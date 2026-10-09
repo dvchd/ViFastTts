@@ -139,10 +139,12 @@ def normalize_stem(text: str, read_number: NumberReader) -> str:
     chem_pat=re.compile(r"(?<!\w)(?=[A-Z][A-Za-z0-9()]*\d)([A-Z][A-Za-z0-9()]*)(?!\w)")
     text=chem_pat.sub(lambda m:read_chemical_formula(m.group(1),read_number),text)
     # Number followed by recognized unit expression.
+    # Trailing lookahead prevents matching unit prefix inside Vietnamese words,
+    # e.g. "s" in "sach" must not match "105 sach" as "105 s" + "ach".
     unit_keys="|".join(sorted((re.escape(x) for x in UNITS),key=len,reverse=True))
-    text=re.sub(rf"(?<!\w)(\d+(?:[,.]\d+)?)\s*({unit_keys})(?:\^?([23]))?(?:/({unit_keys})(?:\^?([23]))?)?",lambda m:_read_measure(m,read_number),text)
+    text=re.sub(rf"(?<!\w)(\d+(?:[,.]\d+)?)\s*({unit_keys})(?:\^?([23]))?(?:/({unit_keys})(?:\^?([23]))?)?(?![A-Za-zÀ-ỹĐđ])",lambda m:_read_measure(m,read_number),text)
     # Composite units may follow a LaTeX expression whose number has already been verbalized.
-    text=re.sub(rf"(?<!\w)({unit_keys})(?:\^?([23]))?/({unit_keys})(?:\^?([23]))?(?!\w)", lambda m: _read_composite_unit(m), text)
+    text=re.sub(rf"(?<!\w)({unit_keys})(?:\^?([23]))?/({unit_keys})(?:\^?([23]))?(?![A-Za-zÀ-ỹĐđ])", lambda m: _read_composite_unit(m), text)
     return re.sub(r"\s+"," ",text).strip()
 
 

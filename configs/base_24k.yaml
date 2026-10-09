@@ -2,5 +2,51 @@ project: ViFastTts
 seed: 42
 language: vi
 sample_rate: 24000
-mel: {n_fft: 1024, win_length: 1024, hop_length: 256, n_mels: 100, f_min: 0, f_max: 12000}
-model: {component_dim: 96, hidden_size: 256, encoder_layers: 6, decoder_layers: 4, attention_heads: 4, ffn_size: 1024, conv_kernel_size: 15, dropout: 0.1, duration_layers: 3, variance_layers: 3}
+
+input:
+  unit: syllable
+  features: [onset, medial, nucleus, coda, tone, word_boundary, phrase_boundary, punctuation]
+  dialect_conditioning: false
+  speaker_conditioning: false
+  style_conditioning: false
+
+mel:
+  n_fft: 1024
+  win_length: 1024
+  hop_length: 256
+  n_mels: 100
+  f_min: 0
+  f_max: 12000
+
+model:
+  component_dim: 96
+  hidden_size: 256
+  encoder_layers: 6
+  decoder_layers: 4
+  attention_heads: 4
+  ffn_size: 1024
+  conv_kernel_size: 15
+  dropout: 0.1
+  duration_layers: 3
+  variance_layers: 3
+
+training:
+  batch_size: 16
+  learning_rate: 0.0002
+  weight_decay: 0.0001
+  max_steps: 500000
+  warmup_steps: 10000
+  grad_clip: 1.0
+  log_every: 50
+  validate_every: 2000
+  save_every: 5000
+  num_workers: 4
+  mixed_precision: true
+
+loss_weights:
+  mel: 1.0
+  duration: 1.0
+  f0: 1.0
+  vuv: 0.5
+  energy: 0.5
+  tone: 0.25

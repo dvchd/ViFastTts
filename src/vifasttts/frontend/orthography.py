@@ -41,4 +41,14 @@ def compose_canonical(onset: str | None, medial: str | None, nucleus: str, coda:
     onset = onset or ""
     # qu already contains the written u that represents medial W.
     written_medial = "" if onset == "qu" else (medial or "")
+    # Canonical "uy" puts tone on final y: thuy -> thuy with tone on y (thuy),
+    # tuy -> tuy with tone on y (tuy). Parser yields nucleus "u" + coda "y",
+    # so move tone to coda for this specific pattern.
+    if (
+        tone is not Tone.NGANG
+        and coda is not None
+        and coda.lower() in ("y", "i")
+        and nucleus.lower() == "u"
+    ):
+        return onset + written_medial + nucleus + apply_tone(coda, tone)
     return onset + written_medial + apply_tone(nucleus, tone) + (coda or "")
