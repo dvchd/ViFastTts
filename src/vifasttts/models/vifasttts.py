@@ -24,7 +24,8 @@ class LengthRegulator(nn.Module):
 class ViFastTtsModel(nn.Module):
     """Reference acoustic model.
 
-    Input shape: [B, syllables, 8] integer structured features.
+    Input shape: [B, syllables, 7] integer structured features
+    (onset, medial, nucleus, coda, tone, boundary, punctuation).
     Output: mel, durations, f0, vuv, energy and tone logits.
     """
     def __init__(self, config: dict, vocab_sizes: list[int]) -> None:

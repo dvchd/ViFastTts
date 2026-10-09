@@ -5,7 +5,7 @@ sample_rate: 24000
 
 input:
   unit: syllable
-  features: [onset, medial, nucleus, coda, tone, word_boundary, phrase_boundary, punctuation]
+  features: [onset, medial, nucleus, coda, tone, boundary, punctuation]
   dialect_conditioning: false
   speaker_conditioning: false
   style_conditioning: false

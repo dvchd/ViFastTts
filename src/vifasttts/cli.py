@@ -19,8 +19,8 @@ def parse_one(value: str) -> None:
 
 
 @app.command("parse")
-def parse(value: str) -> None:
-    typer.echo(json.dumps([x.to_dict() for x in parse_text(value)], ensure_ascii=False, indent=2, default=str))
+def parse(value: str, dialect: str = "north") -> None:
+    typer.echo(json.dumps([x.to_dict() for x in parse_text(value, dialect=dialect)], ensure_ascii=False, indent=2, default=str))
 
 
 @app.command("build-manifest")

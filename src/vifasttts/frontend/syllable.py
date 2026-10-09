@@ -42,14 +42,11 @@ def _match_consonant_coda(remainder: str) -> tuple[str, str]:
 def _parse_vowel(vowel: str, qu_medial: bool) -> tuple[str | None, str, str, str]:
     """Return medial spelling, nucleus spelling, medial abstract, nucleus abstract."""
     if qu_medial:
-        nucleus_spelling = vowel
-        if nucleus_spelling not in NUCLEUS_ABSTRACT:
-            # quyên -> parser receives yê after qu
-            if nucleus_spelling.startswith("y"):
-                nucleus_spelling = nucleus_spelling
-            else:
-                raise ValueError(f"Phần nguyên âm sau qu không hợp lệ: {vowel!r}")
-        return "u", nucleus_spelling, "W", NUCLEUS_ABSTRACT[nucleus_spelling]
+        # After qu, remainder must be a legal nucleus (e.g. "a" in "qua",
+        # "y"/"ye" in "quy/quyen"). qu itself contributes medial W.
+        if vowel not in NUCLEUS_ABSTRACT:
+            raise ValueError(f"Phần nguyên âm sau qu không hợp lệ: {vowel!r}")
+        return "u", vowel, "W", NUCLEUS_ABSTRACT[vowel]
 
     # Longest special sequence first.
     for seq in sorted(SPECIAL_VOWELS, key=len, reverse=True):
