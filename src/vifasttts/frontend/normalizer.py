@@ -67,6 +67,27 @@ def decimal_to_words(value: str, dialect: str | Dialect) -> str:
     return f"{integer_to_words(int(left), dialect)} phẩy " + " ".join(SMALL[int(x)] for x in right)
 
 
+def _phone_to_words(match: re.Match[str]) -> str:
+    digits = re.sub(r"\D", "", match.group(0))
+    if digits.startswith("84") and len(digits) >= 11:
+        digits = "0" + digits[2:]
+    return " ".join(SMALL[int(d)] for d in digits)
+
+
+def _currency_number_to_words(num_str: str, dialect: str | Dialect) -> str:
+    if re.search(r"[,.]", num_str):
+        return decimal_to_words(num_str, dialect)
+    return integer_to_words(int(num_str), dialect)
+
+
+def _integer_token_to_words(match: re.Match[str], dialect: str | Dialect) -> str:
+    raw = match.group(1)
+    # Leading zeros (codes like 007) read digit-by-digit to preserve info.
+    if len(raw) > 1 and raw.startswith("0"):
+        return " ".join(SMALL[int(d)] for d in raw)
+    return integer_to_words(int(raw), dialect)
+
+
 def _canonicalize_vietnamese_token(token: str) -> str | None:
     from vifasttts.frontend.syllable import safe_parse_syllable
     from vifasttts.frontend.orthography import compose_canonical
@@ -123,9 +144,24 @@ def normalize_text(text: str, dialect: str | Dialect = Dialect.NORTH, *, options
     text = normalize_unicode(text)
     if options.stem_formulas:
         text = normalize_stem(text, lambda n: integer_to_words(n, options.dialect))
+    # Thousand separators (Vietnamese "." and space): 1.500.000 -> 1500000.
+    # Only dots/spaces followed by exactly 3 digits are removed, so
+    # decimals like 3.14 stay intact.
+    text = re.sub(r"(?<=\d)\.(?=\d{3}(?!\d))", "", text)
+    text = re.sub(r"(?<=\d) (?=\d{3}(?!\d))", "", text)
+    # Phone numbers digit-by-digit: 0977123456, +84977123456.
+    text = re.sub(r"(?<!\w)(?:\+84\d{9,10}|0\d{9,10})(?!\w)", _phone_to_words, text)
+    # Currency: 50.000đ / 1000VND / $5 / 5$ -> words + dong / do la.
+    # Runs before general numbers to avoid partial matches.
+    # ASCII "d" is common shorthand for đồng, but only for amounts >=1000
+    # to avoid mangling "3d" (3D phim) into currency.
+    text = re.sub(r"(?<!\w)(\d+(?:[,.]\d+)?)\s*(?:đồng|đ|vnd|VND)(?![A-Za-zÀ-ỹĐđ])", lambda m: _currency_number_to_words(m.group(1), options.dialect) + " đồng", text)
+    text = re.sub(r"(?<!\w)(\d{4,}(?:[,.]\d+)?)\s*d(?![A-Za-zÀ-ỹĐđ])", lambda m: _currency_number_to_words(m.group(1), options.dialect) + " đồng", text)
+    text = re.sub(r"\$\s*(\d+(?:[,.]\d+)?)", lambda m: _currency_number_to_words(m.group(1), options.dialect) + " đô la", text)
+    text = re.sub(r"(?<!\w)(\d+(?:[,.]\d+)?)\s*\$(?![A-Za-zÀ-ỹĐđ])", lambda m: _currency_number_to_words(m.group(1), options.dialect) + " đô la", text)
     text = re.sub(r"(?<!\w)(\d+[,.]\d+)\s*%", lambda m: decimal_to_words(m.group(1), options.dialect) + " phần trăm", text)
     text = re.sub(r"(?<!\w)(\d+)\s*%", lambda m: integer_to_words(int(m.group(1)), options.dialect) + " phần trăm", text)
     text = re.sub(r"(?<!\w)(\d+[,.]\d+)(?!\w)", lambda m: decimal_to_words(m.group(1), options.dialect), text)
-    text = re.sub(r"(?<!\w)(-?\d+)(?![\w/.:])", lambda m: integer_to_words(int(m.group(1)), options.dialect), text)
+    text = re.sub(r"(?<!\w)(-?\d+)(?![\w/.:])", lambda m: _integer_token_to_words(m, options.dialect), text)
     text = normalize_words(text, options)
     return re.sub(r"\s+", " ", text).strip()

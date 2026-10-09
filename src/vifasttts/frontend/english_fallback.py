@@ -10,6 +10,7 @@ ACRONYM_READINGS = {
     "HTTP": "hát tê tê pi",
     "HTTPS": "hát tê tê pi ét",
     "JSON": "giây sần",
+    "NASA": "na xa",
     "RAM": "ram",
     "ROM": "rom",
     "SSD": "ét ét đi",

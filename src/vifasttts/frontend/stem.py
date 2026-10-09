@@ -67,17 +67,24 @@ def _balanced_argument(text: str, command: str) -> tuple[str, str] | None:
 
 def read_chemical_formula(formula: str, read_number: NumberReader) -> str:
     formula = formula.strip().replace("_{", "").replace("}", "")
-    parts=[]; pos=0
+    parts=[]; pos=0; found_known=False
     token_re=re.compile(r"([A-Z][a-z]?)(\d*)|([()])|(\d+)|([+\-])")
     for m in token_re.finditer(formula):
         if m.start()!=pos: return formula
         pos=m.end()
         if m.group(1):
-            element=m.group(1); parts.append(ELEMENTS.get(element, element))
+            element=m.group(1)
+            if element in ELEMENTS:
+                found_known=True
+            parts.append(ELEMENTS.get(element, element))
             if m.group(2): parts.append(_read_int(m.group(2),read_number))
         elif m.group(3): parts.append("mở ngoặc" if m.group(3)=="(" else "đóng ngoặc")
         elif m.group(4): parts.append(_read_int(m.group(4),read_number))
         else: parts.append("dương" if m.group(5)=="+" else "âm")
+    # Guard against false positives like RTX3080 (no known element):
+    # return original instead of corrupting version codes.
+    if not found_known:
+        return formula
     return " ".join(parts) if pos==len(formula) and parts else formula
 
 
