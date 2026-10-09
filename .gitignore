@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+runs/
+artifacts/
+data/wavs/
+*.pt
+*.onnx
+*.wav
+.DS_Store

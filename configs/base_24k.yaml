@@ -1,0 +1,6 @@
+project: ViFastTts
+seed: 42
+language: vi
+sample_rate: 24000
+mel: {n_fft: 1024, win_length: 1024, hop_length: 256, n_mels: 100, f_min: 0, f_max: 12000}
+model: {component_dim: 96, hidden_size: 256, encoder_layers: 6, decoder_layers: 4, attention_heads: 4, ffn_size: 1024, conv_kernel_size: 15, dropout: 0.1, duration_layers: 3, variance_layers: 3}
