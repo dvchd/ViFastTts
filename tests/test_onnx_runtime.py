@@ -131,3 +131,13 @@ def test_onnx_runtime_end_to_end(tmp_path: Path):
     ])
     assert result.exit_code == 0, result.stdout
     assert cli_output.exists()
+
+    # 6) Streaming ONNX: 2 câu + khoảng nghỉ (max_chars nhỏ để buộc tách câu)
+    from vifasttts.runtime.onnx_engine import iter_synthesize_onnx
+
+    streamed = list(iter_synthesize_onnx(
+        "Chào bạn. Câu hai!", acoustic_onnx, vocoder_path=vocoder_onnx, max_chars=12,
+    ))
+    assert len(streamed) >= 3
+    assert sum(int(audio.size) for audio, _ in streamed) > 0
+    assert all(rate == 24000 for _, rate in streamed)

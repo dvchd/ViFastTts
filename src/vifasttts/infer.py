@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import warnings
 import wave
+from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
@@ -25,22 +27,123 @@ def write_wav(path: str | Path, waveform, sample_rate: int = 24000) -> None:
         fh.writeframes(pcm.tobytes())
 
 
-def _render_chunk(model, vocoder, vocabs, text: str, dialect: str, speed: float, options) -> np.ndarray | None:
-    """Một đoạn văn bản → waveform numpy (None nếu đoạn không có âm tiết)."""
-    import torch
+class Synthesizer:
+    """Giữ model + vocoder đã nạp để tổng hợp nhiều câu (batch/server/streaming).
 
-    items = parse_text(text, dialect=dialect, options=options)
-    if not items:
-        return None
-    features = torch.tensor([[vocabs.encode(item) for item in items]], dtype=torch.long)
-    with torch.no_grad():
-        outputs = model(features)
-        if speed != 1.0:
-            durations = torch.round(outputs["durations"].float() / max(speed, 1e-3)).clamp_min(1).long()
-            outputs = model(features, durations=durations)
-        mel = outputs["mel"][0]
-        waveform = vocoder(mel.unsqueeze(0))[0]
-    return np.asarray(waveform.cpu().numpy(), dtype=np.float32)
+    `iter_synthesize` yield từng đoạn waveform numpy (kèm khoảng nghỉ giữa câu)
+    — dùng cho streaming hoặc server; `synthesize` ghép lại + hậu xử lý + ghi WAV.
+    """
+
+    def __init__(self, config: dict, checkpoint: str, vocoder_checkpoint: str | None = None) -> None:
+        import torch
+
+        from vifasttts.frontend.vocab import ComponentVocabs
+        from vifasttts.models.istftnet import ISTFTNetLite
+        from vifasttts.models.vifasttts import ViFastTtsModel
+
+        validate_config(config, "acoustic")
+        self.config = config
+        self.sample_rate = int(config.get("sample_rate", 24000))
+        self.vocabs = ComponentVocabs.default()
+        sizes = [len(self.vocabs.onset), len(self.vocabs.medial), len(self.vocabs.nucleus),
+                 len(self.vocabs.coda), len(self.vocabs.tone), len(self.vocabs.boundary),
+                 len(self.vocabs.punctuation)]
+        self.model = ViFastTtsModel(config, sizes)
+        state = torch.load(checkpoint, map_location="cpu")
+        self.model.load_state_dict(state.get("model", state))
+        self.model.eval()
+
+        mel_config = config["mel"]
+        vocoder_training = config.get("vocoder_training", {})
+        # Cùng quy ước với train-vocoder: hidden/upsample_ratio mặc định 256/4.
+        self.vocoder = ISTFTNetLite(
+            n_mels=int(mel_config["n_mels"]),
+            hidden=int(vocoder_training.get("hidden", 256)),
+            n_fft=int(mel_config["n_fft"]),
+            hop_length=int(mel_config["hop_length"]),
+            upsample_ratio=int(vocoder_training.get("upsample_ratio", 4)),
+        )
+        if vocoder_checkpoint and Path(vocoder_checkpoint).exists():
+            vocoder_state = torch.load(vocoder_checkpoint, map_location="cpu")
+            self.vocoder.load_state_dict(vocoder_state.get("vocoder", vocoder_state))
+        elif isinstance(state, dict) and "vocoder" in state:
+            self.vocoder.load_state_dict(state["vocoder"])
+        else:
+            warnings.warn(
+                "Chưa có trọng số vocoder (random weights). Huấn luyện bằng "
+                "`vifasttts train-vocoder` hoặc truyền --vocoder-checkpoint.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        self.vocoder.eval()
+
+    def _render(self, text: str, dialect: str, speed: float, options) -> np.ndarray | None:
+        import torch
+
+        items = parse_text(text, dialect=dialect, options=options)
+        if not items:
+            return None
+        features = torch.tensor([[self.vocabs.encode(item) for item in items]], dtype=torch.long)
+        with torch.no_grad():
+            outputs = self.model(features)
+            if speed != 1.0:
+                durations = torch.round(outputs["durations"].float() / max(speed, 1e-3)).clamp_min(1).long()
+                outputs = self.model(features, durations=durations)
+            mel = outputs["mel"][0]
+            waveform = self.vocoder(mel.unsqueeze(0))[0]
+        return np.asarray(waveform.cpu().numpy(), dtype=np.float32)
+
+    def iter_synthesize(
+        self,
+        text: str,
+        *,
+        dialect: str = "north",
+        speed: float = 1.0,
+        overrides: dict[str, str] | None = None,
+        max_chars: int = 400,
+    ) -> Iterator[tuple[np.ndarray, int]]:
+        """Yield (waveform, sample_rate) từng đoạn — gồm cả khoảng nghỉ giữa câu."""
+        from vifasttts.frontend.normalizer import NormalizerOptions
+
+        options = NormalizerOptions(dialect=dialect, exact_overrides=dict(overrides or {}))  # type: ignore[arg-type]
+        chunks = chunk_text(text, max_chars=max_chars)
+        if not chunks:
+            raise ValueError("Không có âm tiết nào để tổng hợp")
+        rendered_any = False
+        for index, chunk in enumerate(chunks):
+            rendered = self._render(chunk, dialect, speed, options)
+            if rendered is None:
+                continue
+            rendered_any = True
+            yield rendered, self.sample_rate
+            if index < len(chunks) - 1:
+                silence = int(self.sample_rate * pause_seconds(chunk))
+                if silence:
+                    yield np.zeros(silence, dtype=np.float32), self.sample_rate
+        if not rendered_any:
+            raise ValueError("Không có âm tiết nào để tổng hợp")
+
+    def synthesize(
+        self,
+        text: str,
+        output: str | Path,
+        *,
+        dialect: str = "north",
+        speed: float = 1.0,
+        overrides: dict[str, str] | None = None,
+        peak_normalize: bool = False,
+        max_chars: int = 400,
+    ) -> tuple[int, int]:
+        """Ghép các đoạn từ `iter_synthesize`, hậu xử lý và ghi WAV."""
+        from vifasttts.runtime.postprocess import postprocess
+
+        pieces = [audio for audio, _ in self.iter_synthesize(
+            text, dialect=dialect, speed=speed, overrides=overrides, max_chars=max_chars,
+        )]
+        waveform = postprocess(np.concatenate(pieces), self.sample_rate,
+                               target_db=-3.0 if peak_normalize else None)
+        write_wav(output, waveform, self.sample_rate)
+        return int(waveform.size), self.sample_rate
 
 
 def synthesize(
@@ -56,70 +159,58 @@ def synthesize(
     peak_normalize: bool = False,
     max_chars: int = 400,
 ) -> tuple[int, int]:
-    """text -> WAV. Trả về (số mẫu, sample_rate).
-
-    - Văn bản dài được chunk theo câu (xem `frontend/chunking.py`) rồi ghép
-      với khoảng nghỉ theo dấu câu.
-    - `overrides`: từ điển "mặt chữ → cách đọc" (khớp hoa thường) áp trước mọi luật.
-    - `peak_normalize`: chuẩn hoá đỉnh về -3 dBFS (mặc định chỉ fade đầu/cuối).
-    """
-    import torch
-
-    from vifasttts.frontend.normalizer import NormalizerOptions
-    from vifasttts.frontend.vocab import ComponentVocabs
-    from vifasttts.models.istftnet import ISTFTNetLite
-    from vifasttts.models.vifasttts import ViFastTtsModel
-    from vifasttts.runtime.postprocess import postprocess
-
-    validate_config(config, "acoustic")
-    chunks = chunk_text(text, max_chars=max_chars)
-    if not chunks:
-        raise ValueError("Không có âm tiết nào để tổng hợp")
-    options = NormalizerOptions(dialect=dialect, exact_overrides=dict(overrides or {}))  # type: ignore[arg-type]
-
-    vocabs = ComponentVocabs.default()
-    sizes = [len(vocabs.onset), len(vocabs.medial), len(vocabs.nucleus), len(vocabs.coda), len(vocabs.tone), len(vocabs.boundary), len(vocabs.punctuation)]
-    model = ViFastTtsModel(config, sizes)
-    state = torch.load(checkpoint, map_location="cpu")
-    model.load_state_dict(state.get("model", state))
-    model.eval()
-
-    mel_config = config["mel"]
-    sample_rate = int(config.get("sample_rate", 24000))
-    vocoder_training = config.get("vocoder_training", {})
-    # Cùng quy ước với train-vocoder: hidden/upsample_ratio mặc định 256/4.
-    vocoder = ISTFTNetLite(
-        n_mels=int(mel_config["n_mels"]),
-        hidden=int(vocoder_training.get("hidden", 256)),
-        n_fft=int(mel_config["n_fft"]),
-        hop_length=int(mel_config["hop_length"]),
-        upsample_ratio=int(vocoder_training.get("upsample_ratio", 4)),
+    """text -> WAV (nạp model một lần). Trả về (số mẫu, sample_rate)."""
+    engine = Synthesizer(config, checkpoint, vocoder_checkpoint)
+    return engine.synthesize(
+        text, output, dialect=dialect, speed=speed, overrides=overrides,
+        peak_normalize=peak_normalize, max_chars=max_chars,
     )
-    if vocoder_checkpoint and Path(vocoder_checkpoint).exists():
-        vocoder_state = torch.load(vocoder_checkpoint, map_location="cpu")
-        vocoder.load_state_dict(vocoder_state.get("vocoder", vocoder_state))
-    elif isinstance(state, dict) and "vocoder" in state:
-        vocoder.load_state_dict(state["vocoder"])
-    else:
-        print("Cảnh báo: chưa có trọng số vocoder (random weights). Huấn luyện vocoder theo docs/TRAINING.md.")
-    vocoder.eval()
 
-    pieces: list[np.ndarray] = []
-    for index, chunk in enumerate(chunks):
-        rendered = _render_chunk(model, vocoder, vocabs, chunk, dialect, speed, options)
-        if rendered is None:
-            continue
-        pieces.append(rendered)
-        if index < len(chunks) - 1:
-            pause = int(sample_rate * pause_seconds(chunk))
-            if pause:
-                pieces.append(np.zeros(pause, dtype=np.float32))
-    if not pieces:
-        raise ValueError("Không có âm tiết nào để tổng hợp")
 
-    waveform = postprocess(np.concatenate(pieces), sample_rate, target_db=-3.0 if peak_normalize else None)
-    write_wav(output, waveform, sample_rate)
-    return int(waveform.size), sample_rate
+def iter_synthesize(
+    config: dict,
+    checkpoint: str,
+    text: str,
+    *,
+    dialect: str = "north",
+    speed: float = 1.0,
+    vocoder_checkpoint: str | None = None,
+    overrides: dict[str, str] | None = None,
+    max_chars: int = 400,
+) -> Iterator[tuple[np.ndarray, int]]:
+    """Streaming: yield từng đoạn waveform khi tổng hợp (xem `Synthesizer`)."""
+    engine = Synthesizer(config, checkpoint, vocoder_checkpoint)
+    return engine.iter_synthesize(
+        text, dialect=dialect, speed=speed, overrides=overrides, max_chars=max_chars,
+    )
+
+
+def synthesize_batch(
+    config: dict,
+    checkpoint: str,
+    rows: list[tuple[str, str]],
+    output_dir: str | Path,
+    *,
+    vocoder_checkpoint: str | None = None,
+    dialect: str = "north",
+    speed: float = 1.0,
+    overrides: dict[str, str] | None = None,
+    peak_normalize: bool = False,
+    max_chars: int = 400,
+) -> list[Path]:
+    """Tổng hợp danh sách (id, text) → `<output_dir>/<id>.wav` (nạp model một lần)."""
+    engine = Synthesizer(config, checkpoint, vocoder_checkpoint)
+    directory = Path(output_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    paths: list[Path] = []
+    for sample_id, text in rows:
+        path = directory / f"{sample_id}.wav"
+        engine.synthesize(
+            text, path, dialect=dialect, speed=speed, overrides=overrides,
+            peak_normalize=peak_normalize, max_chars=max_chars,
+        )
+        paths.append(path)
+    return paths
 
 
 def load_overrides(path: str | Path) -> dict[str, str]:

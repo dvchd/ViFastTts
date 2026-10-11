@@ -164,6 +164,39 @@ def test_end_to_end_train_synth_export(tmp_path: Path):
     with wave.open(str(wav_out), "rb") as fh:
         assert fh.getnframes() == samples
 
+    # Streaming: các đoạn ghép lại đúng bằng waveform đầy đủ.
+    from vifasttts.infer import iter_synthesize, synthesize_batch
+
+    streamed = list(iter_synthesize(TINY_CONFIG, str(checkpoint), "Chào bạn"))
+    assert streamed and sum(int(audio.size) for audio, _ in streamed) == samples
+    assert all(rate == 24000 for _, rate in streamed)
+
+    # Batch: mỗi câu một file, nạp model một lần.
+    batch_dir = tmp_path / "batch"
+    paths = synthesize_batch(
+        TINY_CONFIG, str(checkpoint),
+        [("s1", "Chào bạn"), ("s2", "Tạm biệt")], batch_dir,
+    )
+    assert len(paths) == 2 and all(path.exists() for path in paths)
+
+    # CLI batch: dòng có tab là id, dòng trần tự sinh id.
+    import yaml
+    from typer.testing import CliRunner
+
+    from vifasttts.cli import app
+
+    config_path = tmp_path / "tiny.yaml"
+    config_path.write_text(yaml.safe_dump(TINY_CONFIG, allow_unicode=True), encoding="utf-8")
+    batch_input = tmp_path / "batch.txt"
+    batch_input.write_text("id1\tChào bạn\nChào buổi sáng\n", encoding="utf-8")
+    cli = CliRunner().invoke(app, [
+        "synthesize-batch", "--config", str(config_path), "--checkpoint", str(checkpoint),
+        "--input", str(batch_input), "--output-dir", str(tmp_path / "batch_cli"),
+    ])
+    assert cli.exit_code == 0, cli.stdout
+    assert (tmp_path / "batch_cli" / "id1.wav").exists()
+    assert (tmp_path / "batch_cli" / "line_0002.wav").exists()
+
     pytest.importorskip("onnx")
     onnxruntime = pytest.importorskip("onnxruntime")
     from vifasttts.export import export_onnx

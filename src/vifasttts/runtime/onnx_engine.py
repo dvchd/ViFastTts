@@ -10,6 +10,7 @@ nếu thiếu thì truyền tường minh khi khởi tạo.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
@@ -120,6 +121,32 @@ def synthesize_onnx(
     """text → WAV bằng ONNX Runtime + numpy (không cần PyTorch)."""
     from vifasttts.infer import write_wav
 
+    rate = sample_rate
+    pieces: list[np.ndarray] = []
+    for audio, chunk_rate in iter_synthesize_onnx(
+        text, acoustic_path, vocoder_path=vocoder_path, dialect=dialect, speed=speed,
+        overrides=overrides, max_chars=max_chars, sample_rate=sample_rate,
+    ):
+        rate = chunk_rate
+        pieces.append(audio)
+    waveform = postprocess(np.concatenate(pieces), int(rate or 24000),
+                           target_db=-3.0 if peak_normalize else None)
+    write_wav(output, waveform, int(rate or 24000))
+    return int(waveform.size), int(rate or 24000)
+
+
+def iter_synthesize_onnx(
+    text: str,
+    acoustic_path: str | Path,
+    *,
+    vocoder_path: str | Path,
+    dialect: str = "north",
+    speed: float = 1.0,
+    overrides: dict[str, str] | None = None,
+    max_chars: int = 400,
+    sample_rate: int | None = None,
+) -> Iterator[tuple[np.ndarray, int]]:
+    """Streaming ONNX: yield (waveform numpy, sample_rate) từng đoạn + khoảng nghỉ."""
     acoustic = OnnxAcousticModel(acoustic_path)
     vocoder = OnnxVocoder(vocoder_path, sample_rate=sample_rate)
     rate = sample_rate or vocoder.sample_rate or int(acoustic.metadata.get("sample_rate", 24000))
@@ -128,19 +155,18 @@ def synthesize_onnx(
     chunks = chunk_text(text, max_chars=max_chars)
     if not chunks:
         raise ValueError("Không có âm tiết nào để tổng hợp")
-    waveforms: list[np.ndarray] = []
+    rendered_any = False
     for index, chunk in enumerate(chunks):
         features = acoustic.features_from_text(chunk, dialect=dialect, options=options)
         outputs = acoustic.run(features)
         mel = np.asarray(outputs["mel"])
         if speed != 1.0:
             mel = _stretch_mel(mel, speed)
-        waveforms.append(vocoder.waveform(mel))
+        yield vocoder.waveform(mel), rate
+        rendered_any = True
         if index < len(chunks) - 1:
             pause = int(rate * pause_seconds(chunk))
             if pause:
-                waveforms.append(np.zeros(pause, dtype=np.float32))
-    waveform = np.concatenate(waveforms)
-    waveform = postprocess(waveform, rate, target_db=-3.0 if peak_normalize else None)
-    write_wav(output, waveform, rate)
-    return int(waveform.size), rate
+                yield np.zeros(pause, dtype=np.float32), rate
+    if not rendered_any:  # pragma: no cover - chunk_text đã bảo đảm không rỗng
+        raise ValueError("Không có âm tiết nào để tổng hợp")

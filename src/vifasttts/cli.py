@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import typer
 
@@ -250,6 +251,57 @@ def synthesize_onnx_cmd(
         peak_normalize=peak_normalize, max_chars=max_chars,
     )
     typer.echo(f"Đã ghi {output} ({samples} mẫu @ {sample_rate} Hz)")
+
+
+@app.command("synthesize-batch")
+def synthesize_batch_cmd(
+    config: str = typer.Option(..., help="File YAML cấu hình"),
+    checkpoint: str = typer.Option(..., help="Checkpoint .pt"),
+    input: str = typer.Option(..., help="File văn bản: 'id<TAB>câu' hoặc mỗi dòng một câu"),
+    output_dir: str = typer.Option(..., "--output-dir", help="Thư mục WAV đầu ra"),
+    vocoder_checkpoint: str | None = typer.Option(None, help="Checkpoint vocoder (tùy chọn)"),
+    dialect: str = typer.Option("north", help="north, central hoặc south"),
+    speed: float = typer.Option(1.0, help="Tốc độ đọc (1.0 là gốc)"),
+    overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc'"),
+    peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
+    max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
+) -> None:
+    """Tổng hợp nhiều câu từ file → thư mục WAV (nạp model một lần)."""
+    from vifasttts.infer import load_overrides, synthesize_batch
+
+    rows: list[tuple[str, str]] = []
+    for line_number, raw in enumerate(Path(input).read_text(encoding="utf-8").splitlines(), 1):
+        line = raw.strip()
+        if not line:
+            continue
+        if "\t" in line:
+            sample_id, text = line.split("\t", 1)
+        else:
+            sample_id, text = f"line_{line_number:04d}", line
+        rows.append((sample_id.strip(), text.strip()))
+    if not rows:
+        raise typer.BadParameter("File input không có dòng hợp lệ")
+    paths = synthesize_batch(
+        load_config(config), checkpoint, rows, output_dir,
+        vocoder_checkpoint=vocoder_checkpoint, dialect=dialect, speed=speed,
+        overrides=load_overrides(overrides) if overrides else None,
+        peak_normalize=peak_normalize, max_chars=max_chars,
+    )
+    typer.echo(f"Đã ghi {len(paths)} file vào {output_dir}")
+
+
+@app.command("serve")
+def serve_cmd(
+    config: str = typer.Option(..., help="File YAML cấu hình"),
+    checkpoint: str = typer.Option(..., help="Checkpoint .pt"),
+    vocoder_checkpoint: str | None = typer.Option(None, help="Checkpoint vocoder (tùy chọn)"),
+    host: str = typer.Option("127.0.0.1", help="Địa chỉ lắng nghe"),
+    port: int = typer.Option(8000, help="Cổng"),
+) -> None:
+    """HTTP server tối giản: POST /synthesize (JSON → WAV), GET /health, /info."""
+    from vifasttts.server import serve
+
+    serve(load_config(config), checkpoint, vocoder_checkpoint=vocoder_checkpoint, host=host, port=port)
 
 
 if __name__ == "__main__":

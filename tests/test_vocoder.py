@@ -169,3 +169,7 @@ def test_synthesize_uses_trained_vocoder(tmp_path: Path):
         vocoder_checkpoint=str(vocoder_out / "last.pt"),
     )
     assert wav_out.exists() and samples > 0 and sample_rate == 24000
+
+    # Không truyền vocoder → cảnh báo RuntimeWarning thay vì im lặng.
+    with pytest.warns(RuntimeWarning):
+        synthesize(ACOUSTIC_TINY, str(acoustic_out / "last.pt"), "Chào", str(tmp_path / "warn.wav"))
