@@ -58,6 +58,17 @@ class AbstractSyllable:
     coda: str
     tone: Tone
 
+    @property
+    def rime(self) -> tuple[str, str, str]:
+        """Vần = (âm đệm, âm chính, âm cuối) — phép chiếu sang mô hình
+        "onset + vần + thanh" mà không mất thông tin thành phần."""
+        return (self.medial, self.nucleus, self.coda)
+
+    @property
+    def rime_key(self) -> str:
+        """Khoá vần dạng chuỗi, tiện làm dict key/report."""
+        return "+".join(self.rime)
+
 
 @dataclass(frozen=True)
 class Boundaries:

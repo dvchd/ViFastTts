@@ -96,7 +96,11 @@ def estimate_f0(wav: torch.Tensor, sample_rate: int, hop_length: int, frame_leng
 
 
 def extract_features(wav_path: str | Path, config: dict[str, Any]) -> dict[str, torch.Tensor]:
-    """WAV -> mel, energy, f0, vuv; độ dài các chuỗi frame được đồng bộ."""
+    """WAV -> mel, energy, f0, vuv; độ dài các chuỗi frame được đồng bộ.
+
+    Khi `config["phonation"]["enabled"]`, thêm `hnr`, `tilt`, `glottalization`
+    (xem `data/phonation.py`).
+    """
     sample_rate = int(config.get("sample_rate", 24000))
     mel_config = dict(config["mel"])
     mel_config.setdefault("sample_rate", sample_rate)
@@ -104,9 +108,15 @@ def extract_features(wav_path: str | Path, config: dict[str, Any]) -> dict[str, 
     mel, energy = extract_mel_energy(wav, mel_config)
     f0, vuv = estimate_f0(wav, sample_rate, int(mel_config["hop_length"]))
     frames = min(mel.size(0), energy.size(0), f0.size(0))
-    return {
+    features = {
         "mel": mel[:frames],
         "energy": energy[:frames],
         "f0": f0[:frames],
         "vuv": vuv[:frames],
     }
+    if config.get("phonation", {}).get("enabled", False):
+        from vifasttts.data.phonation import extract_phonation_frames
+
+        for name, values in extract_phonation_frames(wav, config).items():
+            features[name] = values[:frames]
+    return features

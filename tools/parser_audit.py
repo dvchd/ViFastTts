@@ -3,10 +3,13 @@
 Chạy:
     python tools/parser_audit.py                     # ma trận ~49k tổ hợp
     python tools/parser_audit.py --wordlist FILE     # audit trên 1 từ/dòng
+    python tools/parser_audit.py --wordlist FILE --profile strict
+    python tools/parser_audit.py --wordlist FILE --write-lexicon lex.json
+    python tools/parser_audit.py --wordlist FILE --profile corpus --lexicon lex.json
 
 Chế độ ma trận kiểm tra bất biến `parse → compose → parse`; thoát mã 1 nếu có
-vấn đề (dùng được trong CI). Chế độ từ điển in danh sách fallback và các nhóm
-va chạm (nhiều chữ cùng một tuple) để phân loại thủ công.
+vấn đề (dùng được trong CI). Chế độ từ điển in fallback, nhóm va chạm, coverage
+và (tuỳ chọn) cảnh báo theo profile open/strict/corpus.
 """
 from __future__ import annotations
 
@@ -77,13 +80,18 @@ def run_matrix() -> list[str]:
     return problems
 
 
-def run_wordlist(path: str) -> None:
+def load_wordlist(path: str) -> set[str]:
     syllables: set[str] = set()
     with open(path, encoding="utf-8") as handle:
         for line in handle:
             for token in re.split(r"[\s\-]+", line.strip()):
                 if _WORD_RE.fullmatch(token):
                     syllables.add(token)
+    return syllables
+
+
+def run_wordlist(path: str) -> set[str]:
+    syllables = load_wordlist(path)
     ok: dict[tuple[str, str, str, str, str], set[str]] = defaultdict(set)
     fallback: list[str] = []
     for syllable in syllables:
@@ -121,14 +129,38 @@ def run_wordlist(path: str) -> None:
         preview = ", ".join(f"{m}+{n}+{c}" for m, n, c in missing[:12])
         print(f"Rime bảng chấp nhận nhưng ngữ liệu chưa từng thấy ({len(missing)}): {preview}"
               + (" ..." if len(missing) > 12 else ""))
+    return syllables
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wordlist", help="File văn bản, mỗi dòng một từ/câu")
+    parser.add_argument("--profile", choices=("open", "strict", "corpus"),
+                        help="Kiểm luật chính tả/ngữ âm trên wordlist")
+    parser.add_argument("--lexicon", help="File lexicon .json (cho profile corpus)")
+    parser.add_argument("--write-lexicon", help="Ghi lexicon shape sinh từ wordlist")
     args = parser.parse_args()
     if args.wordlist:
-        run_wordlist(args.wordlist)
+        syllables = run_wordlist(args.wordlist)
+        if args.write_lexicon or args.profile:
+            from vifasttts.frontend.lexicon import Lexicon, profile_report
+
+            if args.write_lexicon:
+                lexicon = Lexicon.from_words(syllables)
+                lexicon.save(args.write_lexicon)
+                print(f"Lexicon: đã ghi {args.write_lexicon} "
+                      f"({len(lexicon.shapes)} shape, {len(lexicon.rimes)} vần)")
+            if args.profile:
+                lexicon = Lexicon.load(args.lexicon) if args.lexicon else None
+                if args.profile == "corpus" and lexicon is None:
+                    print("--profile corpus cần --lexicon FILE (hoặc dùng --write-lexicon)",
+                          file=sys.stderr)
+                    sys.exit(2)
+                report = profile_report(syllables, args.profile, lexicon)
+                print(f"Profile {args.profile}: {report['total']} từ | cảnh báo: {report['flagged']}")
+                for code, count in sorted(report["issues"].items(), key=lambda item: -item[1]):
+                    examples = report["examples"].get(code, [])[:6]
+                    print(f"  {code}: {count} vd={examples}")
         sys.exit(0)
     found = run_matrix()
     for item in found[:20]:

@@ -18,8 +18,8 @@ Quy ước quan trọng:
   (ví dụ hỏi Hà Nội ˧˩ thay vì ˧˩˧) — dự án giữ nguồn đã chọn.
 - Nguyên âm: `OO` là nucleus riêng [ɔː] (xoong, moóc); `ay/au` dùng ă
   ngắn [a] còn `ai/ao` dùng a dài [aː] (Help:IPA/Vietnamese).
-- Ghi chú phương ngữ: Hà Nội đọc `ưu/ươu` ngả về [iw/iəw] (Thompson 1965)
-  — bảng broad giữ /ɯw/ɯəw/ theo âm vị, không hạ xuống i.
+- Phương ngữ: Nam gộp `OO`→[ɔ] (xoong ≈ xong với người Nam); Bắc narrow
+  đọc `ưu/ươu` ngả [iw]/[iəw] (Thompson 1965) — broad giữ /ɯw/ɯəw/.
 - Không có trọng âm từ vựng trong tiếng Việt; không thêm dấu ˈ.
 
 LƯU Ý KIẾN TRÚC: module này KHÔNG được import bởi `models/`, `train.py`,
@@ -87,6 +87,11 @@ NUCLEUS_BROAD: dict[str, tuple[str, ...]] = {
     "IÊ": ("iə",), "UÔ": ("uə",), "ƯƠ": ("ɯə",),
 }
 
+# Phương ngữ Nam gộp /ɔː/ (OO) với /ɔ/ (O): "xoong" ≈ "xong" với người Nam.
+# Trung hiện xấp xỉ bảng Bắc cho nguyên âm (xem ghi chú "Trung" cuối file).
+NUCLEUS_BROAD_SOUTH: dict[str, tuple[str, ...]] = {**NUCLEUS_BROAD, "OO": ("ɔ",)}
+NUCLEUS_BROAD_CENTRAL: dict[str, tuple[str, ...]] = dict(NUCLEUS_BROAD)
+
 # --- Phụ âm cuối ---
 
 CODA_BROAD: dict[str, tuple[str, ...]] = {
@@ -125,7 +130,7 @@ TONE_NUMBERS: dict[str, str] = {
 }
 
 
-def _tone_table(dialect: str | Dialect) -> dict[str, str]:
+def tone_table(dialect: str | Dialect) -> dict[str, str]:
     if Dialect(dialect) is Dialect.SOUTH:
         return TONE_CONTOURS_SOUTH
     if Dialect(dialect) is Dialect.CENTRAL:
@@ -133,8 +138,38 @@ def _tone_table(dialect: str | Dialect) -> dict[str, str]:
     return TONE_CONTOURS_NORTH
 
 
-def _onset_table(dialect: str | Dialect) -> dict[str, tuple[str, ...]]:
+def onset_table(dialect: str | Dialect) -> dict[str, tuple[str, ...]]:
     return ONSET_BROAD_SOUTH if Dialect(dialect) is not Dialect.NORTH else ONSET_BROAD_NORTH
+
+
+def nucleus_table(dialect: str | Dialect) -> dict[str, tuple[str, ...]]:
+    """Bảng nucleus broad theo phương ngữ (Nam gộp OO→ɔ như O)."""
+    if Dialect(dialect) is Dialect.SOUTH:
+        return NUCLEUS_BROAD_SOUTH
+    if Dialect(dialect) is Dialect.CENTRAL:
+        return NUCLEUS_BROAD_CENTRAL
+    return NUCLEUS_BROAD
+
+
+def nucleus_units(
+    nucleus: str,
+    dialect: str | Dialect = Dialect.NORTH,
+    *,
+    style: Style = "broad",
+    coda: str = "NONE",
+) -> tuple[str, ...]:
+    """Đơn vị IPA cho nucleus, xử lý biến thể narrow theo phương ngữ.
+
+    - Nam: `OO` → [ɔ] (gộp với `O`).
+    - Bắc narrow + coda `W`: `ưu/ươu` ngả về [iw]/[iəw] (Thompson 1965).
+    """
+    dialect_value = Dialect(dialect)
+    if style == "narrow" and dialect_value is Dialect.NORTH and coda == "W":
+        if nucleus == "Ư":
+            return ("i",)
+        if nucleus == "ƯƠ":
+            return ("iə",)
+    return nucleus_table(dialect_value)[nucleus]
 
 
 def syllable_to_phonemes(
@@ -157,18 +192,23 @@ def syllable_to_phonemes(
         return ()
     get_profile(dialect)  # validate dialect
     a = parsed.abstract
-    onset = list(_onset_table(dialect)[a.onset])
+    onset = list(onset_table(dialect)[a.onset])
     if style == "narrow":
         onset = list(ONSET_NARROW_OVERRIDES.get(a.onset, tuple(onset)))
     coda = list(CODA_BROAD[a.coda])
     if style == "narrow":
         coda = list(CODA_NARROW_OVERRIDES.get(a.coda, tuple(coda)))
-    phonemes = tuple(onset) + MEDIAL_BROAD[a.medial] + NUCLEUS_BROAD[a.nucleus] + tuple(coda)
+    phonemes = (
+        tuple(onset)
+        + MEDIAL_BROAD[a.medial]
+        + nucleus_units(a.nucleus, dialect, style=style, coda=a.coda)
+        + tuple(coda)
+    )
     if not with_tone or tone_format == "none":
         return phonemes
     if tone_format == "number":
         return phonemes + (TONE_NUMBERS[a.tone.value],)
-    return phonemes + (_tone_table(dialect)[a.tone.value],)
+    return phonemes + (tone_table(dialect)[a.tone.value],)
 
 
 def text_to_phonemes(
@@ -189,7 +229,7 @@ def text_to_phonemes(
 def phoneme_inventory() -> tuple[str, ...]:
     """Toàn bộ ký hiệu IPA có thể xuất, cho vocab phoneme tùy chọn."""
     phonemes: set[str] = set()
-    for table in (ONSET_BROAD_NORTH, ONSET_BROAD_SOUTH, MEDIAL_BROAD, NUCLEUS_BROAD, CODA_BROAD):
+    for table in (ONSET_BROAD_NORTH, ONSET_BROAD_SOUTH, MEDIAL_BROAD, NUCLEUS_BROAD, NUCLEUS_BROAD_SOUTH, CODA_BROAD):
         for value in table.values():
             phonemes.update(value)
     for overrides in (ONSET_NARROW_OVERRIDES, CODA_NARROW_OVERRIDES):

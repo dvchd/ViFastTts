@@ -7,6 +7,7 @@ from typing import Any
 import torch
 from torch.utils.data import Dataset
 
+from vifasttts.data.cache import FeatureCache
 from vifasttts.data.features import extract_features
 from vifasttts.frontend.vocab import ComponentVocabs
 from vifasttts.types import (
@@ -79,13 +80,17 @@ class TtsDataset(Dataset):
     Mỗi mẫu trả về tensor cấp âm tiết (features, durations, f0, vuv, energy)
     và mel cấp frame. `durations` lấy từ trường "durations" trong manifest
     (nếu có, ví dụ từ forced alignment); nếu không, chia đều theo số frame.
+
+    `cache_dir` bật cache feature mel/energy/f0/vuv theo hash(audio, config)
+    để bỏ qua decode/STFT ở epoch sau (xem `data/cache.py`).
     """
 
-    def __init__(self, manifest: str | Path, config: dict[str, Any]) -> None:
+    def __init__(self, manifest: str | Path, config: dict[str, Any], cache_dir: str | Path | None = None) -> None:
         self.rows = ManifestDataset(manifest).rows
         self.config = config
         self.vocabs = ComponentVocabs.default()
         self.sample_rate = int(config.get("sample_rate", 24000))
+        self.cache = FeatureCache(cache_dir, config) if cache_dir is not None else None
 
     def __len__(self) -> int:
         return len(self.rows)
@@ -94,7 +99,13 @@ class TtsDataset(Dataset):
         row = self.rows[index]
         features = torch.tensor(encode_syllables(row["syllables"], self.vocabs), dtype=torch.long)
         syllable_count = features.size(0)
-        extracted = extract_features(row["audio_path"], self.config)
+        if self.cache is not None:
+            extracted = self.cache.get(row)
+            if extracted is None:
+                extracted = extract_features(row["audio_path"], self.config)
+                self.cache.put(row, extracted)
+        else:
+            extracted = extract_features(row["audio_path"], self.config)
         mel = extracted["mel"]
         frames = mel.size(0)
         durations_list = row.get("durations")

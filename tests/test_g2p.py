@@ -71,7 +71,20 @@ def test_oo_loanword_has_distinct_long_nucleus():
     assert syllable_to_phonemes(parse_syllable("xoong")) == ("s", "ɔː", "ŋ", "˧")
     assert syllable_to_phonemes(parse_syllable("xoong"), style="narrow") == ("s", "ɔː", "ŋ", "˧")
     assert syllable_to_phonemes(parse_syllable("xong"), style="narrow") == ("s", "ɔ", "ŋ", "˧")
-    assert syllable_to_phonemes(parse_syllable("moóc"), "south", style="narrow") == ("m", "ɔː", "k̚", "˧˥")
+    # Nam gộp /ɔː/ vào /ɔ/ (xoong ≈ xong); Trung xấp xỉ Bắc.
+    assert syllable_to_phonemes(parse_syllable("xoong"), "south") == ("s", "ɔ", "ŋ", "˦")
+    assert syllable_to_phonemes(parse_syllable("xong"), "south") == ("s", "ɔ", "ŋ", "˦")
+    assert syllable_to_phonemes(parse_syllable("xoong"), "central") == ("s", "ɔː", "ŋ", "˧")
+    assert syllable_to_phonemes(parse_syllable("moóc"), "south", style="narrow") == ("m", "ɔ", "k̚", "˧˥")
+
+
+def test_narrow_hanoi_uu_uou_fronting():
+    # Thompson (1965): Hà Nội đọc ưu/ươu ngả [iw]/[iəw] ở dạng narrow.
+    assert syllable_to_phonemes(parse_syllable("cứu"), style="narrow") == ("k", "i", "w", "˧˥")
+    assert syllable_to_phonemes(parse_syllable("hươu"), style="narrow") == ("h", "iə", "w", "˧")
+    # Broad giữ âm vị /ɯw/; Nam giữ ɯ.
+    assert syllable_to_phonemes(parse_syllable("cứu")) == ("k", "ɯ", "w", "˧˥")
+    assert syllable_to_phonemes(parse_syllable("cứu"), "south", style="narrow") == ("k", "ɯ", "w", "˧˥")
 
 
 def test_ai_ay_ao_au_have_length_contrast():

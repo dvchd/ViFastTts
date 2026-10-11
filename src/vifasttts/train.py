@@ -21,13 +21,18 @@ def set_seed(seed: int) -> None:
         pass
 
 
-def _build_loaders(config: dict[str, Any], train_manifest: str, val_manifest: str, training: dict[str, Any]):
+def _build_loaders(config: dict[str, Any], train_manifest: str, val_manifest: str, training: dict[str, Any], cache_dir: str | None = None):
     from torch.utils.data import DataLoader
 
+    from vifasttts.data.cache import precompute_features
     from vifasttts.data.dataset import TtsDataset, collate_batch
 
-    train_dataset = TtsDataset(train_manifest, config)
-    val_dataset = TtsDataset(val_manifest, config)
+    if cache_dir is not None:
+        # Tính trước ở tiến trình chính để tránh tranh chấp ghi cache giữa workers.
+        precompute_features(train_manifest, config, cache_dir)
+        precompute_features(val_manifest, config, cache_dir)
+    train_dataset = TtsDataset(train_manifest, config, cache_dir=cache_dir)
+    val_dataset = TtsDataset(val_manifest, config, cache_dir=cache_dir)
     if len(train_dataset) == 0:
         raise ValueError("train manifest rỗng")
     if len(val_dataset) == 0:
@@ -65,6 +70,16 @@ def _run_validation(model, loader, config, device) -> float:
             batches += 1
     model.train()
     return total_loss / max(1, batches)
+
+
+def _resolve_cache_dir(training: dict[str, Any], out: Path) -> str | None:
+    """cache_dir tường minh, hoặc bật `cache_features: true` -> mặc định trong run."""
+    cache_dir = training.get("cache_dir")
+    if cache_dir:
+        return str(cache_dir)
+    if training.get("cache_features", False):
+        return str(out / "feature_cache")
+    return None
 
 
 def train_reference(
@@ -109,7 +124,7 @@ def train_reference(
     model.to(device)
     model.train()
 
-    train_loader, val_loader = _build_loaders(config, train_manifest, val_manifest, training)
+    train_loader, val_loader = _build_loaders(config, train_manifest, val_manifest, training, cache_dir=_resolve_cache_dir(training, out))
     optimizer = AdamW(model.parameters(), lr=float(training.get("learning_rate", 2e-4)),
                       weight_decay=float(training.get("weight_decay", 1e-4)))
     steps = max_steps if max_steps is not None else int(training.get("max_steps", 100_000))

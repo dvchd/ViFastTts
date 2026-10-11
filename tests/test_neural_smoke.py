@@ -181,6 +181,31 @@ def test_end_to_end_train_synth_export(tmp_path: Path):
     assert got["mel"].shape[0] == 1 and got["mel"].shape[2] == TINY_CONFIG["mel"]["n_mels"]
     assert got["lengths"].tolist()[0] == got["durations"].sum()
 
+    # INT8 động: file chạy được và giữ nguyên hình dạng đầu ra.
+    int8_path = tmp_path / "model.int8.onnx"
+    export_onnx(TINY_CONFIG, str(checkpoint), str(int8_path), precision="int8")
+    assert int8_path.exists()
+    session_int8 = onnxruntime.InferenceSession(str(int8_path), providers=["CPUExecutionProvider"])
+    got_int8 = dict(zip(
+        [output.name for output in session_int8.get_outputs()],
+        session_int8.run(None, {"features": features.numpy()}),
+    ))
+    assert got_int8["mel"].shape == got["mel"].shape
+
+    # FP16: chỉ chạy khi onnxruntime.transformers hỗ trợ chuyển đổi.
+    fp16_path = tmp_path / "model.fp16.onnx"
+    try:
+        export_onnx(TINY_CONFIG, str(checkpoint), str(fp16_path), precision="fp16")
+    except RuntimeError as exc:  # pragma: no cover - phụ thuộc build onnxruntime
+        pytest.skip(f"fp16 không khả dụng: {exc}")
+    assert fp16_path.exists() and not (tmp_path / "model.fp16.fp32.onnx").exists()
+    session_fp16 = onnxruntime.InferenceSession(str(fp16_path), providers=["CPUExecutionProvider"])
+    got_fp16 = dict(zip(
+        [output.name for output in session_fp16.get_outputs()],
+        session_fp16.run(None, {"features": features.numpy()}),
+    ))
+    assert got_fp16["mel"].shape == got["mel"].shape
+
 
 def test_config_base_loads():
     config = load_config("configs/base_24k.yaml")

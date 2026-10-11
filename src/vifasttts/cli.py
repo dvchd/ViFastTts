@@ -70,10 +70,74 @@ def export_onnx_cmd(
     checkpoint: str = typer.Option(..., help="Checkpoint .pt"),
     output: str = typer.Option(..., help="File .onnx đầu ra"),
     opset: int = typer.Option(18, help="Opset ONNX (mặc định 18)"),
+    precision: str = typer.Option("fp32", help="fp32 | fp16 | int8"),
 ) -> None:
     from vifasttts.export import export_onnx
-    export_onnx(load_config(config), checkpoint, output, opset_version=opset)
-    typer.echo(f"Đã xuất {output}")
+    export_onnx(load_config(config), checkpoint, output, opset_version=opset, precision=precision)
+    typer.echo(f"Đã xuất {output} ({precision})")
+
+
+@app.command("check-profile")
+def check_profile_cmd(
+    text: str = typer.Argument(..., help="Câu cần kiểm tra"),
+    profile: str = typer.Option("strict", help="open | strict | corpus"),
+    lexicon: str | None = typer.Option(None, help="File lexicon .json (bắt buộc cho profile corpus)"),
+) -> None:
+    """Kiểm chính tả/ngữ âm theo profile; in mã cảnh báo cho từng âm tiết."""
+    from vifasttts.frontend.lexicon import ISSUE_DESCRIPTIONS, Lexicon, check_syllable
+
+    lex = Lexicon.load(lexicon) if lexicon else None
+    items = parse_text(text)
+    flagged = 0
+    for item in items:
+        issues = check_syllable(item, profile, lex)  # type: ignore[arg-type]
+        if issues:
+            flagged += 1
+            readable = "; ".join(ISSUE_DESCRIPTIONS.get(code, code) for code in issues)
+            typer.echo(f"  {item.raw}: {readable} [{', '.join(issues)}]")
+    typer.echo(f"{len(items)} âm tiết, {flagged} cảnh báo (profile={profile})")
+
+
+@app.command("build-lexicon")
+def build_lexicon_cmd(
+    output: str = typer.Option(..., help="File JSON đầu ra"),
+    manifest: str | None = typer.Option(None, help="Manifest JSONL nguồn"),
+    wordlist: str | None = typer.Option(None, help="File 1 từ/dòng (nguồn thay thế)"),
+) -> None:
+    """Sinh lexicon shape từ manifest hoặc wordlist cho profile corpus."""
+    import re
+
+    from vifasttts.frontend.lexicon import Lexicon
+
+    if bool(manifest) == bool(wordlist):
+        raise typer.BadParameter("Chọn đúng một trong --manifest hoặc --wordlist")
+    if manifest:
+        lex = Lexicon.from_manifest(manifest)
+    elif wordlist is not None:
+        words: list[str] = []
+        word_re = re.compile(r"[A-Za-zÀ-ỹĐđ]+")
+        with open(wordlist, encoding="utf-8") as handle:
+            for line in handle:
+                words.extend(token for token in re.split(r"[\s\-]+", line.strip()) if word_re.fullmatch(token))
+        lex = Lexicon.from_words(words)
+    else:  # pragma: no cover - đã chặn ở trên
+        raise typer.BadParameter("Thiếu nguồn --manifest/--wordlist")
+    lex.save(output)
+    typer.echo(f"Đã ghi {output} ({len(lex.shapes)} shape, {len(lex.rimes)} vần)")
+
+
+@app.command("cache-features")
+def cache_features_cmd(
+    manifest: str = typer.Option(..., help="Manifest JSONL"),
+    config: str = typer.Option(..., help="File YAML cấu hình"),
+    cache_dir: str = typer.Option(..., help="Thư mục cache"),
+    limit: int | None = typer.Option(None, help="Giới hạn số mẫu (chạy thử)"),
+) -> None:
+    """Tính trước mel/f0/vuv cho manifest để training nhanh hơn."""
+    from vifasttts.data.cache import precompute_features
+
+    done = precompute_features(manifest, load_config(config), cache_dir, limit=limit)
+    typer.echo(f"Đã cache {done} mẫu vào {cache_dir}")
 
 
 @app.command("synthesize")

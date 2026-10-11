@@ -42,6 +42,13 @@ training:
   save_every: 5000
   num_workers: 4
   mixed_precision: true
+  # Cache feature mel/f0/vuv: true -> <output>/feature_cache, hoặc đặt cache_dir tường minh.
+  cache_features: false
+  cache_dir: null
+
+# Kênh phonation tuỳ chọn (HNR, spectral tilt, glottalization) — xem docs/DATA_PIPELINE.md.
+phonation:
+  enabled: false
 
 loss_weights:
   mel: 1.0
