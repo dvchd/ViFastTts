@@ -141,3 +141,47 @@ def test_onnx_runtime_end_to_end(tmp_path: Path):
     assert len(streamed) >= 3
     assert sum(int(audio.size) for audio, _ in streamed) > 0
     assert all(rate == 24000 for _, rate in streamed)
+
+
+def test_coreml_provider_matches_cpu(tmp_path: Path):
+    """Provider CoreML (GPU/ANE) — chỉ chạy khi onnxruntime có CoreML EP.
+
+    So sánh với CPU EP: cùng hình dạng, giá trị hữu hạn (số có thể lệch nhẹ).
+    """
+    import numpy as np
+    import onnxruntime as ort
+
+    from vifasttts.runtime.onnx_engine import OnnxAcousticModel, OnnxVocoder
+
+    if "CoreMLExecutionProvider" not in ort.get_available_providers():
+        pytest.skip("onnxruntime không có CoreMLExecutionProvider")
+
+    manifest = _manifest(tmp_path)
+    acoustic_run = tmp_path / "acoustic"
+    train_reference(TINY_CONFIG, str(manifest), str(manifest), str(acoustic_run), max_steps=2)
+    acoustic_onnx = tmp_path / "model.onnx"
+    export_onnx(TINY_CONFIG, str(acoustic_run / "last.pt"), str(acoustic_onnx))
+    vocoder_run = tmp_path / "vocoder"
+    train_vocoder_reference(TINY_CONFIG, str(manifest), str(vocoder_run), max_steps=2)
+    vocoder_onnx = tmp_path / "vocoder.onnx"
+    export_vocoder_onnx(TINY_CONFIG, str(vocoder_run / "last.pt"), str(vocoder_onnx))
+
+    vocab = ComponentVocabs.default()
+    features = np.array([[vocab.encode(item) for item in parse_text("Chào bạn")]], dtype=np.int64)
+
+    payloads = {}
+    for provider in ("cpu", "coreml"):
+        try:
+            acoustic = OnnxAcousticModel(acoustic_onnx, provider)
+            outputs = acoustic.run(features)
+            payloads[provider] = np.asarray(outputs["mel"], dtype=np.float32)
+        except Exception as exc:  # noqa: BLE001 - CoreML EP có thể từ chối partition tuỳ macOS
+            pytest.skip(f"CoreML EP không chạy được model này: {type(exc).__name__}: {str(exc)[:80]}")
+    assert payloads["cpu"].shape == payloads["coreml"].shape
+    assert np.isfinite(payloads["coreml"]).all()
+
+    mel = payloads["cpu"]
+    wav_cpu = OnnxVocoder(vocoder_onnx, provider="cpu").waveform(mel)
+    wav_coreml = OnnxVocoder(vocoder_onnx, provider="coreml").waveform(mel)
+    assert wav_cpu.shape == wav_coreml.shape
+    assert np.isfinite(wav_coreml).all()

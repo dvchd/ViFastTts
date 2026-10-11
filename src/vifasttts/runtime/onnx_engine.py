@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -23,12 +24,69 @@ from vifasttts.runtime.istft import istft
 from vifasttts.runtime.postprocess import postprocess
 
 
-def _ort_session(path: str | Path):
+def _import_ort():
     try:
         import onnxruntime as ort
     except ImportError as exc:  # pragma: no cover - phụ thuộc môi trường
         raise RuntimeError("Cần cài extra 'onnx' (onnxruntime) để chạy ONNX") from exc
-    return ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+    return ort
+
+
+def _ort_session(path: str | Path, provider: str = "auto"):
+    ort = _import_ort()
+    return ort.InferenceSession(
+        str(path),
+        providers=resolve_providers(provider),
+        sess_options=ort.SessionOptions(),
+    )
+
+
+def resolve_providers(provider: str = "auto") -> list[Any]:
+    """Danh sách execution provider cho ONNX Runtime theo nền tảng.
+
+    - `auto` (mặc định): CUDA nếu có, ngược lại CPU. **Không tự chọn CoreML**
+      vì đo trên Mac cho thấy CoreML EP chậm hơn CPU ở kích thước model này
+      (xem `docs/APPLE_SILICON.md`).
+    - `cpu` | `cuda` | `tensorrt` | `coreml` (CoreML bật `MLComputeUnits=ALL` để
+      có thể dùng GPU/Neural Engine; yêu cầu mạng tĩnh nên dùng
+      `RequireStaticInputShapes=1`).
+    - Provider không khả dụng → ValueError rõ ràng.
+    """
+    ort = _import_ort()
+
+    available = set(ort.get_available_providers())
+    choice = (provider or "auto").strip().lower()
+    if choice == "auto":
+        choice = "cuda" if "CUDAExecutionProvider" in available else "cpu"
+    if choice == "cpu":
+        return ["CPUExecutionProvider"]
+    if choice == "cuda":
+        if "CUDAExecutionProvider" not in available:
+            raise ValueError("Yêu cầu provider=cuda nhưng onnxruntime này không có CUDAExecutionProvider")
+        return [("CUDAExecutionProvider", {}), "CPUExecutionProvider"]
+    if choice == "tensorrt":
+        if "TensorrtExecutionProvider" not in available:
+            raise ValueError("Yêu cầu provider=tensorrt nhưng không có TensorrtExecutionProvider")
+        return [("TensorrtExecutionProvider", {}), "CPUExecutionProvider"]
+    if choice == "coreml":
+        if "CoreMLExecutionProvider" not in available:
+            raise ValueError("Yêu cầu provider=coreml nhưng onnxruntime này không có CoreMLExecutionProvider")
+        import os
+
+        cache_dir = Path(os.environ.get("VIFASTTTS_COREML_CACHE", Path.home() / ".cache" / "vifasttts" / "coreml"))
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return [
+            ("CoreMLExecutionProvider", {
+                "ModelFormat": "MLProgram",
+                "MLComputeUnits": "ALL",  # CPU + GPU + Neural Engine
+                # Ổn định hơn với model có shape động (vd LengthRegulator).
+                "RequireStaticInputShapes": "1",
+                # ORT biên dịch subgraph sang Core ML mỗi session; cache lại để mở nhanh.
+                "ModelCacheDirectory": str(cache_dir),
+            }),
+            "CPUExecutionProvider",
+        ]
+    raise ValueError(f"provider không hợp lệ: {provider!r} (auto|cpu|cuda|coreml|tensorrt)")
 
 
 def read_metadata(path: str | Path) -> dict[str, str]:
@@ -38,9 +96,9 @@ def read_metadata(path: str | Path) -> dict[str, str]:
 
 
 class OnnxAcousticModel:
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, provider: str = "auto") -> None:
         self.path = str(path)
-        self.session = _ort_session(path)
+        self.session = _ort_session(path, provider)
         self.input_name = self.session.get_inputs()[0].name
         self.output_names = [output.name for output in self.session.get_outputs()]
         self.metadata = dict(self.session.get_modelmeta().custom_metadata_map or {})
@@ -71,9 +129,10 @@ class OnnxVocoder:
         n_fft: int | None = None,
         hop_length: int | None = None,
         sample_rate: int | None = None,
+        provider: str = "auto",
     ) -> None:
         self.path = str(path)
-        self.session = _ort_session(path)
+        self.session = _ort_session(path, provider)
         self.input_name = self.session.get_inputs()[0].name
         self.output_names = [output.name for output in self.session.get_outputs()]
         metadata = dict(self.session.get_modelmeta().custom_metadata_map or {})
@@ -117,15 +176,19 @@ def synthesize_onnx(
     peak_normalize: bool = False,
     max_chars: int = 400,
     sample_rate: int | None = None,
+    provider: str = "auto",
 ) -> tuple[int, int]:
-    """text → WAV bằng ONNX Runtime + numpy (không cần PyTorch)."""
+    """text → WAV bằng ONNX Runtime + numpy (không cần PyTorch).
+
+    `provider`: auto|cpu|cuda|coreml|tensorrt — xem `resolve_providers`.
+    """
     from vifasttts.infer import write_wav
 
     rate = sample_rate
     pieces: list[np.ndarray] = []
     for audio, chunk_rate in iter_synthesize_onnx(
         text, acoustic_path, vocoder_path=vocoder_path, dialect=dialect, speed=speed,
-        overrides=overrides, max_chars=max_chars, sample_rate=sample_rate,
+        overrides=overrides, max_chars=max_chars, sample_rate=sample_rate, provider=provider,
     ):
         rate = chunk_rate
         pieces.append(audio)
@@ -145,10 +208,11 @@ def iter_synthesize_onnx(
     overrides: dict[str, str] | None = None,
     max_chars: int = 400,
     sample_rate: int | None = None,
+    provider: str = "auto",
 ) -> Iterator[tuple[np.ndarray, int]]:
     """Streaming ONNX: yield (waveform numpy, sample_rate) từng đoạn + khoảng nghỉ."""
-    acoustic = OnnxAcousticModel(acoustic_path)
-    vocoder = OnnxVocoder(vocoder_path, sample_rate=sample_rate)
+    acoustic = OnnxAcousticModel(acoustic_path, provider)
+    vocoder = OnnxVocoder(vocoder_path, sample_rate=sample_rate, provider=provider)
     rate = sample_rate or vocoder.sample_rate or int(acoustic.metadata.get("sample_rate", 24000))
     options = NormalizerOptions(dialect=dialect, exact_overrides=dict(overrides or {}))  # type: ignore[arg-type]
 

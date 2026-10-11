@@ -240,6 +240,7 @@ def synthesize_onnx_cmd(
     overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc'"),
     peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
     max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
+    provider: str = typer.Option("auto", help="auto | cpu | cuda | coreml | tensorrt"),
 ) -> None:
     """Tổng hợp bằng ONNX Runtime + numpy (không cần PyTorch)."""
     from vifasttts.infer import load_overrides
@@ -249,7 +250,7 @@ def synthesize_onnx_cmd(
         text, acoustic, output, vocoder_path=vocoder,
         dialect=dialect, speed=speed,
         overrides=load_overrides(overrides) if overrides else None,
-        peak_normalize=peak_normalize, max_chars=max_chars,
+        peak_normalize=peak_normalize, max_chars=max_chars, provider=provider,
     )
     typer.echo(f"Đã ghi {output} ({samples} mẫu @ {sample_rate} Hz)")
 
