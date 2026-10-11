@@ -8,7 +8,7 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **833 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **834 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Export ONNX chạy với batch/số âm tiết/độ dài frame động (kiểm chứng onnxruntime).

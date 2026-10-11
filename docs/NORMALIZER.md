@@ -26,6 +26,12 @@ Quy tắc hiện đại: `oa/oe/uy` đặt dấu trên chữ thứ hai (`hoà`, 
 Dấu thanh **chỉ** nằm trên chữ nguyên âm; parser bóc dấu ở bất kỳ đâu rồi
 `compose_canonical` đặt lại đúng âm chính (kể cả khi dấu lỡ nằm trên phụ âm).
 
+**Vì sao dấu nằm trên âm chính?** Theo hệ thống âm vị, dấu thanh là thuộc tính của
+âm tiết gắn với **nucleus**: `hoa` = `(H, W, A, NONE, HUYEN)`, âm đệm `W` viết bằng
+`o` không mang thanh, nên dấu đặt trên `a` → `hoà`. Lối cũ `hòa` cho **cùng bộ âm vị**
+và cùng cách đọc, chỉ khác quy ước ghi. Giải thích đầy đủ kèm bảng vị trí:
+`docs/SYLLABLE_GUIDE.md` mục *"Vì sao hoà đánh dấu trên a"*.
+
 Cả hai lối viết được parser chấp nhận, nhưng output normalizer chỉ có một dạng canonical.
 
 ### Chuẩn hoá vị trí dấu có cài đặt được không?

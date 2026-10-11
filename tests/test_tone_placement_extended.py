@@ -92,3 +92,17 @@ def test_tone_mark_relocated_to_vowel():
     assert canonicalize_vietnamese_tokens("ba\u0323") == "bạ"
     # Nguyên âm đứng một mình vẫn giữ dấu trên nguyên âm.
     assert canonicalize_vietnamese_tokens("y\u0301") == "ý"
+
+
+def test_tone_lives_on_nucleus_not_glide():
+    """Vì sao "hoà" (dấu trên a) chứ không phải "hòa" (dấu trên o):
+    dấu thanh thuộc âm chính (nucleus A), không thuộc âm đệm (W viết bằng o)."""
+    from vifasttts.types import AbstractSyllable, Tone
+
+    old_style = parse_syllable("hòa")
+    new_style = parse_syllable("hoà")
+    assert old_style.abstract == new_style.abstract
+    assert new_style.abstract == AbstractSyllable(onset="H", medial="W", nucleus="A", coda="NONE", tone=Tone.HUYEN)
+    assert new_style.orthography.tone_location == "a"  # dấu thuộc âm chính
+    assert old_style.orthography.tone_location == "o"  # lối cũ: dấu trên âm đệm, vẫn parse được
+    assert canonicalize_vietnamese_tokens("hòa") == "hoà"

@@ -56,6 +56,34 @@ Ví dụ thực hành với **"quốc"**:
 - **Dấu thanh theo chuẩn hiện đại**: "hoà", "thuỷ", "tuỳ" (dấu trên `a/y`) thay cho lối cũ
   "hòa", "thủy", "tùy" — dự án luôn chuẩn hoá về lối hiện đại.
 
+### Vì sao "hoà" đánh dấu trên `a` mà không phải trên `o`?
+
+Theo hệ thống âm vị, **dấu thanh thuộc về âm chính (nucleus)**, không thuộc âm đệm.
+Trong "hoa":
+
+```text
+  h   +   o   +   a
+  │       │       └── ÂM CHÍNH A (nguyên âm hạt nhân)  ← dấu thanh nằm ở đây
+  │       └────────── ÂM ĐỆM W /w/ (bán âm, viết bằng o/u)
+  └────────────────── ÂM ĐẦU H
+```
+
+Âm tiết là bộ âm vị `(H, W, A, NONE, HUYEN)`; `compose_canonical` áp dấu lên âm chính
+`A` → **hoà**. Lối cũ "hòa" đặt dấu lên âm đệm — đọc lên **giống hệt** (cùng bộ âm vị)
+nhưng khác quy ước ghi. Các nhóm tương tự:
+
+| Vần | Dấu đặt trên | Ví dụ |
+| --- | --- | --- |
+| `oa`, `oe`, `uy` | chữ thứ hai (`a/e/y` = âm chính) | hoà, khoẻ, thuỷ |
+| `qu` | nguyên âm sau `u` (`u` thuộc âm đầu K+W) | quả, quý |
+| `ia`, `ua`, `ưa` (mở) | chữ đầu (`i/u/ư`) | bìa, mùa, chửa |
+| `iê`, `uô`, `ươ` | `ê/ô/ơ` | tiếng, muốn, tưởng |
+| `oo` (từ vay) | chữ `o` thứ hai | moóc |
+
+Đây là lý do **parser chấp nhận cả hai lối viết** (để không mất chữ gốc) nhưng
+normalizer luôn xuất lối hiện đại; có thể giữ nguyên lối người viết bằng
+`NormalizerOptions(canonical_tone_spelling=False)` (xem `docs/NORMALIZER.md`).
+
 ## 5. Bảng ví dụ đầy đủ (sinh trực tiếp từ parser của dự án)
 
 | Tiếng | Âm đầu | Âm đệm | Âm chính | Âm cuối | Thanh |
