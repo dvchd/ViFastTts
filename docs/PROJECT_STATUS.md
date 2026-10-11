@@ -8,7 +8,7 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **901 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **921 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối
@@ -17,6 +17,9 @@
   `tools/parser_audit.py --wordlist` nay in luôn coverage (shape/rime/hapax).
 - Export ONNX chạy với batch/số âm tiết/độ dài frame động (kiểm chứng onnxruntime);
   thêm `--precision fp16|int8` (đã kiểm bằng onnxruntime).
+- **Runtime ONNX không cần PyTorch**: `synthesize-onnx` (acoustic + vocoder ONNX,
+  iSTFT numpy), chia câu dài, `--overrides`, `--peak-normalize`; vocoder ONNX xuất
+  spectrum + metadata.
 - Đã triển khai hết lớp frontend/data của roadmap: profile `open/strict/corpus` +
   lexicon, `AbstractSyllable.rime`, Segment Expander + `distribute_frames`, benchmark
   biểu diễn, cache feature, kênh phonation, G2P Nam cho `OO`/`ưu/ươu`.
@@ -78,6 +81,8 @@ dạng chính tả (Orthography) → dạng âm vị học (AbstractSyllable: 5 
 vifasttts parse "Hôm nay trời đẹp."
 vifasttts parse-syllable "giếng"
 vifasttts check-profile "voan bình" --profile strict
+vifasttts g2p "quốc" --dialect south  # IPA từng âm tiết (phân tích)
+vifasttts --version
 python examples/g2p_demo.py            # IPA Bắc/Nam, broad/narrow, 6 thanh
 python tools/frontend_benchmark.py --text "Chào bạn"   # char/slot/phoneme/rime
 
@@ -92,6 +97,10 @@ vifasttts train --config configs/base_24k.yaml --train-manifest ... --val-manife
 vifasttts train-vocoder --config configs/base_24k.yaml --manifest data/train.jsonl --output runs/vocoder
 vifasttts synthesize --config configs/base_24k.yaml --checkpoint runs/base/best.pt --text "Xin chào" --output out.wav
 vifasttts export-onnx --config configs/base_24k.yaml --checkpoint runs/base/best.pt --output model.onnx --precision fp16
+vifasttts export-vocoder-onnx --config configs/base_24k.yaml --checkpoint runs/vocoder/last.pt --output vocoder.onnx
+
+# runtime ONNX (không cần PyTorch)
+vifasttts synthesize-onnx --acoustic model.onnx --vocoder vocoder.onnx --text "Xin chào" --output onnx.wav
 
 # kiểm tra
 pytest && ruff check . && mypy src/vifasttts
@@ -114,7 +123,9 @@ python tools/parser_audit.py --wordlist words.txt   # audit từ điển (+ --pr
    matching + adversarial), checkpoint khóa `vocoder` cho `synthesize`; test smoke +
    CLI. ⬜ Discriminator lớn hơn, spectral loss, A/B HiFi-GAN — chất lượng production.
 4. ✅ **Quantization** khởi điểm: `--precision fp16|int8` + test onnxruntime.
-   ⬜ Calibration INT8 đầy đủ (6 thanh × coda tắc) và lượng tử từng phần vocoder.
+   ✅ **Runtime ONNX** không cần PyTorch (`runtime/`: acoustic + vocoder spectrum +
+   iSTFT numpy + postprocess; CLI `synthesize-onnx`, chia câu, `--overrides`).
+   ⬜ Gộp vocoder vào một graph duy nhất; calibration INT8 đầy đủ (6 thanh × coda tắc).
 5. ✅ **Strict/lexicon**: 3 mức `open/strict/corpus`, `Lexicon` (from_words/from_manifest,
    save/load), CLI `check-profile`/`build-lexicon`, tool audit `--profile`. ⬜ Mở rộng
    OOV resolver cho từ vay viết liền (`palăng`, `a-xít`...).

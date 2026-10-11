@@ -102,6 +102,13 @@ In số đơn vị/âm tiết, p95 độ dài câu và vocab cho 4 biểu diễn
 Ví dụ thực đo: char 3.29, slot 5.0, phoneme 4.0, rime 2.0 đơn vị/âm tiết — dùng để cân
 nhắc unit đầu vào model.
 
+## Chia câu cho văn bản dài (`frontend/chunking.py`)
+
+`chunk_text(text, max_chars=400)` tách theo câu → mệnh đề → từ; `pause_seconds()` gợi ý
+khoảng nghỉ (0.15s cuối câu, 0.08s cuối mệnh đề, 0.05s còn lại). Cả `synthesize` (PyTorch)
+lẫn `synthesize-onnx` dùng chung để tránh đọc câu dài một hơi. `infer.load_overrides(file)`
+nạp từ điển "mặt chữ → cách đọc" và `runtime/postprocess.py` lo fade/peak-normalize.
+
 ## Lớp G2P tùy chọn (`frontend/g2p.py`) — IPA chuẩn theo phương ngữ
 
 Ánh xạ 5 thành phần sang IPA theo Kirby (2011)/Thompson (1965) và bảng đối chiếu trong `docs/G2P_VIETNAMESE.md`:

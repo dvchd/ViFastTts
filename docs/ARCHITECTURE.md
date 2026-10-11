@@ -35,7 +35,10 @@ raw text
 - **Export ONNX**: exporter TorchScript, 8 output có tên (`mel`, `log_duration`, `durations`, `f0`,
   `vuv_logits`, `energy`, `tone_logits`, `lengths`) — 9 nếu bật `model.use_phonation`; dynamic axes cho
   batch/số âm tiết. Dùng `exp-1` thay `expm1` để export được. Hỗ trợ `--precision fp16|int8`.
-  Vocoder chưa export trong graph (iSTFT không có op chuẩn); chiến lược đề xuất ở mục 9.12 của khảo sát.
+  Kèm custom metadata (sample_rate...).
+- **Runtime ONNX**: `runtime/` chạy acoustic + vocoder ONNX bằng onnxruntime (không cần
+  PyTorch), ghép waveform bằng iSTFT numpy, có chia câu dài + fade/peak-normalize —
+  `vifasttts synthesize-onnx`; chi tiết `docs/MODEL_FLOW.md` §6.4.
 
 ## Vì sao đầu vào neural là 5 thành phần âm tiết, không phải IPA
 

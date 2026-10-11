@@ -87,6 +87,9 @@ Một mẫu manifest chứa **audio_path** + **danh sách âm tiết** đã pars
 
 ## 4. Luồng TRAIN acoustic (`train.py: train_reference`)
 
+> Config được `validate_config` kiểm trước khi chạy (báo rõ `thiếu mel.hop_length`...).
+> Lệnh nhanh: `vifasttts --version`; phiên âm IPA: `vifasttts g2p "quốc" --dialect south`.
+
 ### 4.1 Dataset & collate (`data/dataset.py`)
 
 `TtsDataset.__getitem__` trả:
@@ -228,6 +231,22 @@ một âm tiết đại diện. Muốn kiểm soát phát âm OOV: dùng `resolv
 (`frontend/oov.py`) hoặc thêm override trong normalizer/English fallback.
 Nội dung chỉ có dấu câu hoặc rỗng → `synthesize` raise `ValueError`.
 
+### 6.4 Runtime ONNX (`runtime/`) — không cần PyTorch
+
+```text
+text ─▶ frontend/chunking.py (chia câu, ≤ max_chars) ─▶ từng đoạn:
+   OnnxAcousticModel (onnxruntime): 7 ID → mel [1,T,M]
+   --speed: co giãn mel xấp xỉ (nearest-frame)
+   OnnxVocoder (onnxruntime): mel → spec_real/spec_imag
+   runtime/istft.py: iSTFT overlap-add numpy → waveform
+ghép đoạn + khoảng nghỉ theo dấu câu (pause_seconds)
+runtime/postprocess.py: fade mặc định, --peak-normalize → -3 dBFS
+▶ WAV
+```
+
+Metadata trong file ONNX (do `export.py` ghi) cung cấp `sample_rate/n_fft/hop_length`
+cho runtime; nếu thiếu thì truyền tường minh khi khởi tạo `OnnxVocoder`.
+
 ## 7. Luồng EXPORT (`export.py`)
 
 - `torch.onnx.export` (TorchScript exporter, `dynamo=False` khi torch hỗ trợ), opset 18.
@@ -243,8 +262,11 @@ tone_logits [B,N,6], lengths [B]
 
 - `--precision fp32|fp16|int8`: fp16 chuyển toàn graph (giữ io types); int8 quantize
   động weight (QUInt8). Bản chuyển ghi từ file trung gian rồi xoá — `output` luôn hoàn chỉnh.
-- **Vocoder chưa nằm trong graph ONNX** (iSTFT không có op chuẩn; hướng xử lý ở
-  `docs/TTS_ARCHITECTURE_RESEARCH.md` §9.12: tự cài iSTFT bằng ConvTranspose hoặc xuất phổ).
+- **Vocoder ONNX** (`export-vocoder-onnx`): wrapper trả `spec_real/spec_imag`
+  `[B,bins,T×upsample]` (tách khỏi `aten::complex` vì ONNX không hỗ trợ op này);
+  metadata kèm `sample_rate/n_fft/hop_length/upsample_ratio`. Bước iSTFT ghép bằng
+  numpy ở runtime (`runtime/istft.py`, khớp `torch.istft(center=True)`).
+- Ghi custom metadata cho cả hai model để runtime không cần đọc config.
 
 ## 8. Train vs Inference — khác nhau ở đâu
 
@@ -267,8 +289,10 @@ tone_logits [B,N,6], lengths [B]
    chưa phải cấu hình production (cần discriminator lớn, spectral loss, dữ liệu nhiều).
 3. **Phonation conditioning** mới ở mức reference (`model.use_phonation`): model dự đoán
    3 kênh; chưa có đánh giá nghe/thính học.
-4. **ONNX chưa gồm vocoder**; lượng tử mới ở int8 động, chưa calibration đầy đủ.
-5. **Fallback OOV** đọc âm tiết đại diện nếu không bật `resolve_oov`.
+4. **ONNX**: đã có runtime đầy đủ (acoustic + vocoder spectrum + iSTFT numpy ở
+   `runtime/`); còn lại là **gộp vocoder vào một graph duy nhất** và **calibration
+   INT8 đầy đủ** (hiện int8 động). `--speed` trên đường ONNX là xấp xỉ (co giãn mel).
+5. **Fallback OOV** đọc âm tiết đại diện nếu không bật `resolve_oov` / `--overrides`.
 6. **Một giọng, một phương ngữ mỗi checkpoint**; không speaker/dialect ID.
 
 ## 10. Bản đồ file
@@ -283,8 +307,10 @@ tone_logits [B,N,6], lengths [B]
 | Loss acoustic | `losses.py` |
 | Vocoder + discriminator + loss GAN | `models/istftnet.py`, `models/discriminators.py` |
 | Vòng train | `train.py` |
-| Inference | `infer.py` |
-| Export/quantization | `export.py` |
+| Inference (PyTorch) | `infer.py` (chunk + overrides + postprocess) |
+| Chia câu | `frontend/chunking.py` |
+| Runtime ONNX + iSTFT + postprocess | `runtime/{onnx_engine,istft,postprocess}.py` |
+| Export (acoustic + vocoder)/quantization | `export.py` |
 | CLI | `cli.py` |
 
 ## 11. Lệnh chạy nhanh (mỗi luồng)
@@ -302,13 +328,19 @@ vifasttts train --config configs/base_24k.yaml --train-manifest data/train.jsonl
 # 2) train vocoder
 vifasttts train-vocoder --config configs/base_24k.yaml --manifest data/train.jsonl --output runs/vocoder
 
-# 3) inference
+# 3) inference (PyTorch)
 vifasttts synthesize --config configs/base_24k.yaml --checkpoint runs/base/best.pt \
   --vocoder-checkpoint runs/vocoder/last.pt --text "Xin chào" --output out.wav
 
 # 4) export
 vifasttts export-onnx --config configs/base_24k.yaml --checkpoint runs/base/best.pt \
   --output model.onnx --precision fp16
+vifasttts export-vocoder-onnx --config configs/base_24k.yaml \
+  --checkpoint runs/vocoder/last.pt --output vocoder.onnx
+
+# 5) inference chỉ với ONNX Runtime (không cần PyTorch)
+vifasttts synthesize-onnx --acoustic model.onnx --vocoder vocoder.onnx \
+  --text "Xin chào" --output onnx.wav --peak-normalize
 ```
 
 ## 12. Kiểm chứng bằng test
@@ -320,10 +352,16 @@ vifasttts export-onnx --config configs/base_24k.yaml --checkpoint runs/base/best
 | `tests/test_neural_smoke.py::test_model_phonation_branch` | nhánh phonation (output + loss) |
 | `tests/test_vocoder.py` | MPD-lite, dataset/collate, train smoke, CLI, synthesize dùng vocoder vừa train |
 | `tests/test_cache.py` | cache không trích lại; khoá nhạy config |
+| `tests/test_onnx_runtime.py` | export acoustic+vocoder → mel ONNX khớp PyTorch → `synthesize-onnx` + CLI |
+| `tests/test_runtime_istft.py` | iSTFT numpy khớp `torch.istft(center=True)` |
+| `tests/test_chunking.py` | chia câu/mệnh đề/từ, khoảng nghỉ theo dấu câu |
+| `tests/test_config_validation.py` | lỗi config nêu đúng đường dẫn khóa |
+| `tests/test_postprocess.py` | fade + chuẩn hoá đỉnh đúng đích dBFS |
+| `tests/test_features_batched.py` | mel batch khớp từng mẫu (bắt lỗi broadcast) |
 | `tests/test_phonation.py` | HNR/tilt/glottalization đúng dải; kênh đi vào dataset |
 | `tests/test_losses*` (qua smoke) | công thức loss/trọng số không NaN, backward chạy |
 
-Chạy tất cả: `pytest` (901 test). Ma trận parser: `python tools/parser_audit.py`.
+Chạy tất cả: `pytest` (921 test). Ma trận parser: `python tools/parser_audit.py`.
 
 ## 13. Tài liệu liên quan
 

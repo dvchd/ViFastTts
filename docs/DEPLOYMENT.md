@@ -16,6 +16,24 @@ ONNX Runtime ARM64 hoặc Core ML export riêng.
 
 ONNX Runtime ARM64, NEON, mixed precision hoặc INT8.
 
+## Runtime ONNX không cần PyTorch
+
+```bash
+vifasttts export-onnx --config configs/base_24k.yaml --checkpoint runs/base/best.pt \
+  --output artifacts/model.onnx --precision fp16
+vifasttts export-vocoder-onnx --config configs/base_24k.yaml \
+  --checkpoint runs/vocoder/last.pt --output artifacts/vocoder.onnx
+vifasttts synthesize-onnx --acoustic artifacts/model.onnx --vocoder artifacts/vocoder.onnx \
+  --text "Xin chào" --output out.wav --peak-normalize
+```
+
+- `runtime/onnx_engine.py` + `runtime/istft.py`: text → 7 ID → mel (onnxruntime) →
+  vocoder phổ → iSTFT numpy → WAV; tự chia câu dài, fade đầu/cuối.
+- Metadata trong file ONNX (`sample_rate`, `n_fft`, `hop_length`) đủ để runtime chạy
+  mà không cần đọc config.
+- `--speed` trên đường ONNX là **xấp xỉ** (co giãn mel nearest-frame); muốn chính xác
+  thì dùng đường PyTorch (chạy lại duration predictor).
+
 ## Quantization
 
 Repo hỗ trợ sẵn hai mức từ CLI:
