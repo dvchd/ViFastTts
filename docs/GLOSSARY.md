@@ -148,6 +148,19 @@ Khi đọc tài liệu nước ngoài, các thuật ngữ dưới đây tương 
 | Lexicon | `frontend/lexicon.py` | Tập shape (onset + vần) quan sát được, dùng cho profile `corpus` |
 | Segment | `frontend/segments.py` | Đơn vị cấp âm vị (đệm/chính tách đôi khi là âm đôi) + trọng số duration cho aligner |
 
+## Thiết bị & backend (khi chạy/train)
+
+| Tên | Là gì | Ghi chú |
+| --- | --- | --- |
+| **CPU** | Bộ xử lý trung tâm | `device="cpu"` |
+| **GPU** | Xử lý song song; Apple GPU chạy qua Metal | `device="mps"` trên Mac |
+| **MPS (Apple)** | *Metal Performance Shaders* — backend GPU của Apple cho PyTorch | Tương đương vai trò CUDA; **không phải tên máy** |
+| **CUDA** | Nền tảng GPU của NVIDIA | Mac không có; `device="cuda"` |
+| **CUDA MPS** | *Multi-Process Service* của NVIDIA — **trùng viết tắt** với MPS Apple, khác hoàn toàn | Chia sẻ 1 GPU giữa nhiều tiến trình CUDA |
+| **Neural Engine (ANE)** | Khối AI chuyên dụng của Apple (Mac mini M6: Dual 16-core) | PyTorch **không** dùng ANE; muốn dùng phải qua Core ML/CoreMLTools |
+
+Số đo thực tế trên Mac mini M6 32GB (MPS vs CPU): `docs/TRAINING_ESTIMATES.md` §3.1.
+
 ## Tránh dùng
 
 - "trừu tượng"/"abstract" một mình — quá chung, dễ lẫn với lớp lập trình.

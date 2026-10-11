@@ -186,8 +186,11 @@ chỉ giúp encoder học biểu diễn phân biệt thanh; ở inference `tone_
 
 - AdamW, `lr 2e-4`, `weight_decay 1e-4`, warmup tuyến tính, grad clip 1.0.
 - Thiết bị: `training.device` = `auto` (mặc định: CUDA → Apple MPS → CPU) | `cpu` |
-  `cuda` | `mps`. Trên Mac Apple Silicon, acoustic model chạy MPS nhanh hơn CPU;
-  vocoder mặc định quay về CPU (đo thực tế nhanh hơn — xem `docs/TRAINING_ESTIMATES.md`).
+  `cuda` | `mps`. **MPS** = Metal Performance Shaders — backend GPU của Apple (không phải
+  tên máy; đừng lẫn với "CUDA MPS" của NVIDIA). Trên Mac Apple Silicon, acoustic model
+  chạy MPS nhanh hơn CPU; vocoder mặc định quay về CPU (đo thực tế nhanh hơn — xem
+  `docs/TRAINING_ESTIMATES.md`). **Neural Engine không được PyTorch dùng** — nếu muốn
+  khai thác ANE phải chuyển sang Core ML.
 - AMP tự bật khi CUDA (`training.mixed_precision`).
 - Validation mỗi `validate_every` bước: forward **cùng duration thật**, không backward;
   ghi `history.csv` (`step, train_total, train_mel, val_total`); lưu `last.pt` và

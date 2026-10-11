@@ -87,14 +87,43 @@ Base config, batch 8, câu 30 âm tiết × 20 frame = 600 frame/sample.
 
 ### 3.1 Mac Apple Silicon (MPS) — đo trên Mac mini M6, 32 GB
 
-Máy: **Mac mini M6** (12 nhân: 2 Super + 4 Performance + 6 Efficiency), 32 GB RAM hợp
-nhất, torch 2.14 với MPS. Cùng batch đo như trên:
+**Phần cứng (đối chiếu máy + trang spec chính thức `apple.com/mac-mini/specs`):**
 
-| Việc | CPU (2 luồng) | CPU (12 luồng) | MPS | Kết luận |
+| Thành phần | Thông số |
+| --- | --- |
+| CPU | 12 nhân: 2 **Super** + 4 **Performance** + 6 **Efficiency** |
+| GPU | **12 nhân**, Metal 4 |
+| Neural Engine | **Dual 16-core** + "Neural Accelerators" (khối AI chuyên dụng) |
+| RAM | 32 GB hợp nhất; băng thông **153 GB/s** (bản 16 GB) / **170 GB/s** (bản 24–32 GB) |
+| Điện tối đa | 155 W (liên tục) |
+
+Nguồn thông số: trang spec chính thức <https://www.apple.com/mac-mini/specs/> (truy cập
+11/10/2026) — dòng "Apple M6 chip": 12-core CPU (2 super + 4 performance + 6 efficiency),
+12-core GPU, Neural Accelerators, Dual 16-core Neural Engine, băng thông 153 GB/s
+(16 GB) và 170 GB/s (24–32 GB). Máy đo trong repo: bản 32 GB.
+
+**Phân biệt thuật ngữ (rất dễ lẫn):**
+
+| Tên | Là gì | Trong PyTorch |
+| --- | --- | --- |
+| **CPU** | Bộ xử lý trung tâm, chạy mọi thứ | `device="cpu"` |
+| **GPU** | Xử lý song song; Apple GPU chạy qua Metal | `device="mps"` |
+| **MPS (Apple)** | *Metal Performance Shaders* — thư viện/API của Apple trên Metal; **không phải tên máy** | backend của `mps`, tương đương vai trò CUDA |
+| **CUDA** | Nền tảng GPU của NVIDIA (Mac không có) | `device="cuda"` |
+| **CUDA MPS** | *Multi-Process Service* của NVIDIA — **trùng viết tắt, khác hoàn toàn** | – |
+| **Neural Engine (ANE)** | Khối AI chuyên dụng của Apple | **PyTorch KHÔNG dùng ANE**; muốn dùng phải qua Core ML/CoreMLTools |
+
+Cùng batch đo như trên:
+
+| Việc | CPU (2 luồng) | CPU (12 luồng) | MPS (GPU) | Kết luận |
 | --- | --- | --- | --- | --- |
-| Train acoustic | 0,53 s/bước | 0,74 s/bước | **0,31 s/bước** | MPS nhanh nhất (~1,7× CPU 2 luồng); 12 luồng chậm hơn 2 luồng vì overhead trên batch nhỏ |
+| Train acoustic | 0,53 s/bước | 0,74 s/bước | **0,31 s/bước** | MPS nhanh nhất (~1,7× CPU 2 luồng); 12 luồng chậm hơn 2 luồng vì overhead đồng bộ trên batch nhỏ |
 | Train vocoder (G+D) | **0,39 s/bước** | – | 0,93 s/bước | CPU nhanh hơn 2,4× → **mặc định vocoder dùng CPU trên Mac** (`vocoder_training.device=mps` để ép) |
 | Vocoder inference | – | – | ~0,004 s cho 2×50 frame mel | Rất nhanh, dùng tốt cho tổng hợp |
+
+Ghi chú: ANE (Dual 16-core Neural Engine) **không được dùng** trong pipeline hiện tại —
+PyTorch MPS chỉ chạy trên GPU; muốn khai thác ANE cần chuyển model sang Core ML (hướng
+tương lai, đặc biệt cho inference trên máy người dùng).
 
 **Ước lượng thời gian train trên Mac mini M6 32 GB** (từ số đo/bước, cộng ~10–20% cho
 dataloader nếu **không** cache feature):
@@ -172,6 +201,10 @@ Giá cloud GPU thay đổi liên tục — dải tham khảo (Vast.ai/RunPod/Lam
 **Điện + máy local (Việt Nam, tham khảo ~3.000đ/kWh):** hệ 4090 ~500 W → ~1.500đ/giờ;
 một lần train chuẩn (15 giờ) ≈ **~25.000đ tiền điện** — rẻ hơn cloud nếu đã có máy,
 nhưng chi phí máy (~30–50 triệu) lớn hơn nhiều lần.
+
+**Mac mini M6 (155 W tối đa, thực tế khi train ~60–100 W):** ~200–465đ/giờ;
+train chuẩn (~33 giờ acoustic+vocoder) ≈ **~7.000–15.000đ tiền điện** — rẻ nhất nếu
+đã có máy (không tính khấu hao).
 
 **Chi phí thật nằm ở con người:** chuẩn bị + QC dữ liệu, alignment, nghe thử, tune
 thường chiếm **20–120 giờ người** cho một giọng tốt — lớn hơn toàn bộ tiền GPU.
