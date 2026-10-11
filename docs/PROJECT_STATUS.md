@@ -8,7 +8,7 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **1017 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **1023 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối
@@ -109,6 +109,9 @@ vifasttts build-lexicon --manifest data/manifest.jsonl --output data/lexicon.jso
 vifasttts cache-features --manifest data/train.jsonl --config configs/base_24k.yaml --cache-dir cache/train
 vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/codelung --demo       # demo 1 video
 vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/codelung --sleep 1.5  # cả kênh
+python tools/dataset_report.py --dataset data/codelung                                # báo cáo per-video
+python tools/split_manifest.py --manifest data/codelung/manifest.jsonl \
+  --out-dir data/codelung --val-videos 4                                              # chia train/val theo video
 
 # huấn luyện / suy luận / export
 vifasttts train --config configs/base_24k.yaml --train-manifest ... --val-manifest ... --output runs/base

@@ -146,6 +146,11 @@ vifasttts cache-features --manifest data/codelung/manifest.jsonl \
 # ví dụ overrides: {"code": "cốt", "copy": "cô pi"} — mẫu: configs/overrides_tech_vi.json
 vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/codelung \
   --overrides configs/overrides_tech_vi.json --refresh
+
+# báo cáo dataset + chia train/val theo video (tránh rò rỉ)
+python tools/dataset_report.py --dataset data/codelung
+python tools/split_manifest.py --manifest data/codelung/manifest.jsonl \
+  --out-dir data/codelung --val-videos 4
 ```
 
 ## 9. Giới hạn (đọc trước khi train)

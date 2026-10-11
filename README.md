@@ -30,7 +30,7 @@ vị trí, và không có "từ lạ" với tiếng Việt chuẩn.
 
 | Hạng mục | Kết quả |
 | --- | --- |
-| Bộ test | **1017 test pass**; `ruff` + `mypy` sạch |
+| Bộ test | **1023 test pass**; `ruff` + `mypy` sạch |
 | Parser âm tiết | Vét cạn **49.166 tổ hợp = 0 lỗi**; 39K từ thật: 6.617/6.633 parse OK |
 | Kho âm tiết | 24 âm đầu · 2 âm đệm · 15 âm chính · 11 âm cuối · 6 thanh → **264 vần**, **28.800 âm tiết trừu tượng** |
 | Model | Acoustic **16,4 triệu** tham số; vocoder **3,5 triệu** tham số |
@@ -115,7 +115,7 @@ pytest
 | Xuất | `vifasttts export-onnx ... [--precision fp16\|int8]` · `export-vocoder-onnx ...` |
 | Runtime ONNX | `vifasttts synthesize-onnx --acoustic model.onnx --vocoder vocoder.onnx --text "..." --output out.wav [--provider cpu\|cuda\|coreml\|tensorrt]` |
 | Khác | `vifasttts --version` |
-| Kiểm tra | `pytest` · `ruff check .` · `mypy src/vifasttts` · `tools/parser_audit.py` · `tools/frontend_benchmark.py` |
+| Kiểm tra | `pytest` · `ruff check .` · `mypy src/vifasttts` · `tools/parser_audit.py` · `tools/frontend_benchmark.py` · `tools/dataset_report.py` · `tools/split_manifest.py` |
 
 <details>
 <summary>Ví dụ đầy đủ (bấm để mở)</summary>
@@ -186,7 +186,7 @@ src/vifasttts/
   export.py   ONNX (acoustic + vocoder) + quantization
 configs/      base_24k.yaml + small_24k.yaml + large_24k.yaml + overrides_tech_vi.json (từ lạ cho youtube-fetch)
 tools/        parser_audit.py, frontend_benchmark.py
-tests/        1017 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server, youtube
+tests/        1023 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server, youtube
 docs/         toàn bộ tài liệu (xem mục 10)
 ```
 
