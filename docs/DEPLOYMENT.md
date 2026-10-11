@@ -34,6 +34,33 @@ vifasttts synthesize-onnx --acoustic artifacts/model.onnx --vocoder artifacts/vo
 - `--speed` trên đường ONNX là **xấp xỉ** (co giãn mel nearest-frame); muốn chính xác
   thì dùng đường PyTorch (chạy lại duration predictor).
 
+## HTTP server (nghiên cứu/nội bộ)
+
+```bash
+vifasttts serve --config configs/base_24k.yaml --checkpoint runs/base/best.pt \
+  --vocoder-checkpoint runs/vocoder/last.pt --host 127.0.0.1 --port 8000
+
+curl -X POST http://127.0.0.1:8000/synthesize \
+  -H 'Content-Type: application/json' \
+  -d '{"text": "Xin chào", "speed": 1.0, "peak_normalize": true}' -o out.wav
+curl http://127.0.0.1:8000/health
+```
+
+- Chỉ dùng stdlib (`ThreadingHTTPServer`) — không thêm dependency; một model nạp sẵn,
+  lock tuần tự, giới hạn 2000 ký tự / speed 0.25–4.0.
+- Production: đặt sau reverse proxy, thêm hàng đợi/timeout, cân nhắc chạy nhiều process.
+- Batch không cần server: `vifasttts synthesize-batch --input list.txt --output-dir out/`.
+- Streaming (phát dần): Python API `iter_synthesize(...)` / `iter_synthesize_onnx(...)`.
+
+### Vì sao chưa gộp vocoder vào một graph ONNX?
+
+ONNX có op `STFT` (opset 17) nhưng **không có ISTFT** (đề xuất còn mở). Muốn gộp phải tự
+cài iSTFT bằng op có sẵn — khả thi nhưng tốn kém: ma trận IDFT + overlap-add dạng
+ConvTranspose đường chéo cỡ `n_fft²` (~1M tham số cho n_fft=1024) hoặc scatter phức tạp,
+lợi ích chưa tương xứng. Vì vậy pipeline hiện tại xuất **2 file** (`model.onnx` +
+`vocoder.onnx`) và ghép waveform bằng iSTFT numpy trong `runtime/istft.py` (đã kiểm khớp
+`torch.istft`). Đây là lựa chọn có chủ đích, không phải thiếu sót.
+
 ## Quantization
 
 Repo hỗ trợ sẵn hai mức từ CLI:

@@ -8,7 +8,7 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **921 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **925 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối
@@ -20,6 +20,9 @@
 - **Runtime ONNX không cần PyTorch**: `synthesize-onnx` (acoustic + vocoder ONNX,
   iSTFT numpy), chia câu dài, `--overrides`, `--peak-normalize`; vocoder ONNX xuất
   spectrum + metadata.
+- **Dịch vụ & batch**: `vifasttts serve` (HTTP stdlib: `POST /synthesize`, `/health`,
+  `/info`), `synthesize-batch` (file → nhiều WAV), streaming Python
+  `iter_synthesize`/`iter_synthesize_onnx`; library dùng `warnings` thay `print`.
 - Đã triển khai hết lớp frontend/data của roadmap: profile `open/strict/corpus` +
   lexicon, `AbstractSyllable.rime`, Segment Expander + `distribute_frames`, benchmark
   biểu diễn, cache feature, kênh phonation, G2P Nam cho `OO`/`ưu/ươu`.
@@ -96,6 +99,8 @@ vifasttts cache-features --manifest data/train.jsonl --config configs/base_24k.y
 vifasttts train --config configs/base_24k.yaml --train-manifest ... --val-manifest ... --output runs/base
 vifasttts train-vocoder --config configs/base_24k.yaml --manifest data/train.jsonl --output runs/vocoder
 vifasttts synthesize --config configs/base_24k.yaml --checkpoint runs/base/best.pt --text "Xin chào" --output out.wav
+vifasttts synthesize-batch --config configs/base_24k.yaml --checkpoint runs/base/best.pt --input data/cau.txt --output-dir out/
+vifasttts serve --config configs/base_24k.yaml --checkpoint runs/base/best.pt --port 8000
 vifasttts export-onnx --config configs/base_24k.yaml --checkpoint runs/base/best.pt --output model.onnx --precision fp16
 vifasttts export-vocoder-onnx --config configs/base_24k.yaml --checkpoint runs/vocoder/last.pt --output vocoder.onnx
 
@@ -125,7 +130,10 @@ python tools/parser_audit.py --wordlist words.txt   # audit từ điển (+ --pr
 4. ✅ **Quantization** khởi điểm: `--precision fp16|int8` + test onnxruntime.
    ✅ **Runtime ONNX** không cần PyTorch (`runtime/`: acoustic + vocoder spectrum +
    iSTFT numpy + postprocess; CLI `synthesize-onnx`, chia câu, `--overrides`).
-   ⬜ Gộp vocoder vào một graph duy nhất; calibration INT8 đầy đủ (6 thanh × coda tắc).
+   ✅ **Streaming/batch/server**: `iter_synthesize(_onnx)`, `synthesize-batch`,
+   `vifasttts serve` (HTTP stdlib).
+   ⬜ Calibration INT8 đầy đủ (6 thanh × coda tắc) — cần bộ hiệu chỉnh + đo chất lượng;
+   ⬜ gộp vocoder vào một graph ONNX (ONNX thiếu op ISTFT — xem `docs/DEPLOYMENT.md`).
 5. ✅ **Strict/lexicon**: 3 mức `open/strict/corpus`, `Lexicon` (from_words/from_manifest,
    save/load), CLI `check-profile`/`build-lexicon`, tool audit `--profile`. ⬜ Mở rộng
    OOV resolver cho từ vay viết liền (`palăng`, `a-xít`...).

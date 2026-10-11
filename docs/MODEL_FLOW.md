@@ -247,6 +247,23 @@ runtime/postprocess.py: fade mặc định, --peak-normalize → -3 dBFS
 Metadata trong file ONNX (do `export.py` ghi) cung cấp `sample_rate/n_fft/hop_length`
 cho runtime; nếu thiếu thì truyền tường minh khi khởi tạo `OnnxVocoder`.
 
+### 6.5 Streaming, batch và server
+
+- **Streaming** (thư viện): `iter_synthesize(...)` và `iter_synthesize_onnx(...)` yield
+  `(waveform numpy, sample_rate)` theo từng đoạn — gồm cả khoảng nghỉ giữa câu; dùng
+  được cho phát dần hoặc tích hợp server. `Synthesizer` (infer) giữ model đã nạp để
+  không nạp lại mỗi câu.
+- **Batch**: `synthesize_batch(config, checkpoint, rows, output_dir, ...)` nạp model một
+  lần cho cả danh sách; CLI `synthesize-batch --input file --output-dir dir` đọc
+  `id<TAB>câu` hoặc mỗi dòng một câu (tự sinh `line_0001`).
+- **HTTP server** (`server.py`, chỉ stdlib — không thêm dependency):
+  - `GET /health` → `{"status": "ok", "version": ...}`; `GET /info` → sample rate...
+  - `POST /synthesize` nhận JSON `{"text", "dialect"?, "speed"?, "overrides"?, "peak_normalize"?}`
+    → trả `audio/wav`. Giới hạn 2000 ký tự, speed 0.25–4.0, lock tuần tự.
+  - CLI: `vifasttts serve --config ... --checkpoint ... [--vocoder-checkpoint ...] [--port 8000]`.
+  - Lưu ý: server nghiên cứu/nội bộ (không auth, một model); production nên đặt sau
+    reverse proxy + hàng đợi.
+
 ## 7. Luồng EXPORT (`export.py`)
 
 - `torch.onnx.export` (TorchScript exporter, `dynamo=False` khi torch hỗ trợ), opset 18.
@@ -294,6 +311,8 @@ tone_logits [B,N,6], lengths [B]
    INT8 đầy đủ** (hiện int8 động). `--speed` trên đường ONNX là xấp xỉ (co giãn mel).
 5. **Fallback OOV** đọc âm tiết đại diện nếu không bật `resolve_oov` / `--overrides`.
 6. **Một giọng, một phương ngữ mỗi checkpoint**; không speaker/dialect ID.
+7. **Server HTTP** là bản nghiên cứu/nội bộ (stdlib, không auth, một model, lock tuần tự);
+   production cần reverse proxy + hàng đợi + giới hạn tải.
 
 ## 10. Bản đồ file
 
@@ -310,6 +329,8 @@ tone_logits [B,N,6], lengths [B]
 | Inference (PyTorch) | `infer.py` (chunk + overrides + postprocess) |
 | Chia câu | `frontend/chunking.py` |
 | Runtime ONNX + iSTFT + postprocess | `runtime/{onnx_engine,istft,postprocess}.py` |
+| Streaming/batch (`Synthesizer`) | `infer.py` |
+| HTTP server (stdlib) | `server.py` |
 | Export (acoustic + vocoder)/quantization | `export.py` |
 | CLI | `cli.py` |
 
@@ -341,6 +362,11 @@ vifasttts export-vocoder-onnx --config configs/base_24k.yaml \
 # 5) inference chỉ với ONNX Runtime (không cần PyTorch)
 vifasttts synthesize-onnx --acoustic model.onnx --vocoder vocoder.onnx \
   --text "Xin chào" --output onnx.wav --peak-normalize
+
+# 6) batch + server
+vifasttts synthesize-batch --config configs/base_24k.yaml --checkpoint runs/base/best.pt \
+  --input data/cau.txt --output-dir data/out
+vifasttts serve --config configs/base_24k.yaml --checkpoint runs/base/best.pt --port 8000
 ```
 
 ## 12. Kiểm chứng bằng test
@@ -352,7 +378,8 @@ vifasttts synthesize-onnx --acoustic model.onnx --vocoder vocoder.onnx \
 | `tests/test_neural_smoke.py::test_model_phonation_branch` | nhánh phonation (output + loss) |
 | `tests/test_vocoder.py` | MPD-lite, dataset/collate, train smoke, CLI, synthesize dùng vocoder vừa train |
 | `tests/test_cache.py` | cache không trích lại; khoá nhạy config |
-| `tests/test_onnx_runtime.py` | export acoustic+vocoder → mel ONNX khớp PyTorch → `synthesize-onnx` + CLI |
+| `tests/test_onnx_runtime.py` | export acoustic+vocoder → mel ONNX khớp PyTorch → `synthesize-onnx` + streaming + CLI |
+| `tests/test_server.py` | engine (validate payload), WAV bytes, HTTP `/health`, `/info`, `POST /synthesize`, lỗi 400/404 |
 | `tests/test_runtime_istft.py` | iSTFT numpy khớp `torch.istft(center=True)` |
 | `tests/test_chunking.py` | chia câu/mệnh đề/từ, khoảng nghỉ theo dấu câu |
 | `tests/test_config_validation.py` | lỗi config nêu đúng đường dẫn khóa |
@@ -361,7 +388,7 @@ vifasttts synthesize-onnx --acoustic model.onnx --vocoder vocoder.onnx \
 | `tests/test_phonation.py` | HNR/tilt/glottalization đúng dải; kênh đi vào dataset |
 | `tests/test_losses*` (qua smoke) | công thức loss/trọng số không NaN, backward chạy |
 
-Chạy tất cả: `pytest` (921 test). Ma trận parser: `python tools/parser_audit.py`.
+Chạy tất cả: `pytest` (925 test). Ma trận parser: `python tools/parser_audit.py`.
 
 ## 13. Tài liệu liên quan
 

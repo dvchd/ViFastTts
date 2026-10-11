@@ -30,12 +30,13 @@ vị trí, và không có "từ lạ" với tiếng Việt chuẩn.
 
 | Hạng mục | Kết quả |
 | --- | --- |
-| Bộ test | **921 test pass**; `ruff` + `mypy` sạch |
+| Bộ test | **925 test pass**; `ruff` + `mypy` sạch |
 | Parser âm tiết | Vét cạn **49.166 tổ hợp = 0 lỗi**; 39K từ thật: 6.617/6.633 parse OK |
 | Kho âm tiết | 24 âm đầu · 2 âm đệm · 15 âm chính · 11 âm cuối · 6 thanh → **264 vần**, **28.800 âm tiết trừu tượng** |
 | Model | Acoustic **16,4 triệu** tham số; vocoder **3,5 triệu** tham số |
 | Sinh giọng | `vifasttts synthesize` chạy end-to-end (WAV 16-bit, 24 kHz); văn bản dài tự chia câu |
 | Runtime ONNX | `vifasttts synthesize-onnx` chạy acoustic + vocoder ONNX, iSTFT numpy (không cần PyTorch) |
+| Dịch vụ | `vifasttts serve` (HTTP stdlib: `POST /synthesize` → WAV) · `synthesize-batch` (file → nhiều WAV) · streaming qua `iter_synthesize` |
 | Xuất ONNX | fp32 / fp16 / int8, batch và độ dài **động** (đã kiểm bằng onnxruntime) |
 | Huấn luyện | Train acoustic + train vocoder (GAN tham chiếu) + cache feature |
 
@@ -106,6 +107,7 @@ pytest
 | Dữ liệu | `build-manifest` · `validate-manifest` (kèm coverage) · `build-lexicon` · `cache-features` |
 | Huấn luyện | `vifasttts train ...` · `vifasttts train-vocoder ...` |
 | Sinh giọng | `vifasttts synthesize --text "..." --output out.wav [--dialect south] [--speed 0.9] [--overrides file.json] [--peak-normalize]` |
+| Batch / dịch vụ | `synthesize-batch --input list.txt --output-dir out/` · `serve --host 127.0.0.1 --port 8000` |
 | Xuất | `vifasttts export-onnx ... [--precision fp16\|int8]` · `export-vocoder-onnx ...` |
 | Runtime ONNX | `vifasttts synthesize-onnx --acoustic model.onnx --vocoder vocoder.onnx --text "..." --output out.wav` |
 | Khác | `vifasttts --version` |
@@ -137,6 +139,13 @@ vifasttts export-vocoder-onnx --config configs/base_24k.yaml \
 # Chạy lại chỉ với ONNX Runtime (không cần PyTorch)
 vifasttts synthesize-onnx --acoustic artifacts/model.onnx --vocoder artifacts/vocoder.onnx \
   --text "Xin chào" --output onnx.wav --peak-normalize
+
+# Batch và dịch vụ HTTP
+vifasttts synthesize-batch --config configs/base_24k.yaml --checkpoint runs/base/best.pt \
+  --input data/cau.txt --output-dir data/wavs_out
+vifasttts serve --config configs/base_24k.yaml --checkpoint runs/base/best.pt --port 8000
+# → curl -X POST localhost:8000/synthesize -d '{"text":"Xin chào"}' -o out.wav
+#   (kèm GET /health, GET /info)
 ```
 
 </details>
@@ -169,7 +178,7 @@ src/vifasttts/
   export.py   ONNX (acoustic + vocoder) + quantization
 configs/      base_24k.yaml (cấu hình mẫu)
 tools/        parser_audit.py, frontend_benchmark.py
-tests/        921 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX
+tests/        925 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server
 docs/         toàn bộ tài liệu (xem mục 10)
 ```
 
