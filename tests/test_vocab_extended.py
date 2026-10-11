@@ -1,4 +1,3 @@
-from vifasttts.frontend.syllable import parse_syllable
 from vifasttts.frontend.vocab import ComponentVocabs
 
 

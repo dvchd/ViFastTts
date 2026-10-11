@@ -1,4 +1,5 @@
 import pytest
+
 from vifasttts.frontend.syllable import parse_syllable
 
 

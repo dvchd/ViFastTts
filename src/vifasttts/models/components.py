@@ -12,7 +12,8 @@ class ComponentEmbedding(nn.Module):
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         parts = [table(features[..., i]) for i, table in enumerate(self.tables)]
-        return self.proj(torch.cat(parts, dim=-1))
+        projected: torch.Tensor = self.proj(torch.cat(parts, dim=-1))
+        return projected
 
 
 class ConvPredictor(nn.Module):
@@ -33,4 +34,5 @@ class ConvPredictor(nn.Module):
                 x = layer(x.transpose(1, 2)).transpose(1, 2)
             else:
                 x = layer(x)
-        return self.out(x)
+        output: torch.Tensor = self.out(x)
+        return output

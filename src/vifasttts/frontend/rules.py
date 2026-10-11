@@ -25,6 +25,8 @@ SIMPLE_NUCLEI = {"a", "ă", "â", "e", "ê", "i", "y", "o", "ô", "ơ", "u", "ư
 NUCLEUS_ABSTRACT = {
     "a": "A", "ă": "Ă", "â": "Â", "e": "E", "ê": "Ê", "i": "I", "y": "I",
     "o": "O", "ô": "Ô", "ơ": "Ơ", "u": "U", "ư": "Ư",
+    # "oo" chỉ xuất hiện trong từ vay đã Việt hoá: xoong, boong, moóc...
+    "oo": "O",
     "iê": "IÊ", "yê": "IÊ", "ia": "IÊ", "ya": "IÊ",
     "uô": "UÔ", "ua": "UÔ", "ươ": "ƯƠ", "ưa": "ƯƠ",
 }
@@ -34,7 +36,7 @@ NUCLEUS_ABSTRACT = {
 SPECIAL_VOWELS = {
     "oa": ("o", "a"), "oă": ("o", "ă"), "oe": ("o", "e"),
     "uâ": ("u", "â"), "uê": ("u", "ê"), "uy": ("u", "y"),
-    "uyê": ("u", "yê"), "uơ": ("u", "ơ"),
+    "uya": ("u", "ya"), "uyê": ("u", "yê"), "uơ": ("u", "ơ"),
 }
 
 STOP_CODAS = {"P", "T", "C", "CH"}

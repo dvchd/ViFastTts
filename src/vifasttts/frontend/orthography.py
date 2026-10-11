@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unicodedata
+
 from vifasttts.types import Tone
 
 TONE_COMBINING = {
@@ -15,6 +16,9 @@ TONE_COMBINING = {
 
 def _tone_target(nucleus: str) -> int:
     """Return index in grapheme nucleus for canonical main-vowel placement."""
+    # Từ vay "oo" (xoong, moóc): dấu đặt trên chữ o thứ hai.
+    if nucleus.lower() == "oo":
+        return 1
     # Open variants ia, ua, ưa carry tone on the first vowel.
     if nucleus.lower() in {"ia", "ya", "ua", "ưa"}:
         return 0
@@ -41,14 +45,6 @@ def compose_canonical(onset: str | None, medial: str | None, nucleus: str, coda:
     onset = onset or ""
     # qu already contains the written u that represents medial W.
     written_medial = "" if onset == "qu" else (medial or "")
-    # Canonical "uy" puts tone on final y: thuy -> thuy with tone on y (thuy),
-    # tuy -> tuy with tone on y (tuy). Parser yields nucleus "u" + coda "y",
-    # so move tone to coda for this specific pattern.
-    if (
-        tone is not Tone.NGANG
-        and coda is not None
-        and coda.lower() in ("y", "i")
-        and nucleus.lower() == "u"
-    ):
-        return onset + written_medial + nucleus + apply_tone(coda, tone)
+    # "uy" được parse thành medial W + nucleus I (xem syllable.py), nên dấu
+    # thanh tự động rơi trên nucleus "y" — đúng chuẩn hiện đại (thuỷ, tuỳ).
     return onset + written_medial + apply_tone(nucleus, tone) + (coda or "")

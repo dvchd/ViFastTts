@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+
 from vifasttts.types import ParsedSyllable
 
 
@@ -19,7 +20,7 @@ class ComponentVocabs:
     punctuation: dict[str, int]
 
     @classmethod
-    def default(cls) -> "ComponentVocabs":
+    def default(cls) -> ComponentVocabs:
         return cls(
             onset=_map(["NONE", "B", "M", "PH", "V", "T", "TH", "Đ", "N", "D", "GI", "R", "X", "S", "CH", "TR", "NH", "L", "K", "KH", "NG", "G", "H", "P"]),
             medial=_map(["NONE", "W"]),

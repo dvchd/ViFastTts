@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unicodedata
+
 from vifasttts.types import Tone
 
 TONE_MARKS = {

@@ -1,3 +1,15 @@
+"""Kiểu dữ liệu lõi của ViFastTts.
+
+Mỗi âm tiết (`ParsedSyllable`) mang đồng thời ba dạng của cùng một âm tiết:
+
+1. `Orthography` — dạng chính tả (cách ghi gốc).
+2. `AbstractSyllable` — **dạng âm vị học**: 5 thành phần là các category
+   trung lập phương ngữ, dùng làm khoá vocab cho model.
+3. Dạng ngữ âm (IPA) — sinh một chiều bởi `frontend/g2p.py`, theo vùng.
+
+Thuật ngữ đầy đủ và quy ước đặt tên: docs/GLOSSARY.md.
+"""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
@@ -22,6 +34,8 @@ class ParseStatus(StrEnum):
 
 @dataclass(frozen=True)
 class Orthography:
+    """Dạng chính tả: giữ cách ghi gốc (gi/qu, i/y, dấu cũ/mới...)."""
+
     onset: str | None
     medial: str | None
     nucleus: str
@@ -31,6 +45,13 @@ class Orthography:
 
 @dataclass(frozen=True)
 class AbstractSyllable:
+    """Dạng âm vị học: 5 category trung lập phương ngữ.
+
+    Ứng với thuật ngữ ngữ văn: âm đầu / âm đệm / âm chính / âm cuối /
+    thanh điệu. Đây là khoá vocab cho model (qua `ComponentVocabs`);
+    KHÔNG phải IPA — xem docs/GLOSSARY.md.
+    """
+
     onset: str
     medial: str
     nucleus: str
@@ -50,7 +71,7 @@ class ParsedSyllable:
     raw: str
     normalized: str
     orthography: Orthography
-    abstract: AbstractSyllable
+    abstract: AbstractSyllable  # dạng âm vị học (phonological form)
     boundaries: Boundaries = field(default_factory=Boundaries)
     status: ParseStatus = ParseStatus.VALID
     confidence: float = 1.0

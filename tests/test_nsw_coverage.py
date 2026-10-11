@@ -3,12 +3,14 @@
 Covers semiotic classes: cardinal, decimal, percent, currency, phone,
 thousand separators, leading-zero codes, acronyms, versions/codes,
 URLs/emails/hashtags, whitespace/punctuation robustness, idempotency.
-Known gaps (dates, times, fractions, ranges) are documented as fallback
-no-crash tests + xfail for ideal verbalization.
+Date/time/fraction/range verbalization was implemented after the initial
+audit; remaining limits (dates without year, HH:MM:SS, minus ranges) are
+kept as no-crash tests.
 """
 
 import pytest
-from vifasttts.frontend.normalizer import integer_to_words, normalize_text
+
+from vifasttts.frontend.normalizer import normalize_text
 from vifasttts.frontend.pipeline import parse_text
 from vifasttts.types import ParseStatus
 
@@ -138,34 +140,52 @@ def test_ordinal_thu():
     assert normalize_text("thứ 2") == "thứ hai"
 
 
-# --- Known gaps: documented, fallback no-crash now, ideal later ---
+# --- Remaining gaps: no crash, fallback preserved ---
 @pytest.mark.parametrize("source", [
-    "25/12/2023",
-    "14:30",
-    "2/3",
-    "3-5",
-    "1873-1907",
+    "25/12",
+    "2024-13-40",
+    "14:99",
+    "3.5.1",
 ])
 def test_known_gap_no_crash(source):
     items = parse_text(source)
     assert len(items) >= 1
 
 
-@pytest.mark.xfail(reason="Dates not yet verbalized (need DD/MM/YYYY support)")
+# --- Dates, times, fractions, ranges (implemented) ---
 def test_date_ideal():
     assert normalize_text("25/12/2023") == "ngày hai mươi lăm tháng mười hai năm hai nghìn không trăm hai mươi ba"
 
 
-@pytest.mark.xfail(reason="Times not yet verbalized (need HH:MM support)")
+def test_date_prefixed_with_ngay():
+    assert normalize_text("ngày 25/12/2023") == "ngày hai mươi lăm tháng mười hai năm hai nghìn không trăm hai mươi ba"
+
+
 def test_time_ideal():
     assert normalize_text("14:30") == "mười bốn giờ ba mươi phút"
+    assert normalize_text("14:05") == "mười bốn giờ linh năm phút"
 
 
-@pytest.mark.xfail(reason="Fractions not yet verbalized (need 2/3 support)")
+def test_hour_notation():
+    assert normalize_text("14h30") == "mười bốn giờ ba mươi phút"
+    assert normalize_text("18h") == "mười tám giờ"
+
+
 def test_fraction_ideal():
     assert normalize_text("2/3") == "hai phần ba"
 
 
-@pytest.mark.xfail(reason="Ranges not yet verbalized (need 3-5 -> den support)")
 def test_range_ideal():
     assert normalize_text("3-5") == "ba đến năm"
+    assert normalize_text("10-20%") == "mười đến hai mươi phần trăm"
+
+
+# --- Digits survive the tokenizer (never silently dropped) ---
+def test_fallback_keeps_digits():
+    items = parse_text("RTX3080")
+    assert len(items) == 1
+    assert items[0].raw == "RTX3080"
+    assert items[0].status == ParseStatus.FALLBACK_REQUIRED
+    items = parse_text("v2")
+    assert len(items) == 1
+    assert items[0].raw == "v2"

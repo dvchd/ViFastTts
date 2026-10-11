@@ -1,6 +1,8 @@
 import pytest
-from vifasttts.frontend.roman import roman_to_int
+
 from vifasttts.frontend.normalizer import NormalizerOptions, normalize_text
+from vifasttts.frontend.roman import roman_to_int
+
 
 @pytest.mark.parametrize("roman,value", [
     ("II",2),("III",3),("IV",4),("VI",6),("IX",9),("XI",11),

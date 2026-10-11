@@ -1,5 +1,5 @@
-from vifasttts.frontend.dialect import Dialect
 from vifasttts.frontend.normalizer import NormalizerOptions, normalize_text
+
 
 def test_exact_override_beats_everything():
     o=NormalizerOptions(exact_overrides={"VI":"vê i", "AI":"trí tuệ nhân tạo"})

@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import re
+
 from vifasttts.frontend.dialect import Dialect
 from vifasttts.frontend.normalizer import NormalizerOptions, normalize_text
 from vifasttts.frontend.syllable import safe_parse_syllable
-from vifasttts.types import AbstractSyllable, Boundaries, Orthography, ParsedSyllable, ParseStatus, Tone
+from vifasttts.types import (
+    AbstractSyllable,
+    Boundaries,
+    Orthography,
+    ParsedSyllable,
+    ParseStatus,
+    Tone,
+)
 
-_TOKEN_RE = re.compile(r"[A-Za-zÀ-ỹĐđ]+|[^\w\s]", re.UNICODE)
+_TOKEN_RE = re.compile(r"[A-Za-zÀ-ỹĐđ0-9]+|[^\w\s]", re.UNICODE)
 
 
 def _fallback_syllable(token: str) -> ParsedSyllable:
@@ -31,6 +39,7 @@ def parse_text(
     dialect: str | Dialect = Dialect.NORTH,
     *,
     options: NormalizerOptions | None = None,
+    resolve_oov: bool = False,
 ) -> list[ParsedSyllable]:
     """Parse text into structured syllables.
 
@@ -39,7 +48,12 @@ def parse_text(
     punctuation to the previous one with phrase/sentence boundaries.
     Invalid or foreign tokens become FALLBACK_REQUIRED entries instead
     of raising, so manifest building and inference never crash.
+
+    Với `resolve_oov=True`, token OOV được thử respell bằng
+    `frontend/oov.py` (acronym/English/tên chữ cái) trước khi fallback.
     """
+    from vifasttts.frontend.oov import resolve_oov_token
+
     normalized = normalize_text(text, dialect, options=options)
     output: list[ParsedSyllable] = []
     pending_punctuation = ""
@@ -55,10 +69,22 @@ def parse_text(
                 pending_punctuation += token
             continue
         parsed = safe_parse_syllable(token)
-        if parsed is None:
-            parsed = _fallback_syllable(token)
+        expanded: list[ParsedSyllable] = []
+        if parsed is None and resolve_oov:
+            respelled = resolve_oov_token(token)
+            if respelled:
+                expanded = parse_text(respelled, dialect, options=options)
+                for item in expanded:
+                    item.raw = token
+                    item.confidence = min(item.confidence, 0.5)
+        if expanded:
+            items = expanded
+        else:
+            if parsed is None:
+                parsed = _fallback_syllable(token)
+            items = [parsed]
         if pending_punctuation:
-            parsed.punctuation = pending_punctuation + (parsed.punctuation or "")
+            items[0].punctuation = pending_punctuation + (items[0].punctuation or "")
             pending_punctuation = ""
-        output.append(parsed)
+        output.extend(items)
     return output

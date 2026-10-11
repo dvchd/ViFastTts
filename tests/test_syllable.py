@@ -1,4 +1,5 @@
 import pytest
+
 from vifasttts.frontend.syllable import parse_syllable
 
 
@@ -21,7 +22,12 @@ from vifasttts.frontend.syllable import parse_syllable
     ("quả", ("K", "W", "A", "NONE", "HOI")),
     ("quyển", ("K", "W", "IÊ", "N", "HOI")),
     ("giá", ("GI", "NONE", "A", "NONE", "SAC")),
-    ("giếng", ("GI", "NONE", "Ê", "NG", "SAC")),
+    ("giếng", ("GI", "NONE", "IÊ", "NG", "SAC")),
+    ("giêng", ("GI", "NONE", "IÊ", "NG", "NGANG")),
+    ("giết", ("GI", "NONE", "IÊ", "T", "SAC")),
+    ("gì", ("GI", "NONE", "I", "NONE", "HUYEN")),
+    ("gìn", ("GI", "NONE", "I", "N", "HUYEN")),
+    ("già", ("GI", "NONE", "A", "NONE", "HUYEN")),
 ])
 def test_parser(word, expected):
     a = parse_syllable(word).abstract

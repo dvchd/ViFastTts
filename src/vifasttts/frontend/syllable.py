@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import re
-from dataclasses import replace
 
 from vifasttts.frontend.rules import (
-    CODA_ABSTRACT, CONSONANT_CODAS, NUCLEUS_ABSTRACT, ONSET_ABSTRACT,
-    ONSET_SPELLINGS, SPECIAL_VOWELS, STOP_CODAS,
+    CODA_ABSTRACT,
+    CONSONANT_CODAS,
+    NUCLEUS_ABSTRACT,
+    ONSET_ABSTRACT,
+    ONSET_SPELLINGS,
+    SPECIAL_VOWELS,
+    STOP_CODAS,
 )
 from vifasttts.frontend.tone import extract_tone
 from vifasttts.frontend.unicode import normalize_unicode
-from vifasttts.types import AbstractSyllable, Orthography, ParsedSyllable, ParseStatus, Tone
+from vifasttts.types import AbstractSyllable, Orthography, ParsedSyllable, Tone
 
 _EDGE_PUNCT = re.compile(r"^([^\wÀ-ỹĐđ]*)(.*?)([^\wÀ-ỹĐđ]*)$")
+_VOWEL_LETTERS = set("aăâeêioôơuưy")
 
 
 def _split_edge_punctuation(raw: str) -> tuple[str, str | None]:
@@ -24,6 +29,12 @@ def _split_edge_punctuation(raw: str) -> tuple[str, str | None]:
 
 
 def _match_onset(word: str) -> tuple[str, str, bool]:
+    # "gi": chữ i dùng chung giữa onset và vần. Khi sau nó là "ê", hết từ
+    # (gì) hoặc một phụ âm (gìn), chữ i thuộc vần => onset chính tả là "g"
+    # (âm vị vẫn là GI; xem xử lý trong parse_syllable). Trước nguyên âm khác
+    # (già, giữ, giường) thì i là phần của digraph gi (âm /z/), câm.
+    if word.startswith("gi") and (len(word) == 2 or word[2] == "ê" or word[2] not in _VOWEL_LETTERS):
+        return "g", word[1:], False
     for onset in ONSET_SPELLINGS:
         if word.startswith(onset):
             if onset == "qu":
@@ -87,8 +98,19 @@ def parse_syllable(raw: str) -> ParsedSyllable:
     onset_spelling, remainder, qu_medial = _match_onset(no_tone)
     coda_spelling, vowel_part = _match_consonant_coda(remainder)
     if not coda_spelling:
-        coda_spelling, vowel_part = _try_semivowel_coda(vowel_part)
+        # Ưu tiên bộ vần đặc biệt trước khi tách bán âm cuối: "uy" phải là
+        # medial W + nucleus I (phân biệt với "ui" = nucleus U + coda J).
+        try:
+            _parse_vowel(vowel_part, qu_medial)
+        except ValueError:
+            coda_spelling, vowel_part = _try_semivowel_coda(vowel_part)
     medial_s, nucleus_s, medial_a, nucleus_a = _parse_vowel(vowel_part, qu_medial)
+
+    abstract_onset = ONSET_ABSTRACT[onset_spelling]
+    if onset_spelling == "g" and no_tone.startswith("gi"):
+        # Chữ i dùng chung của "gi" (gì, gìn, giếng): chính tả ghi "g",
+        # nhưng âm vị là GI (/z/) chứ không phải G (/ɣ/).
+        abstract_onset = ONSET_ABSTRACT["gi"]
 
     parsed = ParsedSyllable(
         raw=raw,
@@ -101,7 +123,7 @@ def parse_syllable(raw: str) -> ParsedSyllable:
             tone_location=tone_location,
         ),
         abstract=AbstractSyllable(
-            onset=ONSET_ABSTRACT[onset_spelling],
+            onset=abstract_onset,
             medial=medial_a,
             nucleus=nucleus_a,
             coda=CODA_ABSTRACT[coda_spelling],

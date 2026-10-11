@@ -65,9 +65,9 @@ def _balanced_argument(text: str, command: str) -> tuple[str, str] | None:
     return None
 
 
-def read_chemical_formula(formula: str, read_number: NumberReader) -> str:
+def read_chemical_formula(formula: str, read_number: NumberReader, strict: bool = True) -> str:
     formula = formula.strip().replace("_{", "").replace("}", "")
-    parts=[]; pos=0; found_known=False
+    parts=[]; pos=0; known: set[str] = set()
     token_re=re.compile(r"([A-Z][a-z]?)(\d*)|([()])|(\d+)|([+\-])")
     for m in token_re.finditer(formula):
         if m.start()!=pos: return formula
@@ -75,17 +75,45 @@ def read_chemical_formula(formula: str, read_number: NumberReader) -> str:
         if m.group(1):
             element=m.group(1)
             if element in ELEMENTS:
-                found_known=True
+                known.add(element)
             parts.append(ELEMENTS.get(element, element))
             if m.group(2): parts.append(_read_int(m.group(2),read_number))
         elif m.group(3): parts.append("mở ngoặc" if m.group(3)=="(" else "đóng ngoặc")
         elif m.group(4): parts.append(_read_int(m.group(4),read_number))
         else: parts.append("dương" if m.group(5)=="+" else "âm")
-    # Guard against false positives like RTX3080 (no known element):
-    # return original instead of corrupting version codes.
-    if not found_known:
+    if pos!=len(formula) or not parts:
         return formula
-    return " ".join(parts) if pos==len(formula) and parts else formula
+    only_element = next(iter(known)) if len(known) == 1 else None
+    if strict and not _is_plausible_formula(formula, len(known), only_element):
+        return formula
+    return " ".join(parts)
+
+
+# Phân tử đơn chất hai/ba nguyên tử phổ biến: O2, O3, H2, N2, F2, Cl2, Br2, I2.
+_DIATOMIC_ELEMENTS = {"H", "N", "O", "F", "Cl", "Br", "I"}
+_SINGLE_ELEMENT_RE = re.compile(r"([A-Z][a-z]?)([23]?)([+\-]?)")
+
+
+def _is_plausible_formula(formula: str, known: int, only_element: str | None) -> bool:
+    """Guard against product/version codes like RTX3080, MP3, N95, K2.
+
+    Accept when at least two known elements appear, plus single-element cases
+    that are real physical formulas: diatomic molecules (O2, H2, Cl2) and ions
+    with an explicit charge (Fe3+, O2-, Al3+). Everything else is kept verbatim.
+    """
+    if known >= 2:
+        return True
+    if known != 1 or only_element is None:
+        return False
+    m = _SINGLE_ELEMENT_RE.fullmatch(formula)
+    if m is None:
+        return False
+    element, digit, charge = m.group(1), m.group(2), m.group(3)
+    if element != only_element:
+        return False
+    if charge:
+        return True
+    return digit in {"2", "3"} and element in _DIATOMIC_ELEMENTS
 
 
 def read_unit_expression(expr: str, read_number: NumberReader) -> str:
@@ -135,16 +163,17 @@ def normalize_stem(text: str, read_number: NumberReader) -> str:
     # Accept text originating from JSON/Python strings with doubled backslashes.
     text=text.replace("\\\\", "\\")
     # Explicit chemistry commands are handled before generic LaTeX.
-    text=re.sub(r"\\(?:ce|chem)\{([^{}]+)\}",lambda m:read_chemical_formula(m.group(1),read_number),text)
+    text=re.sub(r"\\(?:ce|chem)\{([^{}]+)\}",lambda m:read_chemical_formula(m.group(1),read_number,strict=False),text)
     # Display and inline LaTeX.
     patterns=[r"\$\$([^$]+)\$\$",r"\$([^$]+)\$",r"\\\((.*?)\\\)",r"\\\[(.*?)\\\]"]
-    for pat in patterns: text=re.sub(pat,lambda m:read_math_expression(m.group(1),read_number),text,flags=re.S)
+    for pat in patterns: text=re.sub(pat,lambda m:read_math_expression(m.group(1),read_number),text,flags=re.DOTALL)
     # Safe standalone LaTeX constructs that have explicit brace boundaries.
     text=re.sub(r"\\frac\{[^{}]+\}\{[^{}]+\}", lambda m: read_math_expression(m.group(), read_number), text)
     text=re.sub(r"\\sqrt(?:\[[^]]+\])?\{[^{}]+\}", lambda m: read_math_expression(m.group(), read_number), text)
     # Common standalone chemistry formulas containing digits or multiple element symbols.
-    chem_pat=re.compile(r"(?<!\w)(?=[A-Z][A-Za-z0-9()]*\d)([A-Z][A-Za-z0-9()]*)(?!\w)")
-    text=chem_pat.sub(lambda m:read_chemical_formula(m.group(1),read_number),text)
+    # Cho phép hậu tố điện tích ([+\-]) nhưng không nuốt dấu gạch của khoảng giá trị.
+    chem_pat=re.compile(r"(?<!\w)(?=[A-Z][A-Za-z0-9()]*\d)([A-Z][A-Za-z0-9()]*)([+\-])?(?![\w+\-])")
+    text=chem_pat.sub(lambda m:read_chemical_formula(m.group(1)+(m.group(2) or ""),read_number),text)
     # Number followed by recognized unit expression.
     # Trailing lookahead prevents matching unit prefix inside Vietnamese words,
     # e.g. "s" in "sach" must not match "105 sach" as "105 s" + "ach".

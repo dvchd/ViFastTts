@@ -5,6 +5,7 @@ stop-coda tone restriction, invalid combos.
 """
 
 import pytest
+
 from vifasttts.frontend.normalizer import canonicalize_vietnamese_tokens
 from vifasttts.frontend.syllable import parse_syllable, safe_parse_syllable
 

@@ -1,6 +1,8 @@
 import pytest
-from vifasttts.frontend.stem import read_math_expression
+
 from vifasttts.frontend.normalizer import integer_to_words, normalize_text
+from vifasttts.frontend.stem import read_math_expression
+
 R=lambda n:integer_to_words(n,"north")
 @pytest.mark.parametrize("source,expected",[
  (r"x^2 + y^2 = z^2","ích mũ hai cộng i dài mũ hai bằng dét mũ hai"),

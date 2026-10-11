@@ -7,25 +7,26 @@ name = "vifasttts"
 version = "0.1.0"
 description = "Structured single-speaker Vietnamese TTS research toolkit"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [{name = "ViFastTts contributors"}]
 dependencies = [
   "numpy>=1.26",
   "pyyaml>=6.0",
   "typer>=0.12",
-  "pydantic>=2.7",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
 audio = ["soundfile>=0.12", "scipy>=1.12", "librosa>=0.10"]
 train = ["torch>=2.3", "torchaudio>=2.3", "tensorboard>=2.17"]
-onnx = ["onnx>=1.16", "onnxruntime>=1.18"]
+# onnxscript chỉ cần cho exporter mặc định mới của torch; export.py dùng
+# exporter TorchScript (dynamo=False) nên graph vẫn xuất được nếu thiếu.
+onnx = ["onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.1"]
 all = [
   "soundfile>=0.12", "scipy>=1.12", "librosa>=0.10",
   "torch>=2.3", "torchaudio>=2.3", "tensorboard>=2.17",
-  "onnx>=1.16", "onnxruntime>=1.18",
+  "onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.1",
   "pytest>=8", "ruff>=0.6", "mypy>=1.11"
 ]
 
@@ -44,7 +45,7 @@ line-length = 100
 target-version = "py310"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true

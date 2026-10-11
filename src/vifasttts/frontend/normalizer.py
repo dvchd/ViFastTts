@@ -5,7 +5,9 @@ from dataclasses import dataclass, field
 
 from vifasttts.frontend.dialect import Dialect, ReadingProfile, get_profile
 from vifasttts.frontend.english_fallback import (
-    lookup_case_insensitive_english, lookup_exact_acronym, lookup_product_name,
+    lookup_case_insensitive_english,
+    lookup_exact_acronym,
+    lookup_product_name,
 )
 from vifasttts.frontend.roman import roman_to_int
 from vifasttts.frontend.stem import normalize_stem
@@ -28,38 +30,85 @@ class NormalizerOptions:
 
 
 def _under_100(n: int, p: ReadingProfile) -> str:
-    if n < 10: return SMALL[n]
+    if n < 10:
+        return SMALL[n]
     q, r = divmod(n, 10)
     prefix = "mười" if q == 1 else f"{SMALL[q]} mươi"
-    if r == 0: return prefix
-    if r == 1 and q > 1: tail = "mốt"
-    elif r == 4 and q > 1: tail = p.four_after_tens
-    elif r == 5: tail = "lăm"
-    else: tail = SMALL[r]
+    if r == 0:
+        return prefix
+    if r == 1 and q > 1:
+        tail = "mốt"
+    elif r == 4 and q > 1:
+        tail = p.four_after_tens
+    elif r == 5:
+        tail = "lăm"
+    else:
+        tail = SMALL[r]
     return f"{prefix} {tail}"
 
 
-def _under_1000(n: int, p: ReadingProfile, force_hundreds: bool = False) -> str:
-    if n < 100 and not force_hundreds: return _under_100(n, p)
-    q, r = divmod(n, 100); prefix = f"{SMALL[q]} trăm"
-    if r == 0: return prefix
-    if r < 10: return f"{prefix} {p.zero_tens} {SMALL[r]}"
+def _under_1000(n: int, p: ReadingProfile) -> str:
+    if n < 100:
+        return _under_100(n, p)
+    q, r = divmod(n, 100)
+    prefix = f"{SMALL[q]} trăm"
+    if r == 0:
+        return prefix
+    if r < 10:
+        return f"{prefix} {p.zero_tens} {SMALL[r]}"
     return f"{prefix} {_under_100(r, p)}"
+
+
+def _read_group(g: int, p: ReadingProfile, started: bool) -> str:
+    """Read one three-digit group.
+
+    When a higher group was already spoken and this group has an empty
+    hundreds place, Vietnamese requires the "không trăm" filler:
+    1.050.000 -> "một triệu không trăm năm mươi nghìn".
+    """
+    if started and g < 100:
+        if g < 10:
+            return f"không trăm {p.zero_tens} {SMALL[g]}"
+        return f"không trăm {_under_100(g, p)}"
+    return _under_1000(g, p)
+
+
+def _read_below_billion(n: int, p: ReadingProfile, *, started: bool = False) -> str:
+    groups: list[int] = []
+    while n > 0:
+        n, r = divmod(n, 1000)
+        groups.append(r)
+    scales = ("", p.thousand, "triệu")
+    parts: list[str] = []
+    for index in range(len(groups) - 1, -1, -1):
+        g = groups[index]
+        if g == 0:
+            continue
+        text = _read_group(g, p, started)
+        scale = scales[index]
+        parts.append(f"{text} {scale}".strip())
+        started = True
+    return " ".join(parts)
+
+
+def _read_number(n: int, p: ReadingProfile) -> str:
+    if n == 0:
+        return SMALL[0]
+    if n >= 1_000_000_000:
+        # Đọc đệ quy theo "… tỷ": 2.500.000.000.000 -> "hai nghìn năm trăm tỷ".
+        high, rest = divmod(n, 1_000_000_000)
+        text = _read_number(high, p) + " tỷ"
+        if rest:
+            text += " " + _read_below_billion(rest, p, started=True)
+        return text
+    return _read_below_billion(n, p, started=False)
 
 
 def integer_to_words(n: int, dialect: str | Dialect = Dialect.NORTH) -> str:
     p = get_profile(dialect)
-    if n < 0: return "âm " + integer_to_words(-n, dialect)
-    if n == 0: return SMALL[0]
-    units = [(1_000_000_000, "tỷ"), (1_000_000, "triệu"), (1000, p.thousand)]
-    parts=[]; remaining=n; started=False
-    for value, unit in units:
-        group, remaining = divmod(remaining, value)
-        if group:
-            parts += [_under_1000(group, p), unit]; started=True
-    if remaining:
-        parts.append(_under_1000(remaining, p, force_hundreds=started and remaining < 100))
-    return " ".join(parts)
+    if n < 0:
+        return "âm " + integer_to_words(-n, dialect)
+    return _read_number(n, p)
 
 
 def decimal_to_words(value: str, dialect: str | Dialect) -> str:
@@ -89,8 +138,8 @@ def _integer_token_to_words(match: re.Match[str], dialect: str | Dialect) -> str
 
 
 def _canonicalize_vietnamese_token(token: str) -> str | None:
-    from vifasttts.frontend.syllable import safe_parse_syllable
     from vifasttts.frontend.orthography import compose_canonical
+    from vifasttts.frontend.syllable import safe_parse_syllable
     item = safe_parse_syllable(token)
     if item is None: return None
     o, a = item.orthography, item.abstract
@@ -139,9 +188,65 @@ def canonicalize_vietnamese_tokens(text: str) -> str:
     return normalize_words(text, options)
 
 
+# --- Ngày, giờ, phân số, khoảng giá trị ---
+
+# "14h30" và "14h" là cách viết giờ phổ biến; chạy trước STEM để không bị
+# hiểu nhầm thành đơn vị vật lý. Phút yêu cầu đủ hai chữ số.
+_HOUR_RE = re.compile(r"(?<!\w)(\d{1,2})h(\d{2})?(?!\w)")
+_DATE_RE = re.compile(r"(?<![\d/.,-])(?:[Nn]gày\s+)?(\d{1,2})([/.-])(\d{1,2})\2(\d{4})(?!\d)")
+_TIME_RE = re.compile(r"(?<!\d)(\d{1,2}):(\d{2})(?!\d)")
+_FRACTION_RE = re.compile(r"(?<![\d/.,])(\d+)/(\d+)(?![\d/.,])")
+_RANGE_RE = re.compile(r"(?<![\d.,-])(\d+(?:[.,]\d+)?)\s*[-–—]\s*(\d+(?:[.,]\d+)?)(?:\s*(%))?(?![\d.,])")
+
+
+def _hour_minute_words(hour: int, minute: int, dialect: str | Dialect) -> str:
+    parts = [f"{integer_to_words(hour, dialect)} giờ"]
+    if minute:
+        tail = integer_to_words(minute, dialect)
+        parts.append(f"{get_profile(dialect).zero_tens} {tail} phút" if minute < 10 else f"{tail} phút")
+    return " ".join(parts)
+
+
+def _hour_notation_to_words(m: re.Match[str], dialect: str | Dialect) -> str:
+    minute = int(m.group(2)) if m.group(2) else 0
+    return _hour_minute_words(int(m.group(1)), minute, dialect)
+
+
+def _date_to_words(m: re.Match[str], dialect: str | Dialect) -> str:
+    day, month, year = int(m.group(1)), int(m.group(3)), int(m.group(4))
+    if not (1 <= day <= 31 and 1 <= month <= 12):
+        return m.group(0)
+    return (f"ngày {integer_to_words(day, dialect)} tháng {integer_to_words(month, dialect)} "
+            f"năm {integer_to_words(year, dialect)}")
+
+
+def _time_to_words(m: re.Match[str], dialect: str | Dialect) -> str:
+    hour, minute = int(m.group(1)), int(m.group(2))
+    if hour > 23 or minute > 59:
+        return m.group(0)
+    return _hour_minute_words(hour, minute, dialect)
+
+
+def _fraction_to_words(m: re.Match[str], dialect: str | Dialect) -> str:
+    return f"{integer_to_words(int(m.group(1)), dialect)} phần {integer_to_words(int(m.group(2)), dialect)}"
+
+
+def _number_token_to_words(value: str, dialect: str | Dialect) -> str:
+    if "," in value or "." in value:
+        return decimal_to_words(value, dialect)
+    return integer_to_words(int(value), dialect)
+
+
+def _range_to_words(m: re.Match[str], dialect: str | Dialect) -> str:
+    text = f"{_number_token_to_words(m.group(1), dialect)} đến {_number_token_to_words(m.group(2), dialect)}"
+    return text + " phần trăm" if m.group(3) else text
+
+
 def normalize_text(text: str, dialect: str | Dialect = Dialect.NORTH, *, options: NormalizerOptions | None = None) -> str:
     options = options or NormalizerOptions(dialect=Dialect(dialect))
     text = normalize_unicode(text)
+    # Giờ viết "14h30"/"14h" trước STEM để không lẫn với đơn vị vật lý.
+    text = _HOUR_RE.sub(lambda m: _hour_notation_to_words(m, options.dialect), text)
     if options.stem_formulas:
         text = normalize_stem(text, lambda n: integer_to_words(n, options.dialect))
     # Thousand separators (Vietnamese "." and space): 1.500.000 -> 1500000.
@@ -149,6 +254,9 @@ def normalize_text(text: str, dialect: str | Dialect = Dialect.NORTH, *, options
     # decimals like 3.14 stay intact.
     text = re.sub(r"(?<=\d)\.(?=\d{3}(?!\d))", "", text)
     text = re.sub(r"(?<=\d) (?=\d{3}(?!\d))", "", text)
+    # Ngày/tháng/năm trước mọi phép tách "/"; giờ:phút sau đó.
+    text = _DATE_RE.sub(lambda m: _date_to_words(m, options.dialect), text)
+    text = _TIME_RE.sub(lambda m: _time_to_words(m, options.dialect), text)
     # Phone numbers digit-by-digit: 0977123456, +84977123456.
     text = re.sub(r"(?<!\w)(?:\+84\d{9,10}|0\d{9,10})(?!\w)", _phone_to_words, text)
     # Currency: 50.000đ / 1000VND / $5 / 5$ -> words + dong / do la.
@@ -159,9 +267,15 @@ def normalize_text(text: str, dialect: str | Dialect = Dialect.NORTH, *, options
     text = re.sub(r"(?<!\w)(\d{4,}(?:[,.]\d+)?)\s*d(?![A-Za-zÀ-ỹĐđ])", lambda m: _currency_number_to_words(m.group(1), options.dialect) + " đồng", text)
     text = re.sub(r"\$\s*(\d+(?:[,.]\d+)?)", lambda m: _currency_number_to_words(m.group(1), options.dialect) + " đô la", text)
     text = re.sub(r"(?<!\w)(\d+(?:[,.]\d+)?)\s*\$(?![A-Za-zÀ-ỹĐđ])", lambda m: _currency_number_to_words(m.group(1), options.dialect) + " đô la", text)
+    # Phân số "2/3" trước phần trăm để "1/2%" không bị cắt nửa chừng.
+    text = _FRACTION_RE.sub(lambda m: _fraction_to_words(m, options.dialect), text)
+    # Khoảng giá trị "3-5", "10-20%", "1873-1907".
+    text = _RANGE_RE.sub(lambda m: _range_to_words(m, options.dialect), text)
     text = re.sub(r"(?<!\w)(\d+[,.]\d+)\s*%", lambda m: decimal_to_words(m.group(1), options.dialect) + " phần trăm", text)
     text = re.sub(r"(?<!\w)(\d+)\s*%", lambda m: integer_to_words(int(m.group(1)), options.dialect) + " phần trăm", text)
     text = re.sub(r"(?<!\w)(\d+[,.]\d+)(?!\w)", lambda m: decimal_to_words(m.group(1), options.dialect), text)
     text = re.sub(r"(?<!\w)(-?\d+)(?![\w/.:])", lambda m: _integer_token_to_words(m, options.dialect), text)
+    # Thế hệ mạng di động "5G", "4G" đọc chữ cái G.
+    text = re.sub(r"(?<!\w)([2-6])\s*G(?!\w)", lambda m: f"{SMALL[int(m.group(1))]} giê", text)
     text = normalize_words(text, options)
     return re.sub(r"\s+", " ", text).strip()

@@ -1,5 +1,7 @@
 import pytest
+
 from vifasttts.frontend.normalizer import normalize_text
+
 
 @pytest.mark.parametrize("source,expected", [
     ("AI đang phát triển.", "ây ai đang phát triển."),
@@ -9,7 +11,7 @@ from vifasttts.frontend.normalizer import normalize_text
     ("Ai dùng AI?", "Ai dùng ây ai?"),
     ("API dùng AI.", "ây pi ai dùng ây ai."),
     ("api", "api"),
-    ("CPU GPU USB", "xi pi diu gi pi diu diu ét bi"),
+    ("CPU GPU USB", "xi pi diu giê pi diu diu ét bi"),
     ("Cpu Gpu Usb", "Cpu Gpu Usb"),
 ])
 def test_acronym_case_sensitivity(source, expected):

@@ -1,5 +1,8 @@
 import pytest
+
 from vifasttts.frontend.normalizer import normalize_text
+
+
 @pytest.mark.parametrize("source,expected",[
  ("10 m","mười mét"),("20 km","hai mươi ki lô mét"),("9,8 m/s2","chín phẩy tám mét trên giây bình phương"),
  ("50 Hz","năm mươi héc"),("220 V","hai trăm hai mươi vôn"),("5 A","năm ampe"),

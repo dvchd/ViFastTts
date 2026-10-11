@@ -1,6 +1,7 @@
 import pytest
-from vifasttts.frontend.normalizer import NormalizerOptions, integer_to_words, normalize_text
+
 from vifasttts.frontend.dialect import Dialect
+from vifasttts.frontend.normalizer import NormalizerOptions, integer_to_words, normalize_text
 
 
 @pytest.mark.parametrize("dialect,expected", [
