@@ -1,6 +1,7 @@
 # Quy trình huấn luyện
 
 > Luồng chi tiết as-built (tensor shape, loss, train vs inference): `docs/MODEL_FLOW.md`.
+> Ước lượng **dữ liệu / tham số / thời gian / máy / chi phí** trước khi bắt tay: `docs/TRAINING_ESTIMATES.md`.
 
 ## Trạng thái as-built
 
@@ -65,6 +66,14 @@ Cache feature tự khoá theo cấu hình phonation nên không lẫn bản có/
 ## Cấu hình
 
 `configs/base_24k.yaml` giữ nguyên các nhóm `mel`, `model`, `training`, `loss_weights`. Các khóa `training.*` được đọc bởi `train.py`; `loss_weights` được đọc bởi `losses.py`.
+
+Chọn biến thể theo lượng dữ liệu (ước lượng: `docs/TRAINING_ESTIMATES.md`):
+
+| Dữ liệu | Config | Tham số acoustic |
+| --- | --- | --- |
+| < 5 giờ | `configs/small_24k.yaml` | ≈ 6,1M |
+| 5–30 giờ | `configs/base_24k.yaml` | ≈ 16,4M |
+| ≥ 40–50 giờ | `configs/large_24k.yaml` | ≈ 32,2M |
 
 ## Checklist trước khi train thật
 
