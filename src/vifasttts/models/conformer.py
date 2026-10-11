@@ -1,3 +1,9 @@
+"""ConformerLite: encoder/decoder nhẹ cho chuỗi âm tiết/frame.
+
+Thiết kế để export ONNX được: positional encoding cắt theo độ dài thực,
+attention dùng additive mask viết tay (tránh exporter "nướng" shape vào graph).
+"""
+
 from __future__ import annotations
 
 import math
@@ -10,9 +16,10 @@ MAX_POSITIONS = 4096
 
 
 class SinusoidalPositionalEncoding(nn.Module):
-    """Positional encoding cố định, cắt theo độ dài thực (export ONNX được)."""
+    """Positional encoding hình sin cố định, cắt theo độ dài batch."""
 
     def __init__(self, hidden: int, max_len: int = MAX_POSITIONS) -> None:
+        """Tính trước bảng PE [max_len, hidden] và đăng ký làm buffer (không train)."""
         super().__init__()
         half = (hidden + 1) // 2
         position = torch.arange(max_len, dtype=torch.float).unsqueeze(1)
@@ -24,6 +31,7 @@ class SinusoidalPositionalEncoding(nn.Module):
         self.register_buffer("pe", pe, persistent=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Cộng PE [max_len, H] (cắt theo T thực) vào x [B, T, H]."""
         return x + self.pe[: x.size(1)].unsqueeze(0)
 
 
@@ -36,6 +44,7 @@ class SelfAttention(nn.Module):
     """
 
     def __init__(self, hidden: int, heads: int, dropout: float) -> None:
+        """`hidden` phải chia hết cho `heads`."""
         super().__init__()
         if hidden % heads != 0:
             raise ValueError("hidden phải chia hết cho heads")
@@ -47,6 +56,7 @@ class SelfAttention(nn.Module):
         self.out = nn.Linear(hidden, hidden)
 
     def forward(self, x: torch.Tensor, padding_mask: torch.Tensor | None = None) -> torch.Tensor:
+        """Self-attention [B, T, H]; `padding_mask` bool [B, T] (True = hợp lệ)."""
         # padding_mask: bool [B, T], True = vị trí hợp lệ (không phải pad).
         batch, frames, _ = x.shape
         qkv = self.qkv(x).reshape(batch, frames, 3, self.heads, self.head_dim)
@@ -67,7 +77,10 @@ class SelfAttention(nn.Module):
 
 
 class ConformerLiteBlock(nn.Module):
+    """Một block Conformer: FFN(thang 0.5) → attention → depthwise conv → FFN(thang 0.5)."""
+
     def __init__(self, hidden: int, heads: int, ffn: int, kernel: int, dropout: float) -> None:
+        """`kernel` là kích thước conv depthwise (lẻ để giữ nguyên độ dài)."""
         super().__init__()
         self.ff1 = nn.Sequential(nn.LayerNorm(hidden), nn.Linear(hidden, ffn), nn.SiLU(), nn.Dropout(dropout), nn.Linear(ffn, hidden))
         self.attn_norm = nn.LayerNorm(hidden)
@@ -79,6 +92,7 @@ class ConformerLiteBlock(nn.Module):
         self.out_norm = nn.LayerNorm(hidden)
 
     def forward(self, x: torch.Tensor, padding_mask: torch.Tensor | None = None) -> torch.Tensor:
+        """x [B, T, H] → [B, T, H] với residual + LayerNorm cuối block."""
         x = x + 0.5 * self.ff1(x)
         x = x + self.attn(self.attn_norm(x), padding_mask)
         h = self.conv_norm(x).transpose(1, 2)
@@ -89,13 +103,17 @@ class ConformerLiteBlock(nn.Module):
 
 
 class ConformerLite(nn.Module):
+    """Chồng `layers` block Conformer; dùng cho cả encoder (âm tiết) và decoder (frame)."""
+
     def __init__(self, layers: int, hidden: int, heads: int, ffn: int, kernel: int, dropout: float,
                  max_positions: int = MAX_POSITIONS) -> None:
+        """`layers`: số block; `max_positions`: giới hạn độ dài chuỗi (PE)."""
         super().__init__()
         self.pos = SinusoidalPositionalEncoding(hidden, max_positions)
         self.blocks = nn.ModuleList([ConformerLiteBlock(hidden, heads, ffn, kernel, dropout) for _ in range(layers)])
 
     def forward(self, x: torch.Tensor, padding_mask: torch.Tensor | None = None) -> torch.Tensor:
+        """x [B, T, H] → [B, T, H] sau PE + các block."""
         x = self.pos(x)
         for block in self.blocks:
             x = block(x, padding_mask)

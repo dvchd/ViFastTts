@@ -20,6 +20,7 @@ from vifasttts.types import ParseStatus
 
 
 def _p95(values: list[int]) -> int:
+    """Phân vị 95 (làm tròn lên) của danh sách; 0 nếu rỗng."""
     if not values:
         return 0
     ordered = sorted(values)

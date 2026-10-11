@@ -1,3 +1,8 @@
+"""Huấn luyện: acoustic model (teacher forcing) và vocoder tham chiếu (GAN).
+
+Luồng chi tiết: `docs/MODEL_FLOW.md` §4–§5; cảnh báo alignment: `docs/TRAINING.md`.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -10,6 +15,7 @@ import numpy as np
 
 
 def set_seed(seed: int) -> None:
+    """Cố định seed cho random/numpy/torch (kể cả CUDA) để tái lập thí nghiệm."""
     random.seed(seed)
     np.random.seed(seed)
     try:
@@ -22,6 +28,7 @@ def set_seed(seed: int) -> None:
 
 
 def _build_loaders(config: dict[str, Any], train_manifest: str, val_manifest: str, training: dict[str, Any], cache_dir: str | None = None):
+    """Dựng DataLoader train/val; tính trước cache (nếu bật) để tránh tranh chấp worker."""
     from torch.utils.data import DataLoader
 
     from vifasttts.data.cache import precompute_features
@@ -47,6 +54,7 @@ def _build_loaders(config: dict[str, Any], train_manifest: str, val_manifest: st
 
 
 def _to_device(batch: dict[str, Any], device):
+    """Chuyển tensor trong batch lên thiết bị; thêm `tone_ids` cho loss phân loại thanh."""
     import torch
     moved = {k: (v.to(device) if torch.is_tensor(v) else v) for k, v in batch.items()}
     moved["tone_ids"] = moved["features"][..., 4]
@@ -54,6 +62,7 @@ def _to_device(batch: dict[str, Any], device):
 
 
 def _run_validation(model, loader, config, device) -> float:
+    """Chạy validation không backward; trả loss trung bình (model về lại train())."""
     import torch
 
     from vifasttts.losses import acoustic_losses

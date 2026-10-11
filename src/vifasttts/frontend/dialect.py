@@ -1,3 +1,5 @@
+"""Phương ngữ cho normalizer: Bắc/Trung/Nam chọn cách đọc số và viết tắt."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -5,6 +7,8 @@ from enum import StrEnum
 
 
 class Dialect(StrEnum):
+    """Ba vùng miền normalizer hỗ trợ (parser không phụ thuộc vùng)."""
+
     NORTH = "north"
     CENTRAL = "central"
     SOUTH = "south"
@@ -12,6 +16,8 @@ class Dialect(StrEnum):
 
 @dataclass(frozen=True)
 class ReadingProfile:
+    """Khác biệt đọc số theo vùng: nghìn/ngàn, linh/lẻ, tư/bốn."""
+
     thousand: str
     zero_tens: str
     four_after_tens: str
@@ -25,6 +31,7 @@ PROFILES = {
 
 
 def get_profile(value: str | Dialect) -> ReadingProfile:
+    """Lấy profile đọc số theo tên vùng; lỗi rõ ràng nếu vùng không hợp lệ."""
     try:
         return PROFILES[Dialect(value)]
     except ValueError as exc:

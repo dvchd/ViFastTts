@@ -1,3 +1,5 @@
+"""Ghép chính tả canonical: đặt dấu thanh đúng âm chính và dựng lại từ các phần."""
+
 from __future__ import annotations
 
 import unicodedata
@@ -22,11 +24,11 @@ def _tone_target(nucleus: str) -> int:
     # Open variants ia, ua, ưa carry tone on the first vowel.
     if nucleus.lower() in {"ia", "ya", "ua", "ưa"}:
         return 0
-    # Quality-marked main vowel has priority.
+    # Nguyên âm chính có dấu chất lượng được ưu tiên nhận thanh.
     for char in "êôơưăâÊÔƠƯĂÂ":
         if char in nucleus:
             return nucleus.index(char)
-    # Canonical diphthongs and triphthongs.
+    # Nguyên âm đôi/ba chuẩn.
     for char in "aAeEoOiIuUyY":
         if char in nucleus:
             return nucleus.index(char)
@@ -34,6 +36,7 @@ def _tone_target(nucleus: str) -> int:
 
 
 def apply_tone(nucleus: str, tone: Tone) -> str:
+    """Đặt dấu thanh vào đúng chữ âm chính của vần (NFC, giữ dấu chất lượng)."""
     if tone is Tone.NGANG:
         return nucleus
     i = _tone_target(nucleus)
@@ -42,8 +45,9 @@ def apply_tone(nucleus: str, tone: Tone) -> str:
 
 
 def compose_canonical(onset: str | None, medial: str | None, nucleus: str, coda: str | None, tone: Tone) -> str:
+    """Dựng chính tả canonical từ 5 phần rời (đã chuẩn hoá vị trí dấu thanh)."""
     onset = onset or ""
-    # qu already contains the written u that represents medial W.
+    # "qu" đã chứa sẵn chữ u viết cho âm đệm W, không ghi thêm lần nữa.
     written_medial = "" if onset == "qu" else (medial or "")
     # "uy" được parse thành medial W + nucleus I (xem syllable.py), nên dấu
     # thanh tự động rơi trên nucleus "y" — đúng chuẩn hiện đại (thuỷ, tuỳ).

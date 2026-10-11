@@ -1,3 +1,8 @@
+"""iSTFTNet nhẹ: mel → phổ → waveform; dùng làm vocoder tham chiếu của repo.
+
+Bản production cần discriminator lớn + spectral loss — xem `docs/TRAINING.md`.
+"""
+
 from __future__ import annotations
 
 import torch
@@ -16,6 +21,7 @@ class ISTFTNetLite(nn.Module):
 
     def __init__(self, n_mels: int = 100, hidden: int = 256, n_fft: int = 1024,
                  hop_length: int = 256, upsample_ratio: int = 4) -> None:
+        """`hop_length` phải chia hết cho `upsample_ratio` (hop trong graph = hop/ratio)."""
         super().__init__()
         if hop_length % upsample_ratio != 0:
             raise ValueError("hop_length phải chia hết cho upsample_ratio")
@@ -54,6 +60,7 @@ class ISTFTNetLite(nn.Module):
         return torch.complex(real, imag)
 
     def forward(self, mel: torch.Tensor) -> torch.Tensor:
+        """Mel [B, T, M] → waveform [B, L] (iSTFT center=True, ghép theo batch)."""
         spec = self.spectrogram(mel)
         window = torch.hann_window(self.n_fft, device=mel.device, dtype=mel.dtype)
         waves = [torch.istft(s, self.n_fft, self.hop_length, self.n_fft, window=window) for s in spec]

@@ -17,6 +17,7 @@ class PeriodDiscriminatorLite(nn.Module):
     """Một period discriminator: conv (5,1) stride (3,1), 3 tầng + head."""
 
     def __init__(self, period: int = 2, channels: int = 16) -> None:
+        """`period`: chu kỳ reshape waveform; `channels`: số kênh tầng đầu."""
         super().__init__()
         self.period = period
         self.blocks = nn.ModuleList([
@@ -27,12 +28,14 @@ class PeriodDiscriminatorLite(nn.Module):
         self.head = nn.Conv2d(channels * 4, 1, (3, 1), padding=(1, 0))
 
     def _reshape(self, wav: torch.Tensor) -> torch.Tensor:
+        """[B, L] → [B, 1, L//period, period]; pad thêm nếu L không chia hết."""
         batch, length = wav.shape
         if length % self.period:
             wav = F.pad(wav, (0, self.period - length % self.period))
         return wav.view(batch, 1, wav.size(1) // self.period, self.period)
 
     def forward(self, wav: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        """wav [B, L] → (logits [B], danh sách feature map các tầng conv)."""
         x = self._reshape(wav)
         features: list[torch.Tensor] = []
         for block in self.blocks:
@@ -43,11 +46,15 @@ class PeriodDiscriminatorLite(nn.Module):
 
 
 class MultiPeriodDiscriminatorLite(nn.Module):
+    """Gộp nhiều period discriminator (mặc định 2/3/5) như HiFi-GAN."""
+
     def __init__(self, periods: tuple[int, ...] = (2, 3, 5), channels: int = 16) -> None:
+        """Mỗi `period` là một sub-discriminator riêng (2/3/5 như HiFi-GAN)."""
         super().__init__()
         self.discriminators = nn.ModuleList(PeriodDiscriminatorLite(period, channels) for period in periods)
 
     def forward(self, wav: torch.Tensor) -> list[tuple[torch.Tensor, list[torch.Tensor]]]:
+        """wav [B, L] → list (logits [B], feature maps) cho từng period."""
         return [discriminator(wav) for discriminator in self.discriminators]
 
 

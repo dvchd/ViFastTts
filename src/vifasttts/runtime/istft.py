@@ -10,6 +10,7 @@ import numpy as np
 
 
 def hann_window(length: int) -> np.ndarray:
+    """Cửa sổ Hann đối xứng như torch.hann_window (dùng cho iSTFT numpy)."""
     return (0.5 - 0.5 * np.cos(2.0 * np.pi * np.arange(length) / length)).astype(np.float64)
 
 
@@ -22,7 +23,7 @@ def istft(
     win_length: int | None = None,
     center: bool = True,
 ) -> np.ndarray:
-    """Ghép phổ [bins, T] (hoặc [T, bins] với transpose=False?) về waveform 1 chiều.
+    """Ghép phổ [bins, T] về waveform 1 chiều.
 
     Quy ước khớp `torch.istft`: cửa sổ hann, chuẩn hoá bằng tổng bình phương
     cửa sổ chồng lấn, và khi `center=True` cắt `n_fft//2` mẫu mỗi đầu; độ dài

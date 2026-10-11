@@ -1,3 +1,11 @@
+"""Xuất ONNX: acoustic (7 ID → mel), vocoder (mel → phổ), kèm metadata + quantization.
+
+Ghi chú kỹ thuật quan trọng (vì sao có vài lựa chọn lạ):
+- `dynamo=False` vì dùng exporter TorchScript ổn định, không cần onnxscript.
+- `exp-1` thay `expm1` trong model để export được (ONNX không có op tương ứng).
+- Metadata (`sample_rate`, `n_fft`, `hop_length`...) để runtime không cần config.
+"""
+
 from __future__ import annotations
 
 import inspect
@@ -43,6 +51,7 @@ def _write_metadata(path: str, props: dict[str, object]) -> None:
 
 
 def _export_fp32(config: dict, checkpoint: str, output: str, opset_version: int) -> None:
+    """Xuất acoustic ONNX fp32, kèm metadata; danh sách output đổi theo `use_phonation`."""
     import torch
 
     from vifasttts.frontend.vocab import ComponentVocabs
@@ -77,6 +86,7 @@ def _export_fp32(config: dict, checkpoint: str, output: str, opset_version: int)
 
 
 def _build_vocoder(config: dict, checkpoint: str):
+    """Dựng ISTFTNetLite theo config `vocoder_training` và nạp trọng số (khóa `vocoder`)."""
     import torch
 
     from vifasttts.models.istftnet import ISTFTNetLite
@@ -168,10 +178,12 @@ def export_vocoder_onnx(config: dict, checkpoint: str, output: str, *, opset_ver
         """mel -> (spec_real, spec_imag); iSTFT ghép ở runtime bằng numpy."""
 
         def __init__(self, module: ISTFTNetLite) -> None:
+            """Nhận generator để gọi `spectrogram_parts` (không tạo tensor complex)."""
             super().__init__()
             self.vocoder = module
 
         def forward(self, mel: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+            """mel [B, T, M] → (real, imag) [B, bins, T*ratio] cho runtime iSTFT."""
             real, imag = self.vocoder.spectrogram_parts(mel)
             return real, imag
 

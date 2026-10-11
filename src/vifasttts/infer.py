@@ -1,3 +1,10 @@
+"""Suy luận bằng PyTorch: text → WAV (chunk câu dài, override, hậu xử lý).
+
+`Synthesizer` giữ model + vocoder đã nạp để dùng cho batch/server/streaming;
+hàm `synthesize` chạy một lần và `iter_synthesize` cho streaming là API tiện dụng.
+Luồng chi tiết: `docs/MODEL_FLOW.md` §6.
+"""
+
 from __future__ import annotations
 
 import warnings
@@ -42,6 +49,10 @@ class Synthesizer:
         *,
         device: str | None = None,
     ) -> None:
+        """Nạp acoustic + vocoder lên `device` (auto = cuda→mps→cpu).
+
+        Không có trọng số vocoder → cảnh báo RuntimeWarning (âm thanh random).
+        """
         import torch
 
         from vifasttts.device import resolve_device
@@ -89,6 +100,7 @@ class Synthesizer:
         self.vocoder.eval()
 
     def _render(self, text: str, dialect: str, speed: float, options) -> np.ndarray | None:
+        """Tổng hợp một đoạn: parse → model → vocoder; None nếu đoạn không có âm tiết."""
         import torch
 
         items = parse_text(text, dialect=dialect, options=options)

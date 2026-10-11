@@ -25,6 +25,7 @@ from vifasttts.runtime.postprocess import postprocess
 
 
 def _import_ort():
+    """Import onnxruntime với thông báo lỗi thân thiện nếu thiếu extra 'onnx'."""
     try:
         import onnxruntime as ort
     except ImportError as exc:  # pragma: no cover - phụ thuộc môi trường
@@ -33,6 +34,7 @@ def _import_ort():
 
 
 def _ort_session(path: str | Path, provider: str = "auto"):
+    """Mở InferenceSession với danh sách provider đã giải."""
     ort = _import_ort()
     return ort.InferenceSession(
         str(path),
@@ -96,7 +98,10 @@ def read_metadata(path: str | Path) -> dict[str, str]:
 
 
 class OnnxAcousticModel:
+    """Bọc session ONNX của model acoustic: text → features → dict đầu ra."""
+
     def __init__(self, path: str | Path, provider: str = "auto") -> None:
+        """`provider`: auto|cpu|cuda|coreml|tensorrt (xem `resolve_providers`)."""
         self.path = str(path)
         self.session = _ort_session(path, provider)
         self.input_name = self.session.get_inputs()[0].name
@@ -110,6 +115,7 @@ class OnnxAcousticModel:
         dialect: str = "north",
         options: NormalizerOptions | None = None,
     ) -> np.ndarray:
+        """Parse text → mảng int64 [1, N, 7] cho session ONNX."""
         items = parse_text(text, dialect=dialect, options=options)
         if not items:
             raise ValueError("Không có âm tiết nào để tổng hợp")
@@ -117,11 +123,14 @@ class OnnxAcousticModel:
         return np.array([[vocabs.encode(item) for item in items]], dtype=np.int64)
 
     def run(self, features: np.ndarray) -> dict[str, np.ndarray]:
+        """Chạy session; trả dict {tên output: mảng numpy}."""
         outputs = self.session.run(None, {self.input_name: features.astype(np.int64)})
         return dict(zip(self.output_names, outputs))
 
 
 class OnnxVocoder:
+    """Bọc session ONNX của vocoder: mel → phổ (real/imag) → waveform (iSTFT numpy)."""
+
     def __init__(
         self,
         path: str | Path,
@@ -131,6 +140,7 @@ class OnnxVocoder:
         sample_rate: int | None = None,
         provider: str = "auto",
     ) -> None:
+        """Thông số iSTFT lấy từ metadata ONNX; truyền tường minh nếu file thiếu metadata."""
         self.path = str(path)
         self.session = _ort_session(path, provider)
         self.input_name = self.session.get_inputs()[0].name
@@ -145,6 +155,7 @@ class OnnxVocoder:
             )
 
     def spectrogram(self, mel: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """mel [1, T, M] → (real, imag) [bins, T*ratio]."""
         outputs = self.session.run(None, {self.input_name: mel.astype(np.float32)})
         named = dict(zip(self.output_names, outputs))
         real = named.get("spec_real", outputs[0])
@@ -152,6 +163,7 @@ class OnnxVocoder:
         return np.asarray(real)[0], np.asarray(imag)[0]
 
     def waveform(self, mel: np.ndarray) -> np.ndarray:
+        """mel [1, T, M] → waveform float32 (iSTFT overlap-add, khớp torch.istft)."""
         real, imag = self.spectrogram(mel)
         return istft(real, imag, n_fft=self.n_fft, hop_length=self.hop_length)
 

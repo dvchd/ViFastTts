@@ -35,6 +35,7 @@ _WORD_RE = re.compile(r"[A-Za-zÀ-ỹĐđ]+")
 
 
 def run_matrix() -> list[str]:
+    """Vét cạn mọi tổ hợp hợp lệ và kiểm bất biến; trả danh sách vấn đề (rỗng = đạt)."""
     problems: list[str] = []
     total = 0
     onsets = [onset for onset in ONSET_ABSTRACT if onset]
@@ -81,6 +82,7 @@ def run_matrix() -> list[str]:
 
 
 def load_wordlist(path: str) -> set[str]:
+    """Đọc file (mỗi dòng có thể chứa nhiều từ) thành tập token chữ Latin."""
     syllables: set[str] = set()
     with open(path, encoding="utf-8") as handle:
         for line in handle:
@@ -91,6 +93,7 @@ def load_wordlist(path: str) -> set[str]:
 
 
 def run_wordlist(path: str) -> set[str]:
+    """Audit ngữ liệu: fallback, va chạm tuple, coverage; trả tập token đã đọc."""
     syllables = load_wordlist(path)
     ok: dict[tuple[str, str, str, str, str], set[str]] = defaultdict(set)
     fallback: list[str] = []

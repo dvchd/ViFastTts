@@ -60,6 +60,7 @@ class Lexicon:
 
     @classmethod
     def from_words(cls, words: Iterable[str]) -> Lexicon:
+        """Sinh lexicon từ danh sách từ: parse rồi lấy shape của các âm tiết hợp lệ."""
         shapes = set()
         for word in words:
             parsed = safe_parse_syllable(str(word))
@@ -70,6 +71,7 @@ class Lexicon:
 
     @classmethod
     def from_manifest(cls, manifest: str | Path) -> Lexicon:
+        """Sinh lexicon từ manifest JSONL (đọc `abstract` của từng âm tiết hợp lệ)."""
         shapes = set()
         with Path(manifest).open("r", encoding="utf-8") as handle:
             for line in handle:
@@ -83,19 +85,23 @@ class Lexicon:
         return cls(frozenset(shapes))
 
     def has(self, abstract: AbstractSyllable) -> bool:
+        """Shape (onset, đệm, chính, cuối) của âm tiết có trong lexicon không."""
         return (abstract.onset, abstract.medial, abstract.nucleus, abstract.coda) in self.shapes
 
     @property
     def rimes(self) -> frozenset[tuple[str, str, str]]:
+        """Tập vần (đệm, chính, cuối) suy ra từ các shape đã có."""
         return frozenset((medial, nucleus, coda) for (_o, medial, nucleus, coda) in self.shapes)
 
     def save(self, path: str | Path) -> None:
+        """Ghi lexicon ra JSON (`{"version": 1, "shapes": [...]}`) để tái sử dụng."""
         payload = {"version": 1, "shapes": sorted([list(shape) for shape in self.shapes])}
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
     @classmethod
     def load(cls, path: str | Path) -> Lexicon:
+        """Đọc lexicon từ JSON do `save` tạo."""
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         return cls(frozenset(tuple(shape) for shape in payload["shapes"]))
 

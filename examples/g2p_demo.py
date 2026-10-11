@@ -16,10 +16,12 @@ from vifasttts.frontend.vocab import ComponentVocabs
 
 
 def section(title: str) -> None:
+    """In tiêu đề mục cho dễ đọc khi chạy demo."""
     print(f"\n=== {title} ===")
 
 
 def main() -> None:
+    """Chạy các nhóm ví dụ G2P: âm tiết, thanh điệu, phương ngữ, inventory."""
     section("1. Một âm tiết: Bắc vs Nam (broad, thanh Chao)")
     for word in ["hoa", "quy", "đường", "nguyễn", "rồi", "khuya"]:
         parsed = parse_syllable(word)

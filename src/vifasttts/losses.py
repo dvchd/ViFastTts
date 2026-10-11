@@ -1,3 +1,9 @@
+"""Hàm loss cho acoustic model (masked) và bảng trọng số theo config.
+
+Công thức từng loss: xem `docs/MODEL_FLOW.md` §4.4. Mọi loss đều mask theo
+độ dài thật để vùng padding không ảnh hưởng gradient.
+"""
+
 from __future__ import annotations
 
 import torch
@@ -5,6 +11,7 @@ import torch.nn.functional as F
 
 
 def masked_l1(pred: torch.Tensor, target: torch.Tensor, lengths: torch.Tensor | None = None) -> torch.Tensor:
+    """L1 có mask theo `lengths` (bỏ qua vùng padding)."""
     if lengths is None:
         return F.l1_loss(pred, target)
     steps = torch.arange(pred.size(1), device=pred.device)[None, :]
@@ -13,6 +20,7 @@ def masked_l1(pred: torch.Tensor, target: torch.Tensor, lengths: torch.Tensor | 
 
 
 def _syllable_mask(lengths: torch.Tensor | None, size: int, device: torch.device) -> torch.Tensor:
+    """Mask [B, size] cho cấp âm tiết: 1 = vị trí thật, 0 = padding."""
     if lengths is None:
         return torch.ones(1, size, device=device)
     steps = torch.arange(size, device=device)[None, :]
@@ -20,12 +28,18 @@ def _syllable_mask(lengths: torch.Tensor | None, size: int, device: torch.device
 
 
 def _masked_mean(values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    """Trung bình có mask, tự mở rộng chiều mask cho khớp `values`."""
     while mask.dim() < values.dim():
         mask = mask.unsqueeze(-1)
     return (values * mask).sum() / mask.sum().clamp_min(1)
 
 
 def acoustic_losses(outputs: dict[str, torch.Tensor], batch: dict[str, torch.Tensor], weights: dict) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Tổng hợp loss acoustic: mel L1 + duration MSE(log1p) + f0/energy L1 + vuv BCE + tone CE.
+
+    Kèm `phonation` L1 khi batch có target (bật `phonation.enabled`).
+    Trả về (loss tổng đã nhân trọng số, dict từng thành phần để log).
+    """
     syllable_lengths = batch.get("syllable_lengths")
     syllable_mask = _syllable_mask(syllable_lengths, outputs["log_duration"].size(1), outputs["log_duration"].device)
 

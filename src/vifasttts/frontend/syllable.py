@@ -1,3 +1,10 @@
+"""Tách một âm tiết tiếng Việt thành 5 thành phần (âm đầu/đệm/chính/cuối/thanh).
+
+Từ chữ viết → `ParsedSyllable` (chính tả gốc + dạng âm vị trừu tượng). Mọi luật
+chính tả đặc thù (`gi`, `qu`, `uy`, `ay/au`...) nằm trong file này; bảng dữ liệu
+nằm ở `rules.py`. Tổng quan: `docs/FRONTEND.md`, `docs/SYLLABLE_GUIDE.md`.
+"""
+
 from __future__ import annotations
 
 import re
@@ -21,6 +28,7 @@ _VOWEL_LETTERS = set("aăâeêioôơuưy")
 
 
 def _split_edge_punctuation(raw: str) -> tuple[str, str | None]:
+    """Tách dấu câu ở hai đầu token, trả (phần lõi, dấu câu) để parse phần lõi."""
     m = _EDGE_PUNCT.match(raw)
     if not m:
         return raw, None
@@ -30,6 +38,10 @@ def _split_edge_punctuation(raw: str) -> tuple[str, str | None]:
 
 
 def _match_onset(word: str) -> tuple[str, str, bool]:
+    """Khớp âm đầu dài nhất (ngh/ng/gh/gi/kh/qu...).
+
+    Trả về (chính tả onset, phần còn lại, có phải `qu` không).
+    """
     # "gi": chữ i dùng chung giữa onset và vần. Khi sau nó là "ê", hết từ
     # (gì) hoặc một phụ âm (gìn), chữ i thuộc vần => onset chính tả là "g"
     # (âm vị vẫn là GI; xem xử lý trong parse_syllable). Trước nguyên âm khác
@@ -45,6 +57,7 @@ def _match_onset(word: str) -> tuple[str, str, bool]:
 
 
 def _match_consonant_coda(remainder: str) -> tuple[str, str]:
+    """Khớp phụ âm cuối dài nhất (nh/ng/ch...) ở cuối phần vần."""
     for coda in CONSONANT_CODAS:
         if remainder.endswith(coda) and len(remainder) > len(coda):
             return coda, remainder[:-len(coda)]
@@ -54,13 +67,13 @@ def _match_consonant_coda(remainder: str) -> tuple[str, str]:
 def _parse_vowel(vowel: str, qu_medial: bool) -> tuple[str | None, str, str, str]:
     """Return medial spelling, nucleus spelling, medial abstract, nucleus abstract."""
     if qu_medial:
-        # After qu, remainder must be a legal nucleus (e.g. "a" in "qua",
-        # "y"/"ye" in "quy/quyen"). qu itself contributes medial W.
+        # Sau "qu", phần còn lại phải là nucleus hợp lệ (ví dụ "a" trong "qua",
+        # "y"/"yê" trong "quy/quyên"). Bản thân "qu" đóng góp âm đệm W.
         if vowel not in NUCLEUS_ABSTRACT:
             raise ValueError(f"Phần nguyên âm sau qu không hợp lệ: {vowel!r}")
         return "u", vowel, "W", NUCLEUS_ABSTRACT[vowel]
 
-    # Longest special sequence first.
+    # Ưu tiên cụm đặc biệt dài nhất trước.
     for seq in sorted(SPECIAL_VOWELS, key=len, reverse=True):
         if vowel == seq:
             medial, nucleus = SPECIAL_VOWELS[seq]
@@ -72,7 +85,7 @@ def _parse_vowel(vowel: str, qu_medial: bool) -> tuple[str | None, str, str, str
 
 
 def _try_semivowel_coda(vowel_part: str) -> tuple[str, str]:
-    """Split final i/y/u/o as abstract J/W when the remaining nucleus is legal."""
+    """Tách i/y/u/o cuối thành coda trừu tượng J/W nếu phần nucleus còn lại hợp lệ."""
     if len(vowel_part) < 2:
         return "", vowel_part
     last = vowel_part[-1]
@@ -83,6 +96,7 @@ def _try_semivowel_coda(vowel_part: str) -> tuple[str, str]:
 
 
 def validate(parsed: ParsedSyllable) -> None:
+    """Kiểm bất biến âm vị: có nucleus, âm đệm hợp lệ, coda tắc chỉ sắc/nặng."""
     a = parsed.abstract
     if not a.nucleus or a.nucleus == "NONE":
         raise ValueError("Âm tiết phải có nucleus")
@@ -93,6 +107,7 @@ def validate(parsed: ParsedSyllable) -> None:
 
 
 def parse_syllable(raw: str) -> ParsedSyllable:
+    """Parse một token thành ParsedSyllable (chữ gốc + chính tả + âm vị + dấu câu)."""
     normalized = normalize_unicode(raw.lower())
     core, punctuation = _split_edge_punctuation(normalized)
     if not core:
@@ -145,6 +160,7 @@ def parse_syllable(raw: str) -> ParsedSyllable:
 
 
 def safe_parse_syllable(raw: str) -> ParsedSyllable | None:
+    """Như `parse_syllable` nhưng trả None thay vì raise (dùng trong pipeline)."""
     try:
         return parse_syllable(raw)
     except ValueError:

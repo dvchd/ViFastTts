@@ -1,3 +1,5 @@
+"""Chuẩn hoá STEM: công thức hoá học, LaTeX/toán, đơn vị vật lý → chữ đọc được."""
+
 from __future__ import annotations
 
 import re
@@ -49,11 +51,13 @@ UNITS = {
 
 
 def _read_int(text: str, read_number: NumberReader) -> str:
+    """Đọc số nguyên; nếu không phải số thì giữ nguyên chuỗi gốc."""
     try: return read_number(int(text))
     except ValueError: return text
 
 
 def _balanced_argument(text: str, command: str) -> tuple[str, str] | None:
+    """Tách tham số trong ngoặc của lệnh LaTeX `\\cmd{...}` (cân bằng ngoặc lồng)."""
     prefix = "\\" + command + "{"
     if not text.startswith(prefix): return None
     depth = 1
@@ -66,6 +70,11 @@ def _balanced_argument(text: str, command: str) -> tuple[str, str] | None:
 
 
 def read_chemical_formula(formula: str, read_number: NumberReader, strict: bool = True) -> str:
+    """Đọc công thức hoá học thành chữ (H2O → "hát hai ô"; Fe3+ → "sắt ba dương").
+
+    Với `strict=True`, các mã trông giống công thức nhưng là tên sản phẩm
+    (RTX3080, MP3, N95, K2...) được giữ nguyên (xem `_is_plausible_formula`).
+    """
     formula = formula.strip().replace("_{", "").replace("}", "")
     parts=[]; pos=0; known: set[str] = set()
     token_re=re.compile(r"([A-Z][a-z]?)(\d*)|([()])|(\d+)|([+\-])")
@@ -95,11 +104,11 @@ _SINGLE_ELEMENT_RE = re.compile(r"([A-Z][a-z]?)([23]?)([+\-]?)")
 
 
 def _is_plausible_formula(formula: str, known: int, only_element: str | None) -> bool:
-    """Guard against product/version codes like RTX3080, MP3, N95, K2.
+    """Lọc mã sản phẩm/phiên bản trông giống công thức (RTX3080, MP3, N95, K2).
 
-    Accept when at least two known elements appear, plus single-element cases
-    that are real physical formulas: diatomic molecules (O2, H2, Cl2) and ions
-    with an explicit charge (Fe3+, O2-, Al3+). Everything else is kept verbatim.
+    Chấp nhận khi có ≥2 nguyên tố đã biết, hoặc trường hợp một nguyên tố là
+    công thức thật: phân tử hai nguyên tử (O2, H2, Cl2) và ion có điện tích rõ
+    (Fe3+, O2-, Al3+). Còn lại giữ nguyên chuỗi gốc.
     """
     if known >= 2:
         return True
@@ -117,6 +126,7 @@ def _is_plausible_formula(formula: str, known: int, only_element: str | None) ->
 
 
 def read_unit_expression(expr: str, read_number: NumberReader) -> str:
+    """Đọc biểu thức đơn vị SI (m/s² → "mét trên giây bình phương")."""
     expr=expr.strip()
     expr=re.sub(r"([A-Za-z°Ω]+)\^?([23])\b", lambda m: f"{UNITS.get(m.group(1),m.group(1))} {'bình phương' if m.group(2)=='2' else 'lập phương'}", expr)
     pieces=re.split(r"([/·*])",expr); out=[]
@@ -130,9 +140,10 @@ def read_unit_expression(expr: str, read_number: NumberReader) -> str:
 
 
 def read_math_expression(expr: str, read_number: NumberReader) -> str:
+    """Đọc biểu thức LaTeX/toán thành chữ (đệ quy cho \\frac, \\sqrt, mũ/chỉ số)."""
     expr=expr.strip().replace("\\\\", "\\")
     expr=re.sub(r"\\+(?=[A-Za-z])", r"\\", expr)
-    # Structured LaTeX commands, recursively parsed.
+    # Các lệnh LaTeX có cấu trúc: xử lý đệ quy.
     while "\\frac{" in expr:
         m=re.search(r"\\frac\{([^{}]+)\}\{([^{}]+)\}",expr)
         if not m: break
@@ -145,7 +156,7 @@ def read_math_expression(expr: str, read_number: NumberReader) -> str:
     for k,v in sorted({**GREEK,**MATH_COMMANDS}.items(), key=lambda item: len(item[0]), reverse=True):
         expr=expr.replace("\\" + k, v)
     expr=expr.replace("\\,"," ").replace("\\;"," ").replace("\\!","")
-    # Superscript/subscript before generic punctuation.
+    # Mũ/chỉ số xử lý trước dấu câu chung.
     expr=re.sub(r"\^\{([^{}]+)\}",lambda m:" mũ "+read_math_expression(m.group(1),read_number),expr)
     expr=re.sub(r"\^([0-9A-Za-z])",lambda m:" mũ "+read_math_expression(m.group(1),read_number),expr)
     expr=re.sub(r"_\{([^{}]+)\}",lambda m:" chỉ số "+read_math_expression(m.group(1),read_number),expr)
@@ -159,32 +170,33 @@ def read_math_expression(expr: str, read_number: NumberReader) -> str:
 
 
 def normalize_stem(text: str, read_number: NumberReader) -> str:
-    """Normalize explicit LaTeX, chemistry formulas, common equations and SI units."""
-    # Accept text originating from JSON/Python strings with doubled backslashes.
+    """Chuẩn hoá LaTeX, công thức hoá học, phương trình và đơn vị SI thành chữ."""
+    # Nhận cả chuỗi JSON/Python có backslash nhân đôi.
     text=text.replace("\\\\", "\\")
-    # Explicit chemistry commands are handled before generic LaTeX.
+    # Lệnh hoá học tường minh xử lý trước LaTeX chung.
     text=re.sub(r"\\(?:ce|chem)\{([^{}]+)\}",lambda m:read_chemical_formula(m.group(1),read_number,strict=False),text)
-    # Display and inline LaTeX.
+    # LaTeX dạng hiển thị và nội tuyến.
     patterns=[r"\$\$([^$]+)\$\$",r"\$([^$]+)\$",r"\\\((.*?)\\\)",r"\\\[(.*?)\\\]"]
     for pat in patterns: text=re.sub(pat,lambda m:read_math_expression(m.group(1),read_number),text,flags=re.DOTALL)
-    # Safe standalone LaTeX constructs that have explicit brace boundaries.
+    # Các cấu trúc LaTeX đứng riêng nhưng có ngoặc rõ ràng.
     text=re.sub(r"\\frac\{[^{}]+\}\{[^{}]+\}", lambda m: read_math_expression(m.group(), read_number), text)
     text=re.sub(r"\\sqrt(?:\[[^]]+\])?\{[^{}]+\}", lambda m: read_math_expression(m.group(), read_number), text)
-    # Common standalone chemistry formulas containing digits or multiple element symbols.
+    # Công thức hoá học đứng riêng có chữ số hoặc nhiều ký hiệu nguyên tố.
     # Cho phép hậu tố điện tích ([+\-]) nhưng không nuốt dấu gạch của khoảng giá trị.
     chem_pat=re.compile(r"(?<!\w)(?=[A-Z][A-Za-z0-9()]*\d)([A-Z][A-Za-z0-9()]*)([+\-])?(?![\w+\-])")
     text=chem_pat.sub(lambda m:read_chemical_formula(m.group(1)+(m.group(2) or ""),read_number),text)
-    # Number followed by recognized unit expression.
-    # Trailing lookahead prevents matching unit prefix inside Vietnamese words,
-    # e.g. "s" in "sach" must not match "105 sach" as "105 s" + "ach".
+    # Số đi kèm đơn vị đã nhận diện.
+    # Lookahead phía sau tránh khớp tiền tố đơn vị nằm trong từ tiếng Việt,
+    # ví dụ "s" trong "sach" không được khớp "105 sach" thành "105 s" + "ach".
     unit_keys="|".join(sorted((re.escape(x) for x in UNITS),key=len,reverse=True))
     text=re.sub(rf"(?<!\w)(\d+(?:[,.]\d+)?)\s*({unit_keys})(?:\^?([23]))?(?:/({unit_keys})(?:\^?([23]))?)?(?![A-Za-zÀ-ỹĐđ])",lambda m:_read_measure(m,read_number),text)
-    # Composite units may follow a LaTeX expression whose number has already been verbalized.
+    # Đơn vị ghép khi số đứng trước đã được đọc (ví dụ sau biểu thức LaTeX).
     text=re.sub(rf"(?<!\w)({unit_keys})(?:\^?([23]))?/({unit_keys})(?:\^?([23]))?(?![A-Za-zÀ-ỹĐđ])", lambda m: _read_composite_unit(m), text)
     return re.sub(r"\s+"," ",text).strip()
 
 
 def _read_measure(m: re.Match[str], read_number: NumberReader) -> str:
+    """Đọc cặp "<số> <đơn vị>" kèm số mũ và dạng tử/mẫu (m/s²)."""
     number=m.group(1).replace(",",".")
     if "." in number:
         whole,frac=number.split(".",1); n=read_number(int(whole))+" phẩy "+" ".join(read_number(int(x)) for x in frac)
@@ -199,6 +211,7 @@ def _read_measure(m: re.Match[str], read_number: NumberReader) -> str:
 
 
 def _read_composite_unit(m: re.Match[str]) -> str:
+    """Đọc đơn vị ghép kiểu "kg/m³" khi phần số đã được đọc trước đó."""
     numerator=UNITS[m.group(1)]
     if m.group(2): numerator += " bình phương" if m.group(2)=="2" else " lập phương"
     denominator=UNITS[m.group(3)]

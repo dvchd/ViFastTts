@@ -18,6 +18,8 @@ from typing import Any
 
 
 class Tone(StrEnum):
+    """Sáu thanh điệu tiếng Việt; giá trị chuỗi dùng thẳng làm ID trong vocab."""
+
     NGANG = "NGANG"
     HUYEN = "HUYEN"
     SAC = "SAC"
@@ -27,6 +29,8 @@ class Tone(StrEnum):
 
 
 class ParseStatus(StrEnum):
+    """Trạng thái parse của một token (hợp lệ / không hợp lệ / cần fallback)."""
+
     VALID = "VALID"
     INVALID = "INVALID"
     FALLBACK_REQUIRED = "FALLBACK_REQUIRED"
@@ -72,6 +76,8 @@ class AbstractSyllable:
 
 @dataclass(frozen=True)
 class Boundaries:
+    """Ranh giới ngữ điệu dùng sinh ID `boundary`: hết từ / hết mệnh đề / hết câu."""
+
     word_end: bool = True
     phrase_end: bool = False
     sentence_end: bool = False
@@ -79,6 +85,12 @@ class Boundaries:
 
 @dataclass
 class ParsedSyllable:
+    """Kết quả parse một âm tiết: chữ gốc + chính tả + dạng âm vị + trạng thái.
+
+    `orthography` giữ cách viết người dùng (i/y, gi/qu, dấu cũ...);
+    `abstract` là 5 thành phần trung lập phương ngữ — khoá vocab cho model.
+    """
+
     raw: str
     normalized: str
     orthography: Orthography
@@ -89,4 +101,5 @@ class ParsedSyllable:
     punctuation: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Chuyển sang dict (asdict) để ghi manifest JSONL / in CLI."""
         return asdict(self)

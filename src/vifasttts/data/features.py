@@ -1,3 +1,9 @@
+"""Trích feature âm thanh: mel, năng lượng, F0/VUV (+ phonation tùy chọn).
+
+Mọi hàm ở đây chạy thuần torch/numpy trên CPU; mel dùng STFT center=True nên số
+frame = `1 + len(wav)//hop_length`. Xem `docs/MODEL_FLOW.md` §4.1.
+"""
+
 from __future__ import annotations
 
 import math
@@ -8,10 +14,12 @@ import torch
 
 
 def _hz_to_mel(freq: float) -> float:
+    """Đổi Hz sang thang mel (công thức HTK)."""
     return 2595.0 * math.log10(1.0 + freq / 700.0)
 
 
 def _mel_to_hz(mel: float) -> float:
+    """Đổi mel về Hz (nghịch đảo `_hz_to_mel`)."""
     return float(700.0 * (10.0 ** (mel / 2595.0) - 1.0))
 
 

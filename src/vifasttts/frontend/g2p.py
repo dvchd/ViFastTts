@@ -131,6 +131,7 @@ TONE_NUMBERS: dict[str, str] = {
 
 
 def tone_table(dialect: str | Dialect) -> dict[str, str]:
+    """Bảng đường nét thanh (Chao) theo phương ngữ."""
     if Dialect(dialect) is Dialect.SOUTH:
         return TONE_CONTOURS_SOUTH
     if Dialect(dialect) is Dialect.CENTRAL:
@@ -139,6 +140,7 @@ def tone_table(dialect: str | Dialect) -> dict[str, str]:
 
 
 def onset_table(dialect: str | Dialect) -> dict[str, tuple[str, ...]]:
+    """Bảng phụ âm đầu broad theo phương ngữ (Trung dùng chung bảng Nam)."""
     return ONSET_BROAD_SOUTH if Dialect(dialect) is not Dialect.NORTH else ONSET_BROAD_NORTH
 
 
@@ -242,6 +244,7 @@ def phoneme_inventory() -> tuple[str, ...]:
 
 
 def to_phoneme_string(phonemes: tuple[str, ...]) -> str:
+    """Nối tuple âm vị IPA thành chuỗi cách nhau bằng dấu cách (để in/log)."""
     return " ".join(phonemes)
 
 

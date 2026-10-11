@@ -1,3 +1,5 @@
+"""Fallback tiếng Anh viết tắt/sản phẩm: bảng tra chính xác + không phân biệt hoa thường."""
+
 from __future__ import annotations
 
 # Acronym phải khớp chính xác, có phân biệt hoa thường. Vì vậy AI khác ai/Ai.
@@ -78,12 +80,15 @@ EXACT_PRODUCT_NAMES = {
 
 
 def lookup_exact_acronym(token: str) -> str | None:
+    """Tra viết tắt đúng hoa thường (AI → "ây ai"); None nếu không có."""
     return ACRONYM_READINGS.get(token)
 
 
 def lookup_product_name(token: str) -> str | None:
+    """Tra tên sản phẩm viết đúng như bảng; None nếu không có."""
     return EXACT_PRODUCT_NAMES.get(token)
 
 
 def lookup_case_insensitive_english(token: str) -> str | None:
+    """Tra từ tiếng Anh không phân biệt hoa thường; None nếu không có."""
     return CASE_INSENSITIVE_ENGLISH.get(token.lower())

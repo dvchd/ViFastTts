@@ -1,3 +1,5 @@
+"""Manifest JSONL: dựng từ metadata CSV, kiểm tra và báo coverage trước khi train."""
+
 from __future__ import annotations
 
 import csv
@@ -9,6 +11,7 @@ from vifasttts.frontend.pipeline import parse_text
 
 
 def build_manifest(metadata: str | Path, wav_dir: str | Path, output: str | Path) -> None:
+    """CSV `id|text` + thư mục WAV → manifest JSONL (kèm âm tiết đã parse)."""
     wav_dir = Path(wav_dir)
     rows: list[dict[str, Any]] = []
     with Path(metadata).open("r", encoding="utf-8") as f:

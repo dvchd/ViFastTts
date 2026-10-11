@@ -18,6 +18,7 @@ from vifasttts.data.features import load_wav
 
 
 def _frame_count(num_samples: int, hop_length: int) -> int:
+    """Số frame của STFT center=True: `1 + len//hop`."""
     return 1 + num_samples // hop_length
 
 
@@ -122,4 +123,5 @@ def extract_phonation(wav_path: str | Path, config: dict[str, Any]) -> dict[str,
 
 
 def phonation_enabled(config: dict[str, Any]) -> bool:
+    """Cờ bật trích kênh phonation trong config (`phonation.enabled`)."""
     return bool(config.get("phonation", {}).get("enabled", False))

@@ -1,3 +1,8 @@
+"""CLI của ViFastTts (Typer): frontend, dữ liệu, train, suy luận, export, server.
+
+Chạy `vifasttts --help` để xem toàn bộ lệnh; `--version` để in phiên bản.
+"""
+
 from __future__ import annotations
 
 import json
@@ -16,6 +21,7 @@ app = typer.Typer(help="ViFastTts CLI")
 
 
 def _version_callback(value: bool) -> None:
+    """In phiên bản rồi thoát khi có `--version` (chạy trước mọi lệnh)."""
     if value:
         typer.echo(f"ViFastTts {__version__}")
         raise typer.Exit()
@@ -33,11 +39,13 @@ def main_callback(
 
 @app.command("parse-syllable")
 def parse_one(value: str) -> None:
+    """Parse một âm tiết và in JSON đầy đủ (chính tả + âm vị + trạng thái)."""
     typer.echo(json.dumps(parse_syllable(value).to_dict(), ensure_ascii=False, indent=2, default=str))
 
 
 @app.command("parse")
 def parse(value: str, dialect: str = "north") -> None:
+    """Parse cả câu theo vùng miền, in JSON từng âm tiết (kèm dấu câu/ranh giới)."""
     typer.echo(json.dumps([x.to_dict() for x in parse_text(value, dialect=dialect)], ensure_ascii=False, indent=2, default=str))
 
 
@@ -63,6 +71,7 @@ def manifest(
     wav_dir: str = typer.Option(..., help="Thư mục chứa WAV"),
     output: str = typer.Option(..., help="File JSONL đầu ra"),
 ) -> None:
+    """Dựng manifest JSONL (text + âm tiết đã parse) từ CSV và thư mục WAV."""
     build_manifest(metadata, wav_dir, output)
     typer.echo(f"Đã ghi {output}")
 
@@ -72,6 +81,7 @@ def validate_manifest_cmd(
     manifest: str = typer.Option(..., help="File JSONL cần kiểm tra"),
     wav_dir: str | None = typer.Option(None, help="Thư mục WAV (nếu manifest chỉ có id)"),
 ) -> None:
+    """Kiểm manifest: WAV tồn tại, âm tiết rỗng; in coverage tone/coda/fallback."""
     from vifasttts.data.manifest import coverage_report, validate_manifest
     report = validate_manifest(manifest, wav_dir)
     typer.echo(f"Tổng {report['total']} dòng, {len(report['issues'])} vấn đề")
@@ -95,6 +105,7 @@ def train(
     output: str = typer.Option(..., help="Thư mục run"),
     max_steps: int | None = typer.Option(None, help="Ghi đè số bước tối đa (chạy thử nhanh)"),
 ) -> None:
+    """Huấn luyện acoustic model (device lấy từ `training.device`, auto = cuda→mps→cpu)."""
     train_reference(load_config(config), train_manifest, val_manifest, output, max_steps=max_steps)
 
 
@@ -106,6 +117,7 @@ def export_onnx_cmd(
     opset: int = typer.Option(18, help="Opset ONNX (mặc định 18)"),
     precision: str = typer.Option("fp32", help="fp32 | fp16 | int8"),
 ) -> None:
+    """Xuất ONNX acoustic (fp32/fp16/int8) với batch/độ dài động + metadata."""
     from vifasttts.export import export_onnx
     export_onnx(load_config(config), checkpoint, output, opset_version=opset, precision=precision)
     typer.echo(f"Đã xuất {output} ({precision})")
@@ -219,6 +231,7 @@ def synthesize_cmd(
     max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
     device: str = typer.Option("auto", help="auto | cpu | cuda | mps"),
 ) -> None:
+    """Tổng hợp WAV bằng PyTorch (chunk câu dài, override, chuẩn hoá đỉnh tuỳ chọn)."""
     from vifasttts.infer import load_overrides, synthesize
     samples, sample_rate = synthesize(
         load_config(config), checkpoint, text, output,

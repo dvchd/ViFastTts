@@ -1,3 +1,5 @@
+"""Ví dụ tối thiểu: parse một câu và in cấu trúc từng âm tiết."""
+
 from pprint import pprint
 
 from vifasttts.frontend.pipeline import parse_text

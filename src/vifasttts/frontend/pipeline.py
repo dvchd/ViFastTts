@@ -1,3 +1,5 @@
+"""Đường ống parse văn bản: chuẩn hoá → token → âm tiết kèm dấu câu/ranh giới."""
+
 from __future__ import annotations
 
 import re
@@ -18,11 +20,11 @@ _TOKEN_RE = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 
 
 def _fallback_syllable(token: str) -> ParsedSyllable:
-    """Create a fallback entry for non-Vietnamese or invalid tokens.
+    """Tạo entry fallback cho token không phải tiếng Việt hoặc không parse được.
 
-    Keeps raw text for debugging, marks FALLBACK_REQUIRED with zero
-    confidence, and uses valid vocab IDs (NONE/NONE/A/NONE/NGANG) so
-    downstream encoding does not crash. Caller attaches punctuation.
+    Giữ raw để debug, đánh dấu FALLBACK_REQUIRED với confidence 0, và dùng ID
+    hợp lệ (NONE/NONE/A/NONE/NGANG) để encode không bao giờ crash.
+    Caller gắn dấu câu sau đó.
     """
     return ParsedSyllable(
         raw=token,
@@ -43,11 +45,10 @@ def parse_text(
 ) -> list[ParsedSyllable]:
     """Parse text into structured syllables.
 
-    Normalizer handles dialect-specific readings, then tokens are parsed.
-    Leading punctuation is attached to the next syllable, trailing
-    punctuation to the previous one with phrase/sentence boundaries.
-    Invalid or foreign tokens become FALLBACK_REQUIRED entries instead
-    of raising, so manifest building and inference never crash.
+    Normalizer xử lý cách đọc theo vùng miền trước, sau đó mới token hoá và parse.
+    Dấu câu đứng trước gắn vào âm tiết kế tiếp, dấu câu đứng sau gắn vào âm tiết
+    trước đó kèm ranh giới phrase/câu. Token lạ trở thành FALLBACK_REQUIRED thay
+    vì raise, nên build manifest và suy luận không bao giờ crash.
 
     Với `resolve_oov=True`, token OOV được thử respell bằng
     `frontend/oov.py` (acronym/English/tên chữ cái) trước khi fallback.

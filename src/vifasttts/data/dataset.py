@@ -1,3 +1,8 @@
+"""Dataset cho training: acoustic (TtsDataset) và vocoder (VocoderDataset) + collate.
+
+Mỗi mẫu acoustic trả tensor cấp âm tiết + mel cấp frame; chi tiết: `docs/MODEL_FLOW.md` §4.1.
+"""
+
 from __future__ import annotations
 
 import json
@@ -21,14 +26,19 @@ from vifasttts.types import (
 
 
 class ManifestDataset:
+    """Đọc manifest JSONL thành danh sách dict (mỗi dòng một mẫu)."""
+
     def __init__(self, manifest: str | Path) -> None:
+        """Đọc toàn bộ manifest vào bộ nhớ (manifest thường nhỏ, chỉ chứa metadata)."""
         with Path(manifest).open("r", encoding="utf-8") as f:
             self.rows: list[dict[str, Any]] = [json.loads(line) for line in f if line.strip()]
 
     def __len__(self) -> int:
+        """Số mẫu trong manifest."""
         return len(self.rows)
 
     def __getitem__(self, index: int) -> dict[str, Any]:
+        """Dict của mẫu thứ `index`."""
         return self.rows[index]
 
 
@@ -51,6 +61,7 @@ def parsed_from_dict(row: dict[str, Any]) -> ParsedSyllable:
 
 
 def encode_syllables(rows: list[dict[str, Any]], vocabs: ComponentVocabs) -> list[list[int]]:
+    """Mã hoá danh sách âm tiết (dict trong manifest) thành list 7 ID."""
     return [vocabs.encode(parsed_from_dict(row)) for row in rows]
 
 
@@ -86,6 +97,7 @@ class TtsDataset(Dataset):
     """
 
     def __init__(self, manifest: str | Path, config: dict[str, Any], cache_dir: str | Path | None = None) -> None:
+        """Nạp manifest + config; `cache_dir` bật cache mel/f0/vuv giữa các epoch."""
         self.rows = ManifestDataset(manifest).rows
         self.config = config
         self.vocabs = ComponentVocabs.default()
@@ -93,9 +105,11 @@ class TtsDataset(Dataset):
         self.cache = FeatureCache(cache_dir, config) if cache_dir is not None else None
 
     def __len__(self) -> int:
+        """Số mẫu trong dataset."""
         return len(self.rows)
 
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
+        """Mẫu thứ index: features/durations/f0/vuv/energy/mel (+ phonation nếu bật)."""
         row = self.rows[index]
         features = torch.tensor(encode_syllables(row["syllables"], self.vocabs), dtype=torch.long)
         syllable_count = features.size(0)
@@ -198,6 +212,7 @@ class VocoderDataset(Dataset):
     """
 
     def __init__(self, manifest: str | Path, config: dict[str, Any], cache_dir: str | Path | None = None) -> None:
+        """Nạp manifest + config cho huấn luyện vocoder."""
         self.rows = ManifestDataset(manifest).rows
         self.config = config
         self.hop_length = int(config["mel"]["hop_length"])
@@ -205,9 +220,11 @@ class VocoderDataset(Dataset):
         self.cache = FeatureCache(cache_dir, config) if cache_dir is not None else None
 
     def __len__(self) -> int:
+        """Số mẫu trong dataset."""
         return len(self.rows)
 
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
+        """Mẫu thứ index: mel [T, 100] + waveform thật [T*hop] (đã pad/khớp)."""
         from vifasttts.data.features import load_wav
 
         row = self.rows[index]

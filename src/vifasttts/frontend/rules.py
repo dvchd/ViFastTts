@@ -1,6 +1,11 @@
+"""Bảng ánh xạ chính tả ↔ âm vị học: âm đầu, âm đệm, âm chính, âm cuối + bất biến.
+
+Gồm cả các bảng compatibility dùng cho validator/audit (xem `frontend/lexicon.py`).
+"""
+
 from __future__ import annotations
 
-# Longest spelling forms are checked first. "q" đứng một mình không phải âm
+# Dạng chính tả dài được kiểm trước. "q" đứng một mình không phải âm
 # đầu hợp lệ trong tiếng Việt (chỉ tồn tại trong "qu"); "qa", "qi"... là fallback.
 ONSET_SPELLINGS = (
     "ngh", "ng", "gh", "gi", "kh", "nh", "ph", "th", "tr", "ch", "qu",
@@ -32,8 +37,8 @@ NUCLEUS_ABSTRACT = {
     "uô": "UÔ", "ua": "UÔ", "ươ": "ƯƠ", "ưa": "ƯƠ",
 }
 
-# Vowel-part mappings after onset and consonant coda are removed.
-# The first item is medial spelling, second is nucleus spelling.
+# Ánh xạ cụm nguyên âm sau khi đã bỏ âm đầu và phụ âm cuối.
+# Phần tử thứ nhất là chính tả âm đệm, thứ hai là chính tả âm chính.
 SPECIAL_VOWELS = {
     "oa": ("o", "a"), "oă": ("o", "ă"), "oe": ("o", "e"),
     "uâ": ("u", "â"), "uê": ("u", "ê"), "uy": ("u", "y"),
@@ -42,9 +47,9 @@ SPECIAL_VOWELS = {
 
 STOP_CODAS = {"P", "T", "C", "CH"}
 
-# Productive legal combinations used by validators, coverage reports and future
-# Rust parity tests. Orthographic validity should still be checked against a
-# generated syllable lexicon before production training.
+# Các tổ hợp hợp lệ dùng cho validator, báo cáo coverage và test parity Rust
+# về sau. Tính hợp lệ chính tả vẫn nên đối chiếu lexicon sinh từ corpus trước
+# khi huấn luyện production.
 # W (âm đệm o/u) chỉ kết hợp với: oa, oă, oe, uâ, uê, uy, uyê, uô?, uơ — xác
 # minh trên wordlist 39k từ: W+{A,Ă,Â,E,Ê,I,IÊ,Ô,Ơ} (Ô từ "quốc"); không có
 # W+O hay W+U trong từ thật.

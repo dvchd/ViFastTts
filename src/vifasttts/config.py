@@ -1,3 +1,5 @@
+"""Đọc/kiểm tra config YAML: `load_config` + `validate_config` báo lỗi rõ ràng."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,6 +15,7 @@ _MODEL_KEYS = (
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
+    """Đọc YAML thành dict; lỗi nếu file không phải mapping."""
     with Path(path).open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     if not isinstance(data, dict):

@@ -1,3 +1,5 @@
+"""Nhận dạng số La Mã viết hoa chuẩn (1..3999) để đọc thành số tiếng Việt."""
+
 from __future__ import annotations
 
 import re
@@ -9,11 +11,10 @@ _CANONICAL_ROMAN = re.compile(
 
 
 def roman_to_int(token: str) -> int | None:
-    """Convert canonical uppercase Roman numeral in range 1..3999.
+    """Đổi số La Mã viết hoa chuẩn (≥2 ký tự) sang int; trả None nếu không hợp lệ.
 
-    At least two characters are required by default. This preserves common
-    single-letter tokens such as I, V, X, C, D and M for other normalization
-    policies. `VI` is six, while `vi` and `Vi` are not Roman numerals.
+    Yêu cầu viết HOA toàn bộ để không nuốt nhầm từ thường (`vi`, `mi`...).
+    Ví dụ: `VI` → 6; `vi`, `VX`, `IIII` → None.
     """
     if token != token.upper() or not token.isascii() or not _CANONICAL_ROMAN.fullmatch(token):
         return None

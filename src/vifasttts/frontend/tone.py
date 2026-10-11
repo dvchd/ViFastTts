@@ -1,3 +1,9 @@
+"""Bóc dấu thanh khỏi âm tiết, giữ nguyên dấu chất lượng (ă â ê ô ơ ư).
+
+Tách "thanh" (huyền/sắc/hỏi/ngã/nặng) khỏi "chất lượng nguyên âm" — hai loại
+dấu khác nhau về bản chất ngôn ngữ học, xem `docs/GLOSSARY.md`.
+"""
+
 from __future__ import annotations
 
 import unicodedata
@@ -16,9 +22,10 @@ QUALITY_MARKS = {"\u0302", "\u0306", "\u031B"}
 
 
 def extract_tone(syllable: str) -> tuple[str, Tone, str | None]:
-    """Remove only tone marks, preserving ă â ê ô ơ ư.
+    """Bóc chỉ dấu thanh, giữ nguyên ă â ê ô ơ ư.
 
-    Returns tone-stripped NFC text, tone and the vowel carrying the tone.
+    Trả về văn bản đã bỏ dấu thanh (NFC), thanh và nguyên âm mang thanh;
+    nhiều dấu thanh khác loại trong cùng âm tiết bị coi là lỗi.
     """
     nfd = unicodedata.normalize("NFD", syllable)
     result: list[str] = []

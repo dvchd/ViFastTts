@@ -14,6 +14,7 @@ from vifasttts.frontend.benchmark import format_stats, representation_stats
 
 
 def main() -> None:
+    """Đọc tham số CLI rồi in thống kê so sánh biểu diễn."""
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--text-file", help="File văn bản, mỗi dòng một câu")

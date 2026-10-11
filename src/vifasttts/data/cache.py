@@ -44,20 +44,24 @@ class FeatureCache:
     """Thư mục cache feature dạng `<root>/<sha1>.pt`."""
 
     def __init__(self, root: str | Path, config: dict[str, Any]) -> None:
+        """Mở/tạo thư mục cache; `config` dùng để tính khoá (mel, sample_rate, phonation)."""
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.config = config
 
     def path_for(self, row: dict[str, Any]) -> Path:
+        """Đường dẫn file `.pt` cho một mẫu (khoá theo audio thật + config)."""
         return self.root / f"{feature_cache_key(row, self.config)}.pt"
 
     def get(self, row: dict[str, Any]) -> dict[str, torch.Tensor] | None:
+        """Đọc feature đã cache (None nếu chưa có — caller tự trích)."""
         path = self.path_for(row)
         if not path.exists():
             return None
         return cast(dict[str, torch.Tensor], torch.load(path, map_location="cpu", weights_only=False))
 
     def put(self, row: dict[str, Any], features: dict[str, torch.Tensor]) -> None:
+        """Lưu feature của một mẫu vào cache."""
         torch.save(features, self.path_for(row))
 
 

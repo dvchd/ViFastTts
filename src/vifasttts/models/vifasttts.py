@@ -1,3 +1,9 @@
+"""Model acoustic chính: embedding 7 ID → encoder → predictors → decoder → mel.
+
+Luồng chi tiết + tensor shape: `docs/MODEL_FLOW.md` §4.2. Điểm export ONNX:
+`LengthRegulator` vector hoá bằng cumsum + gather, `exp-1` thay `expm1`.
+"""
+
 from __future__ import annotations
 
 import torch
@@ -15,6 +21,7 @@ class LengthRegulator(nn.Module):
     """
 
     def forward(self, x: torch.Tensor, durations: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """x [B, N, H] + durations [B, N] → (expanded [B, T, H], lengths [B], mask [B, T])."""
         lengths = durations.sum(dim=1)
         max_frames = lengths.max()
         # 0-dim tensor làm biên arange: giữ độ dài động khi export ONNX.
@@ -39,6 +46,7 @@ class ViFastTtsModel(nn.Module):
     """
 
     def __init__(self, config: dict, vocab_sizes: list[int]) -> None:
+        """`vocab_sizes`: 7 vocab size theo thứ tự ID (xem `ComponentVocabs`)."""
         super().__init__()
         m = config["model"]
         h = m["hidden_size"]
@@ -77,6 +85,12 @@ class ViFastTtsModel(nn.Module):
         durations: torch.Tensor | None = None,
         input_lengths: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
+        """features [B, N, 7] → dict đầu ra (mel/log_duration/durations/f0/vuv/energy/tone...).
+
+        - `durations=None` → tự dự đoán (chế độ inference).
+        - `durations` được truyền → teacher forcing khi train.
+        - `input_lengths` [B] → mask padding cho encoder khi train.
+        """
         padding_mask = None
         if input_lengths is not None:
             steps = torch.arange(features.size(1), device=features.device)

@@ -52,14 +52,17 @@ class TtsEngine:
         *,
         device: str | None = None,
     ) -> None:
+        """Nạp Synthesizer (model + vocoder) và lock tuần tự cho đa luồng."""
         self.synthesizer = Synthesizer(config, checkpoint, vocoder_checkpoint, device=device)
         self.lock = threading.Lock()
 
     @property
     def sample_rate(self) -> int:
+        """Sample rate đầu ra (Hz)."""
         return self.synthesizer.sample_rate
 
     def synthesize_bytes(self, payload: dict[str, Any]) -> bytes:
+        """JSON payload → bytes WAV; validate text/speed/overrides rồi tổng hợp."""
         text = str(payload.get("text", "")).strip()
         if not text:
             raise ValueError("Thiếu trường 'text'")
@@ -89,10 +92,15 @@ class TtsEngine:
 
 
 def make_handler(engine: TtsEngine):
+    """Tạo lớp handler HTTP đóng gói `engine` (GET /health, /info; POST /synthesize)."""
+
     class Handler(BaseHTTPRequestHandler):
+        """Handler tối giản: trả JSON cho GET, WAV bytes cho POST."""
+
         server_version = f"ViFastTts/{__version__}"
 
         def _send_json(self, code: int, payload: dict[str, Any]) -> None:
+            """Gửi JSON với đúng Content-Type/Content-Length."""
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -101,6 +109,7 @@ def make_handler(engine: TtsEngine):
             self.wfile.write(body)
 
         def do_GET(self) -> None:
+            """`/health` và `/info`; đường dẫn khác trả 404 JSON."""
             if self.path == "/health":
                 self._send_json(200, {"status": "ok", "version": __version__})
             elif self.path == "/info":
@@ -114,6 +123,7 @@ def make_handler(engine: TtsEngine):
                 self._send_json(404, {"error": "not found"})
 
         def do_POST(self) -> None:
+            """`/synthesize`: JSON → WAV; tham số sai 400, lỗi nội bộ 500."""
             if self.path != "/synthesize":
                 self._send_json(404, {"error": "not found"})
                 return
@@ -138,8 +148,8 @@ def make_handler(engine: TtsEngine):
             self.end_headers()
             self.wfile.write(audio)
 
-        def log_message(self, *args: Any) -> None:  # im lặng trong test/log
-            pass
+        def log_message(self, *args: Any) -> None:
+            """Tắt log mặc định của http.server (tránh ồn khi test/CLI)."""
 
     return Handler
 
@@ -152,6 +162,7 @@ class _TtsHttpServer(ThreadingHTTPServer):
     """
 
     def server_bind(self) -> None:
+        """Bind socket rồi lấy cổng thật, KHÔNG gọi getfqdn (tránh treo DNS ngược)."""
         import socketserver
 
         socketserver.TCPServer.server_bind(self)
@@ -161,6 +172,7 @@ class _TtsHttpServer(ThreadingHTTPServer):
 
 
 def create_server(engine: TtsEngine, host: str = "127.0.0.1", port: int = 8000) -> ThreadingHTTPServer:
+    """Tạo server (chưa chạy) với handler của `engine`; `port=0` chọn cổng trống tự do."""
     return _TtsHttpServer((host, port), make_handler(engine))
 
 
