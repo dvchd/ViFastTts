@@ -1,5 +1,13 @@
 # Khảo sát kiến trúc TTS cho ViFastTts
 
+> **Trạng thái triển khai (11/10/2026):** các đề xuất trong tài liệu này đã được hiện thực
+> một phần: ✅ Segment Expander (§9.4, `frontend/segments.py`), ✅ phonation extraction +
+> conditioning (§9.7, `data/phonation.py`, `model.use_phonation`), ✅ vocoder training tham
+> chiếu (§9.9, `train-vocoder`), ✅ quantization FP16/INT8 động (§9.12), ✅ ONNX acoustic
+> với độ dài động. ⬜ Còn lại: aligner thật (MFA/forward-sum), discriminator/spectral loss
+> production, ONNX vocoder, calibration INT8 đầy đủ. Luồng as-built: `docs/MODEL_FLOW.md`;
+> trạng thái tổng: `docs/PROJECT_STATUS.md`.
+
 **Mục đích:** rà soát các họ kiến trúc TTS phổ biến (AR, NAR, end-to-end VAE/GAN, flow matching, diffusion, vocoder) và kết luận cho bài toán riêng của ViFastTts: **một giọng, một phương ngữ cho mỗi checkpoint, đầu vào là cấu trúc âm tiết `ONSET+MEDIAL+NUCLEUS+CODA+TONE`, không speaker/dialect/style id, non-autoregressive, deterministic, 24 kHz, ONNX là định dạng triển khai, có baseline iSTFTNet**.
 
 **Cách khảo sát:** mỗi kết luận dưới đây dựa trên bài báo/repo gốc. Các liên kết đã được kiểm tra trực tiếp bằng công cụ tải trang (webfetch) được đánh dấu ✅ trong mục 11; các liên kết chỉ xác minh được qua kết quả tìm kiếm (trích đúng tiêu đề/abstract) được đánh dấu 🔎. Không có benchmark nào trong tài liệu này được tự đặt ra; các con số đều là con số do chính bài báo/repo công bố và được ghi rõ nguồn.

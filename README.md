@@ -1,207 +1,198 @@
-# ViFastTts
+# ViFastTts — Text-to-Speech tiếng Việt
 
-ViFastTts là dự án nghiên cứu và triển khai TTS tiếng Việt một giọng, một checkpoint, ưu tiên độ chính xác phát âm, thanh điệu ổn định và tốc độ suy luận cao.
+Toolkit nghiên cứu và triển khai **TTS tiếng Việt một giọng**: hiểu văn bản tiếng Việt,
+sinh giọng nói, huấn luyện và xuất ONNX để chạy nhanh trên CPU/GPU. Mỗi checkpoint là
+một người nói, một phương ngữ — không cần `speaker_id`, `dialect_id` hay audio mẫu.
 
-## Triết lý
+> **Đọc nhanh:** Muốn biết toàn cảnh trong 1 trang → mục 2–3 bên dưới.
+> Muốn hiểu sâu từng bước → `docs/MODEL_FLOW.md` (model) và `docs/SYLLABLE_GUIDE.md` (âm tiết).
 
-- Frontend dùng chung cho tiếng Việt, không gắn cứng với miền Bắc, Trung hay Nam.
-- Mỗi checkpoint chỉ chứa một người nói và một phương ngữ.
-- Không cần `dialect_id`, `speaker_id`, `style_id` hoặc audio tham chiếu ở runtime.
-- Mỗi âm tiết được mô tả bằng `ONSET + MEDIAL + NUCLEUS + CODA + TONE`.
-- Mô hình non-autoregressive và deterministic.
-- Conformer ở cấp âm tiết, Length Regulator ở cấp frame, iSTFTNet ở đầu ra.
-- ONNX là định dạng triển khai chính (đã kiểm chứng export với batch/độ dài động).
+## 1. Dự án làm gì?
 
-## Trạng thái
+Ba khối chính, ghép lại thành một câu TTS hoàn chỉnh:
 
-Những phần chạy được ngay trong repository:
+```text
+Văn bản  ──▶  FRONTEND (tiếng Việt)  ──▶  MODEL (mel + thời lượng)  ──▶  VOCODER  ──▶  WAV
+```
 
-- Chuẩn hóa Unicode, tách câu, tách token.
-- Parser âm tiết tiếng Việt có cấu trúc, fallback không crash.
-- Normalizer theo vùng miền (`north`, `central`, `south`): số, ngày/tháng/năm, giờ, phân số, khoảng giá trị, phần trăm, tiền tệ, điện thoại, La Mã, STEM (Toán/Hoá/Lý), English fallback có kiểm chứng "reading phải là âm tiết Việt hợp lệ".
-- Lớp G2P tùy chọn (`frontend/g2p.py`, chỉ dùng cho phân tích — không nằm trong đường runtime) và OOV resolver (`frontend/oov.py`, opt-in qua `parse_text(..., resolve_oov=True)`).
-- Vocabulary thành phần, manifest JSONL và `validate-manifest`.
-- Mô hình PyTorch: Conformer + positional encoding + variance predictors + LengthRegulator vector hoá + frame-position + iSTFTNet có upsampling.
-- Vòng huấn luyện thật: trích mel/energy/F0/VUV từ WAV, collate có mask, teacher forcing duration, lưu `best.pt`/`last.pt`.
-- Suy luận end-to-end `vifasttts synthesize` (WAV 16-bit, không cần thư viện ngoài).
-- Export ONNX acoustic model (đã kiểm chứng bằng onnxruntime: batch, số âm tiết và tổng frame động).
+| Khối | Nhiệm vụ | Điểm mạnh |
+| --- | --- | --- |
+| **Frontend** | Chuẩn hoá số/ngày/giờ/đơn vị, tách âm tiết, chuyển thành **7 ID/âm tiết** | Phủ toàn bộ tiếng Việt chuẩn, không UNK; 3 vùng miền Bắc/Trung/Nam |
+| **Model acoustic** | Từ 7 ID → dự đoán mel + thời lượng + f0/vuv/energy | Non-autoregressive, chạy tất định, xuất ONNX được |
+| **Vocoder** | Từ mel → sóng 24 kHz | iSTFTNet nhẹ, có vòng huấn luyện GAN tham chiếu |
 
-Để có giọng nói chất lượng thực tế bạn vẫn cần dataset audio + transcript và alignment thật (MFA hoặc aligner tương đương); repository dùng alignment tạm (chia đều frame) và không kèm trọng số đã huấn luyện. Xem `docs/TRAINING.md` và `docs/TTS_ARCHITECTURE_RESEARCH.md`.
+**Khác biệt cốt lõi:** thay vì đưa chuỗi ký tự hay BPE vào model, dự án mô tả mỗi âm tiết
+bằng 5 thành phần ngôn ngữ học `âm đầu + âm đệm + âm chính + âm cuối + thanh điệu`
+(cộng dấu câu/chấm câu — xem mục 7). Nhờ vậy: phát âm ổn định, dấu thanh không bao giờ sai
+vị trí, và không có "từ lạ" với tiếng Việt chuẩn.
 
-## Cài đặt
+## 2. Trạng thái hiện tại (số liệu thật)
 
-Yêu cầu Python >= 3.11.
+| Hạng mục | Kết quả |
+| --- | --- |
+| Bộ test | **901 test pass**; `ruff` + `mypy` sạch |
+| Parser âm tiết | Vét cạn **49.166 tổ hợp = 0 lỗi**; 39K từ thật: 6.617/6.633 parse OK |
+| Kho âm tiết | 24 âm đầu · 2 âm đệm · 15 âm chính · 11 âm cuối · 6 thanh → **264 vần**, **28.800 âm tiết trừu tượng** |
+| Model | Acoustic **16,4 triệu** tham số; vocoder **3,5 triệu** tham số |
+| Sinh giọng | `vifasttts synthesize` chạy end-to-end (WAV 16-bit, 24 kHz) |
+| Xuất ONNX | fp32 / fp16 / int8, batch và độ dài **động** (đã kiểm bằng onnxruntime) |
+| Huấn luyện | Train acoustic + train vocoder (GAN tham chiếu) + cache feature |
+
+⚠️ **Chưa có sẵn trọng số huấn luyện** trong repo. Muốn có giọng nói thật, cần audio + transcript
+và (khuyến nghị) alignment thật bằng MFA — xem `docs/TRAINING.md`.
+
+## 3. Luồng hoạt động trong 30 giây
+
+```text
+1) CHUẨN BỊ:   WAV + CSV  →  manifest.jsonl  (+ cache feature, kiểm coverage)
+2) TRAIN:      manifest   →  acoustic model (dự đoán mel/duration/f0)  → best.pt
+                           vocoder riêng (mel → sóng)                 → vocoder.pt
+3) SUY LUẬN:   text  →  7 ID/âm tiết  →  mel dự đoán  →  vocoder  →  out.wav
+4) XUẤT:       best.pt  →  model.onnx  (chạy bằng ONNX Runtime, fp32/fp16/int8)
+```
+
+Điểm cần nhớ để hiểu code:
+
+- **Train dùng thời lượng thật** (teacher forcing); **suy luận tự dự đoán** thời lượng.
+- **Không sampling** — cùng đầu vào cho cùng đầu ra.
+- Token không phải tiếng Việt vẫn chạy được (fallback), không bao giờ crash.
+
+Chi tiết đầy đủ (tensor shape, công thức loss, số tham số): `docs/MODEL_FLOW.md`.
+
+## 4. Cài đặt
+
+Yêu cầu Python ≥ 3.11.
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
 pip install -e ".[dev,audio,train,onnx]"
 ```
 
-Trên Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -e ".[dev,audio,train,onnx]"
-```
-
-## Thử parser
+Bản tối thiểu (chỉ frontend/CLI, không cần torch):
 
 ```bash
+pip install -e .
+```
+
+## 5. Thử nhanh
+
+```bash
+# Xem một câu được tách thành âm tiết và 5 thành phần thế nào
 vifasttts parse "Hôm nay trời đẹp."
-vifasttts parse-syllable "ngoài"
-vifasttts check-profile "voan bình" --profile strict   # cảnh báo chính tả/ngữ âm
-python examples/g2p_demo.py   # phiên âm IPA Bắc/Nam, broad/narrow, 6 thanh
+vifasttts parse-syllable "quốc"
+vifasttts check-profile "voan bình" --profile strict   # cảnh báo chính tả/từ vay
+
+# So sánh phiên âm IPA Bắc/Nam (chỉ để phân tích)
+python examples/g2p_demo.py
 ```
 
-## Normalizer theo vùng miền
-
-`north`, `central`, `south` chỉ tác động tới cách đọc số và từ có khác biệt thật, ví dụ `nghìn/ngàn`, `linh/lẻ` và lựa chọn `tư/bốn` sau hàng chục. Parser âm tiết không thay đổi theo vùng.
-
-- Bắc: `nghìn`, `linh`, mặc định `tư` sau hàng chục.
-- Trung: `ngàn`, `lẻ`, mặc định `tư`.
-- Nam: `ngàn`, `lẻ`, mặc định `bốn`.
-
-Mọi văn bản được chuẩn hoá vị trí dấu thanh về dạng âm vị học chính: `hòa` thành `hoà`, `hóa` thành `hoá`, `thủy` thành `thuỷ`.
-
-Thứ tự phân loại token: exact override → acronym viết hoa chính xác → tên sản phẩm → số La Mã viết hoa chuẩn (≥2 ký tự) → âm tiết tiếng Việt → English fallback không phân biệt hoa thường → giữ nguyên.
-
-Ví dụ mới: `25/12/2023` → "ngày hai mươi lăm tháng mười hai năm hai nghìn không trăm hai mươi ba"; `14h30` → "mười bốn giờ ba mươi phút"; `2/3` → "hai phần ba"; `10-20%` → "mười đến hai mươi phần trăm"; `1.005.000` → "một triệu không trăm linh năm nghìn".
-
-## Kiểm tra dự án
+Kiểm chứng toàn bộ pipeline bằng test (tự tạo dữ liệu tí hon, train 2 bước, sinh WAV, xuất ONNX):
 
 ```bash
 pytest
-ruff check .
-mypy src/vifasttts
-python tools/parser_audit.py                       # audit parser: ma trận ~49k tổ hợp
-python tools/parser_audit.py --wordlist data.txt   # audit trên danh sách từ (1 từ/dòng)
-python tools/parser_audit.py --wordlist data.txt --profile strict   # cảnh báo chính tả/ngữ âm
-python tools/parser_audit.py --wordlist data.txt --write-lexicon data/lexicon.json
-python tools/frontend_benchmark.py --text "Chào bạn"                # so sánh biểu diễn char/slot/phoneme/rime
 ```
 
-## Tạo manifest từ WAV và metadata
+## 6. Các lệnh chính
+
+| Nhóm | Lệnh |
+| --- | --- |
+| Frontend | `vifasttts parse "<câu>"` · `parse-syllable <từ>` · `check-profile "<câu>" --profile strict` |
+| Dữ liệu | `build-manifest` · `validate-manifest` (kèm coverage) · `build-lexicon` · `cache-features` |
+| Huấn luyện | `vifasttts train ...` · `vifasttts train-vocoder ...` |
+| Sinh giọng | `vifasttts synthesize --text "..." --output out.wav [--dialect south] [--speed 0.9]` |
+| Xuất | `vifasttts export-onnx ... [--precision fp16\|int8]` |
+| Kiểm tra | `pytest` · `ruff check .` · `mypy src/vifasttts` · `tools/parser_audit.py` · `tools/frontend_benchmark.py` |
+
+<details>
+<summary>Ví dụ đầy đủ (bấm để mở)</summary>
 
 ```bash
-vifasttts build-manifest \
-  --metadata data/metadata.csv \
-  --wav-dir data/wavs \
-  --output data/manifest.jsonl
-
+# Dữ liệu: metadata.csv có dạng  id|text
+vifasttts build-manifest --metadata data/metadata.csv --wav-dir data/wavs --output data/manifest.jsonl
 vifasttts validate-manifest --manifest data/manifest.jsonl --wav-dir data/wavs
+
+# Huấn luyện
+vifasttts train --config configs/base_24k.yaml \
+  --train-manifest data/train.jsonl --val-manifest data/val.jsonl --output runs/base
+vifasttts train-vocoder --config configs/base_24k.yaml \
+  --manifest data/train.jsonl --output runs/vocoder
+
+# Sinh giọng + xuất ONNX
+vifasttts synthesize --config configs/base_24k.yaml \
+  --checkpoint runs/base/best.pt --vocoder-checkpoint runs/vocoder/last.pt \
+  --text "Xin chào, đây là hệ thống thử nghiệm." --output out.wav
+vifasttts export-onnx --config configs/base_24k.yaml \
+  --checkpoint runs/base/best.pt --output artifacts/model.onnx --precision fp16
 ```
 
-`validate-manifest` kiểm tra WAV tồn tại và in **coverage** (số âm tiết, fallback, phân bố tone/coda, thanh còn thiếu) để đối chiếu với `docs/DATA_PIPELINE.md` bước 10.
+</details>
 
-Sinh lexicon shape để siết dữ liệu bằng `profile` (xem `docs/FRONTEND.md`):
+## 7. Âm tiết tiếng Việt trong dự án (dễ hiểu)
 
-```bash
-vifasttts build-lexicon --manifest data/manifest.jsonl --output data/lexicon.json
-vifasttts check-profile "khoai lang" --profile corpus --lexicon data/lexicon.json
-```
+Mỗi âm tiết (một "tiếng") gồm 5 phần + dấu câu. Ví dụ `quốc`:
 
-Định dạng `metadata.csv`:
+| Phần | Trong `quốc` | Có bao nhiêu giá trị | Ví dụ khác |
+| --- | --- | --- | --- |
+| Âm đầu (onset) | `K` | 24 | `b`, `ch`, `ng`, `qu`... |
+| Âm đệm (medial) | `W` | 2 (không có / có) | `oa`, `uy`, `qu`... |
+| Âm chính (nucleus) | `Ô` | 15 | `a`, `ie`, `uo`, `oo`... |
+| Âm cuối (coda) | `C` | 11 | `ng`, `nh`, `i`, `u`... |
+| Thanh điệu | `SAC` (sắc) | 6 | ngang, huyền, hỏi, ngã, nặng |
+
+Cộng thêm **chấm câu** và **ranh giới từ/câu** → mỗi âm tiết là **7 con số** đưa vào model.
+Giải thích từ đầu cho người không chuyên: `docs/SYLLABLE_GUIDE.md`.
+
+## 8. Cấu trúc repo
 
 ```text
-sample_0001|Hôm nay trời đẹp.
-sample_0002|Tôi đang thử hệ thống mới.
+src/vifasttts/
+  frontend/   chuẩn hoá text, tách âm tiết, vocab, G2P (phân tích), lexicon/profile, segments
+  data/       manifest, features (mel/f0/vuv/energy/phonation), dataset, cache
+  models/     acoustic model, conformer, iSTFTNet vocoder, discriminator
+  train.py    vòng huấn luyện acoustic + vocoder
+  infer.py    text → WAV
+  export.py   ONNX + quantization
+configs/      base_24k.yaml (cấu hình mẫu)
+tools/        parser_audit.py, frontend_benchmark.py
+tests/        901 test: parser, normalizer, G2P, model, train/infer/export
+docs/         toàn bộ tài liệu (xem mục 10)
 ```
 
-## Huấn luyện
+## 9. Giới hạn hiện tại & việc còn lại
 
-```bash
-vifasttts train \
-  --config configs/base_24k.yaml \
-  --train-manifest data/train.jsonl \
-  --val-manifest data/val.jsonl \
-  --output runs/base \
-  --max-steps 200000
-```
+- **Alignment**: chưa có thời lượng thật → mặc định chia theo trọng số (placeholder). Cần MFA/aligner để chất lượng tốt hơn.
+- **Vocoder**: bản tham chiếu (GAN nhẹ), chưa phải cấu hình production.
+- **ONNX**: đã gồm model acoustic; **chưa gồm vocoder** (kỹ thuật iSTFT trong ONNX còn để ngỏ).
+- **OOV**: từ ngoài tiếng Việt đọc bằng fallback — muốn kiểm soát thì bật `resolve_oov=True` hoặc thêm override.
+- **Một checkpoint = một giọng, một phương ngữ** (đúng thiết kế; muốn đa giọng phải tách lớp riêng).
 
-Manifest có thể chứa trường `durations` (số frame mỗi âm tiết từ forced alignment). Nếu thiếu, duration được chia đều theo số frame — chỉ là placeholder, xem cảnh báo trong `docs/TRAINING.md`.
+Roadmap chi tiết có đánh dấu ✅/⬜: `docs/PROJECT_STATUS.md`.
 
-Vocoder tham chiếu (iSTFTNetLite + MPD-lite) tách riêng:
+## 10. Tài liệu — nên đọc gì trước?
 
-```bash
-vifasttts train-vocoder \
-  --config configs/base_24k.yaml \
-  --manifest data/train.jsonl \
-  --output runs/vocoder \
-  --max-steps 100000
-```
+| Nhóm | Tài liệu | Nội dung |
+| --- | --- | --- |
+| **Bắt đầu ở đây** | `docs/PROJECT_STATUS.md` | Trạng thái tổng, quyết định quan trọng, việc còn lại |
+| | `docs/MODEL_FLOW.md` | Luồng model chi tiết: data → train → inference → export |
+| | `docs/SYLLABLE_GUIDE.md` | Hướng dẫn tách âm tiết cho người không chuyên |
+| | `docs/GLOSSARY.md` | Thuật ngữ (âm đầu/đệm/chính/cuối, toàn ánh/song ánh...) |
+| **Frontend** | `docs/FRONTEND.md` | Parser, profile/lexicon, segments, G2P, OOV |
+| | `docs/NORMALIZER.md` | Số/ngày/giờ theo vùng miền, dấu thanh, i/y |
+| | `docs/STEM_NORMALIZER.md` | Toán/LaTeX, hoá học, đơn vị vật lý |
+| | `docs/G2P_VIETNAMESE.md` | Khảo sát sea-g2p, viG2P... và bảng IPA nội bộ |
+| **Model & dữ liệu** | `docs/ARCHITECTURE.md` | Sơ đồ as-built, quyết định thiết kế |
+| | `docs/DATA_PIPELINE.md` | 15 bước chuẩn bị dữ liệu |
+| | `docs/TRAINING.md` | Hướng dẫn train + cảnh báo alignment |
+| | `docs/DEPLOYMENT.md` | ONNX Runtime, quantize, nền tảng |
+| **Nghiên cứu** | `docs/SYLLABLE_SYSTEMS_RESEARCH.md` | So sánh mô hình tách/gộp âm tiết (quốc tế + Việt Nam) và audit biên |
+| | `docs/TTS_ARCHITECTURE_RESEARCH.md` | Khảo sát họ kiến trúc TTS + đề xuất tương lai |
+| **Thiết kế gốc** | `docs/DESIGN_V1_MIEN_BAC.md`, `docs/DESIGN_V2.md`, `docs/FULL_DESIGN.md` | Bản thiết kế ban đầu (tham khảo lịch sử) |
+| **Khác** | `docs/RUST_ROADMAP.md` | Kế hoạch port Rust (tối ưu triển khai) |
+| | `docs/LICENSES.md` | Giấy phép các thành phần tham chiếu |
 
-`synthesize` tự dùng trọng số `vocoder` trong checkpoint nếu có.
+## 11. Giấy phép
 
-Để train nhanh hơn ở epoch sau, tính trước feature vào cache:
-
-```bash
-vifasttts cache-features \
-  --manifest data/train.jsonl \
-  --config configs/base_24k.yaml \
-  --cache-dir cache/train
-```
-
-hoặc đặt `training.cache_features: true` trong config (dùng `<run>/feature_cache`).
-
-## Tổng hợp
-
-```bash
-vifasttts synthesize \
-  --config configs/base_24k.yaml \
-  --checkpoint runs/base/best.pt \
-  --text "Xin chào, đây là hệ thống thử nghiệm." \
-  --output out.wav
-```
-
-## Export ONNX
-
-```bash
-vifasttts export-onnx \
-  --config configs/base_24k.yaml \
-  --checkpoint runs/base/best.pt \
-  --output artifacts/vifasttts.onnx
-```
-
-Thêm `--precision fp16` hoặc `--precision int8` để xuất bản lượng tử hoá (xem `docs/DEPLOYMENT.md`).
-
-## Hướng Rust sau này
-
-Phiên bản đầu dùng Python để dễ nghiên cứu, kiểm thử và thay đổi kiến trúc. Sau khi quy tắc ổn định, các phần xử lý thuần có thể viết thêm bằng Rust:
-
-- Unicode normalization.
-- Text lexer và normalizer.
-- Syllable parser và OOV resolver.
-- Vocabulary mapping.
-- Manifest validation.
-- ONNX Runtime inference.
-- WAV I/O và CLI.
-
-PyO3 hoặc C ABI có thể được dùng để gọi Rust từ Python. Việc viết lại bằng Rust là tối ưu triển khai, không thay đổi định dạng parser hoặc checkpoint.
-
-## Tài liệu
-
-- `docs/ARCHITECTURE.md` — kiến trúc as-built và lộ trình.
-- `docs/MODEL_FLOW.md` — **luồng model chi tiết**: data → train acoustic → train vocoder → inference → export (kèm tensor shape, loss, số tham số, khác biệt train/infer).
-- `docs/PROJECT_STATUS.md` — trạng thái tổng hợp, nhật ký quyết định, kết quả audit, việc còn lại.
-- `docs/GLOSSARY.md` — thuật ngữ: cấu trúc âm tiết (nguồn gốc, âm đầu–đệm–chính–cuối), dạng âm vị học, ngữ âm; quy ước đặt tên.
-- `docs/SYLLABLE_GUIDE.md` — hướng dẫn tách âm tiết cho người không chuyên (5 bước, ví dụ, bài tập, tài liệu tham khảo).
-- `docs/FRONTEND.md` — parser, G2P, OOV.
-- `docs/DATA_PIPELINE.md`
-- `docs/TRAINING.md`
-- `docs/DEPLOYMENT.md`
-- `docs/RUST_ROADMAP.md`
-- `docs/G2P_VIETNAMESE.md` — sea-g2p, viG2P và các hệ G2P tiếng Việt; cách tích hợp.
-- `docs/SYLLABLE_SYSTEMS_RESEARCH.md` — so sánh mô hình tách/gộp âm tiết (lý thuyết quốc tế + nghiên cứu Việt Nam) và audit biên.
-- `docs/TTS_ARCHITECTURE_RESEARCH.md` — khảo sát toàn bộ họ kiến trúc TTS và đề xuất v2.1.
-- `docs/FULL_DESIGN.md` — tách frontend dùng chung / checkpoint riêng, âm tiết, dấu, dialect, English fallback, neural.
-- `docs/NORMALIZER.md` — số theo vùng miền, dấu canonical, fallback tiếng Anh, thứ tự token.
-- `docs/STEM_NORMALIZER.md` — Toán/LaTeX, Hoá học, đơn vị vật lý.
-- `docs/DESIGN_V1_MIEN_BAC.md` — thiết kế chi tiết v1 miền Bắc (tài liệu gốc).
-- `docs/DESIGN_V2.md` — thiết kế hệ thống v2 cải tiến (tài liệu gốc).
-- `docs/LICENSES.md` — ghi chú giấy phép các thành phần tham chiếu.
-
-## Giấy phép
-
-MIT. Dữ liệu giọng nói và checkpoint do người dùng tạo có thể có giấy phép riêng.
+MIT cho code trong repo. Dữ liệu giọng nói, lexicon và checkpoint do người dùng tạo có
+giấy phép riêng; các công cụ tham chiếu (sea-g2p, MFA, vPhon...) giữ giấy phép gốc —
+chi tiết ở `docs/LICENSES.md`.

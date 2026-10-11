@@ -1,5 +1,9 @@
 # ViFastTts Full Design
 
+> **Trạng thái:** tài liệu này giữ tóm tắt thiết kế gốc. Trạng thái as-built hiện tại:
+> `docs/ARCHITECTURE.md` và luồng chi tiết `docs/MODEL_FLOW.md`; tổng hợp + roadmap:
+> `docs/PROJECT_STATUS.md`.
+
 ## Phạm vi
 
 ViFastTts tách frontend tiếng Việt dùng chung khỏi checkpoint âm thanh. Parser không nhận phương ngữ. Normalizer nhận `north`, `central`, `south` chỉ để chọn cách đọc có khác biệt thực tế. Mỗi checkpoint chỉ chứa một người nói và một phương ngữ, nên không có dialect ID, speaker ID hoặc style ID trong neural input.
@@ -33,10 +37,10 @@ Fallback là từ điển xác định cho các từ công nghệ phổ biến, 
 
 - Component embeddings cho từng trường âm tiết.
 - Context encoder ở cấp âm tiết.
-- Duration, F0, VUV và energy predictors.
+- Duration, F0, VUV và energy predictors; tùy chọn thêm 3 kênh phonation (HNR/tilt/glottalization).
 - Acoustic decoder sinh mel.
-- iSTFT-style vocoder sinh waveform 24 kHz.
-- ONNX là định dạng triển khai mục tiêu.
+- iSTFT-style vocoder sinh waveform 24 kHz; đã có vòng huấn luyện GAN tham chiếu (`vifasttts train-vocoder`).
+- ONNX là định dạng triển khai mục tiêu (fp32/fp16/int8).
 
 ## Rust sau này
 

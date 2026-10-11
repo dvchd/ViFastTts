@@ -297,6 +297,8 @@ MFA (G2P + acoustic Việt, CC BY 4.0)
 | thanh ngang | ˧ | ˧ | ˦ |
 
 - Nguyên âm: `a ă ɤ̆ ɛ e i ɔ o ɤ u ɯ`; vần đôi `iə uə ɯə` (Kirby 2011); thêm `OO = ɔː` (o dài trong từ vay: xoong, moóc) và tách `A` (a dài, ai/ao) khỏi `Ă` (ă ngắn, ay/au) theo Help:IPA/Vietnamese ("ai" [aːj] vs "ay" [aj]).
+- Nam **gộp `OO` → `ɔ`** (`xoong` ≈ `xong` với người Nam); Trung xấp xỉ bảng nguyên âm Bắc.
+- Narrow Bắc: `ưu/ươu` ngả `[iw]/[iəw]` (Thompson 1965); broad giữ âm vị /ɯw/ɯəw/.
 - Narrow thêm: `t̪ t̪ʰ`, `p̚ t̚ k̚`, `k̟̚`, `ŋ̟`.
 - **Quy ước số thanh phải chuẩn hoá khi đối chiếu**: bảng nội bộ dùng thứ tự viG2P (1 ngang, 2 huyền, 3 ngã, 4 hỏi, 5 sắc, 6 nặng); VNI/Telex dùng 1 sắc, 2 huyền, 3 hỏi, 4 ngã, 5 nặng; sea-g2p chỉ dùng số cho huyền/hỏi/ngã/nặng (2/4/5/6) và phân biệt ngang/sắc bằng chất lượng nguyên âm. Vì vậy so khớp liên hệ thống cần ánh xạ quy ước trước, không so ký tự thô.
 - Trung: chưa có bảng Huế đủ tin cậy; muốn chốt cần dữ liệu WikiPron `hue` hoặc MFA Huế (`docs/G2P_VIETNAMESE.md` mục 4.6).

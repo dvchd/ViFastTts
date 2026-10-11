@@ -323,7 +323,7 @@ vifasttts export-onnx --config configs/base_24k.yaml --checkpoint runs/base/best
 | `tests/test_phonation.py` | HNR/tilt/glottalization đúng dải; kênh đi vào dataset |
 | `tests/test_losses*` (qua smoke) | công thức loss/trọng số không NaN, backward chạy |
 
-Chạy tất cả: `pytest` (900 test). Ma trận parser: `python tools/parser_audit.py`.
+Chạy tất cả: `pytest` (901 test). Ma trận parser: `python tools/parser_audit.py`.
 
 ## 13. Tài liệu liên quan
 
