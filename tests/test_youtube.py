@@ -1,5 +1,6 @@
 import csv
 import json
+import re
 import sys
 import textwrap
 from pathlib import Path
@@ -10,6 +11,7 @@ from typer.testing import CliRunner
 from vifasttts.cli import app
 from vifasttts.data.subtitles import load_subtitles
 from vifasttts.data.youtube import FetchOptions, fetch_dataset, read_wav_mono
+from vifasttts.frontend.syllable import safe_parse_syllable
 
 runner = CliRunner()
 
@@ -223,6 +225,52 @@ def test_fetch_dataset_retries_transient_error(tmp_path: Path, fake_ytdlp: Path,
     assert stats["clips"] == 2
 
 
+def test_overrides_tech_config_is_parseable():
+    payload = json.loads(
+        (Path(__file__).resolve().parents[1] / "configs" / "overrides_tech_vi.json")
+        .read_text(encoding="utf-8")
+    )
+    assert payload, "file overrides mẫu không được rỗng"
+    for token, reading in payload.items():
+        assert token.strip() and reading.strip()
+        for word in re.split(r"\s+", reading):
+            assert safe_parse_syllable(word) is not None, f"{word!r} trong {reading!r} ({token!r})"
+
+
+def test_fetch_dataset_reports_oov(tmp_path: Path, fake_ytdlp: Path, monkeypatch):
+    entry = [{"id": "vidOov", "title": "Có từ lạ", "duration": 6.0,
+              "url": "https://www.youtube.com/watch?v=vidOov"}]
+    sentence = "xin chào các bạn hôm nay zibble florp rất hay"
+    _set_fake_env(monkeypatch, entries=entry, subs={"vidOov": _json3([(0.5, 2.0, sentence)])})
+    options = _options(tmp_path, fake_ytdlp)
+    stats = fetch_dataset(options, log=lambda _: None)
+    assert stats["coverage"]["fallback"] == 2
+    tokens = dict(stats["oov_top"])
+    assert tokens == {"zibble": 1, "florp": 1}
+    report = json.loads((options.out / "oov_report.json").read_text(encoding="utf-8"))
+    assert {"token": "zibble", "count": 1} in report["tokens"]
+    card = (options.out / "dataset_card.md").read_text(encoding="utf-8")
+    assert "Từ lạ (OOV)" in card
+
+
+def test_fetch_dataset_overrides_reduce_oov(tmp_path: Path, fake_ytdlp: Path, monkeypatch):
+    entry = [{"id": "vidOov", "title": "Có từ lạ", "duration": 6.0,
+              "url": "https://www.youtube.com/watch?v=vidOov"}]
+    sentence = "xin chào các bạn hôm nay zibble florp rất hay"
+    _set_fake_env(monkeypatch, entries=entry, subs={"vidOov": _json3([(0.5, 2.0, sentence)])})
+    options = _options(tmp_path, fake_ytdlp,
+                       overrides={"zibble": "xíp bồ", "florp": "phờ lốp"},
+                       overrides_source="overrides.json")
+    stats = fetch_dataset(options, log=lambda _: None)
+    assert stats["coverage"]["fallback"] == 0
+    assert stats["oov_top"] == []
+    records = [json.loads(line) for line in (options.out / "clips.jsonl").read_text(
+        encoding="utf-8").splitlines()]
+    assert records[0]["text"] == "xin chào các bạn hôm nay xíp bồ phờ lốp rất hay"
+    card = (options.out / "dataset_card.md").read_text(encoding="utf-8")
+    assert "--overrides overrides.json" in card
+
+
 def test_fetch_dataset_demo_picks_short_video(tmp_path: Path, fake_ytdlp: Path, monkeypatch):
     entries = [
         {"id": "vidLong", "title": "Dài", "duration": 3600.0,
@@ -231,20 +279,59 @@ def test_fetch_dataset_demo_picks_short_video(tmp_path: Path, fake_ytdlp: Path, 
          "url": "https://www.youtube.com/watch?v=vidA"},
     ]
     _set_fake_env(monkeypatch, entries=entries)
-    options = _options(tmp_path, fake_ytdlp, demo=True)
+    options = _options(tmp_path, fake_ytdlp, demo=True, min_caption_density=0.0)
     stats = fetch_dataset(options, log=lambda _: None)
-    assert stats["videos_listed"] == 1
+    assert stats["videos_listed"] == 2  # demo đưa cả danh sách vào candidates
     records = [json.loads(line) for line in (options.out / "clips.jsonl").read_text(
         encoding="utf-8").splitlines()]
-    assert all(record["video"] == "vidA" for record in records)
+    assert records and all(record["video"] == "vidA" for record in records)
+
+
+def test_fetch_dataset_skips_sparse_captions(tmp_path: Path, fake_ytdlp: Path, monkeypatch):
+    entry = [{"id": "vidSparse", "title": "Nhiều nhạc", "duration": 300.0,
+              "url": "https://www.youtube.com/watch?v=vidSparse"}]
+    sparse = _json3([(0.5, 1.0, "chào bạn")])  # 8 ký tự / 300 giây = quá thưa
+    _set_fake_env(monkeypatch, entries=entry, subs={"vidSparse": sparse})
+    options = _options(tmp_path, fake_ytdlp)
+    stats = fetch_dataset(options, log=lambda _: None)
+    assert stats["videos_sparse_subs"] == 1
+    assert stats["videos_processed"] == 0
+    assert stats["clips"] == 0
+    assert not (options.out / "raw").exists()  # chưa tải audio vì bị lọc trước
+
+
+def test_demo_tries_candidates_until_good(tmp_path: Path, fake_ytdlp: Path, monkeypatch):
+    entries = [
+        {"id": "vidSparse", "title": "Ngắn nhưng nhiều nhạc", "duration": 10.0,
+         "url": "https://www.youtube.com/watch?v=vidSparse"},
+        {"id": "vidGood", "title": "Nói đều", "duration": 20.0,
+         "url": "https://www.youtube.com/watch?v=vidGood"},
+    ]
+    good = _json3([
+        (0.3, 0.8, "xin chào mọi người hôm nay"),
+        (1.2, 0.8, "chúng ta cùng học lập trình"),
+        (2.1, 0.8, "đây là ví dụ dễ hiểu"),
+        (3.0, 0.8, "cảm ơn các bạn đã xem"),
+    ])
+    _set_fake_env(monkeypatch, entries=entries,
+                  subs={"vidSparse": _json3([(0.5, 1.0, "chào")]), "vidGood": good})
+    options = _options(tmp_path, fake_ytdlp, demo=True)
+    stats = fetch_dataset(options, log=lambda _: None)
+    assert stats["videos_sparse_subs"] == 1
+    assert stats["videos_processed"] == 1
+    records = [json.loads(line) for line in (options.out / "clips.jsonl").read_text(
+        encoding="utf-8").splitlines()]
+    assert records and all(record["video"] == "vidGood" for record in records)
 
 
 def test_youtube_fetch_cli(tmp_path: Path, fake_ytdlp: Path, monkeypatch):
     _set_fake_env(monkeypatch)
     out = tmp_path / "cli-dataset"
+    overrides = tmp_path / "overrides.json"
+    overrides.write_text(json.dumps({"code": "cốt"}), encoding="utf-8")
     result = runner.invoke(app, [
         "youtube-fetch", "https://www.youtube.com/channel/UCtest/videos",
-        "--out", str(out), "--demo", "--sleep", "0",
+        "--out", str(out), "--demo", "--sleep", "0", "--overrides", str(overrides),
         "--ytdlp-bin", f'{sys.executable} "{fake_ytdlp}"', "--ffmpeg-bin", "ffmpeg-giả",
     ])
     assert result.exit_code == 0, result.stdout

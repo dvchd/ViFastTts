@@ -102,7 +102,7 @@ def youtube_fetch_cmd(
     channel: str = typer.Argument(..., help="URL kênh (/videos), playlist hoặc video YouTube của bạn"),
     out: str = typer.Option("data/youtube", help="Thư mục dataset đầu ra"),
     limit: int = typer.Option(0, help="Số video tối đa (0 = tất cả)"),
-    demo: bool = typer.Option(False, help="Chạy demo: chỉ 1 video ngắn (60–900 giây)"),
+    demo: bool = typer.Option(False, help="Chạy demo: thử lần lượt video ngắn nhất tới khi có clip"),
     langs: str = typer.Option("vi,vi-orig", help="Phụ đề ưu tiên, cách nhau dấu phẩy"),
     dialect: str = typer.Option("north", help="Cách đọc số/ngày: north, central, south"),
     min_duration: float = typer.Option(1.0, help="Độ dài clip tối thiểu (giây)"),
@@ -117,6 +117,8 @@ def youtube_fetch_cmd(
     dedupe: bool = typer.Option(True, "--dedupe/--no-dedupe", help="Lọc clip trùng chữ"),
     min_rms_db: float = typer.Option(-45.0, help="Bỏ clip im lặng dưới mức RMS này (dBFS)"),
     max_fallback_ratio: float = typer.Option(0.34, help="Bỏ clip có tỉ lệ fallback cao hơn"),
+    min_caption_density: float = typer.Option(2.0, help="Bỏ video có phụ đề thưa hơn (ký tự/giây)"),
+    overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc' cho từ lạ (OOV)"),
     license: str = typer.Option("CC BY 4.0", help="Giấy phép mở ghi vào dataset card"),
     sleep: float = typer.Option(1.0, help="Nghỉ giữa các request (giây)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Chỉ liệt kê video, không tải"),
@@ -134,6 +136,15 @@ def youtube_fetch_cmd(
 
     from vifasttts.data.youtube import FetchOptions, fetch_dataset
 
+    overrides_map: dict[str, str] = {}
+    if overrides:
+        payload = json.loads(Path(overrides).read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or not all(
+            isinstance(key, str) and isinstance(value, str) for key, value in payload.items()
+        ):
+            raise typer.BadParameter('File overrides phải là JSON dạng {"mặt chữ": "cách đọc"}')
+        overrides_map = payload
+
     fetch_dataset(FetchOptions(
         channel=channel, out=Path(out), limit=limit, demo=demo,
         langs=tuple(lang.strip() for lang in langs.split(",") if lang.strip()),
@@ -142,6 +153,8 @@ def youtube_fetch_cmd(
         min_video_duration=min_video_duration, max_video_duration=max_video_duration,
         title_filter=title_filter, keep_wav=keep_wav, dedupe=dedupe,
         min_rms_db=min_rms_db, max_fallback_ratio=max_fallback_ratio,
+        min_caption_density=min_caption_density, overrides=overrides_map,
+        overrides_source=overrides,
         license=license, sleep=sleep, dry_run=dry_run, refresh=refresh,
         ytdlp=shlex.split(ytdlp_bin) if ytdlp_bin else None, ffmpeg=ffmpeg_bin,
     ))

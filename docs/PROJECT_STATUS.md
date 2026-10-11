@@ -8,7 +8,7 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **958 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **1017 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối
@@ -165,10 +165,11 @@ python tools/parser_audit.py --wordlist words.txt   # audit từ điển (+ --pr
    tensor shape, loss, số tham số, khác biệt train/infer) và `docs/TRAINING_ESTIMATES.md`
    (ước lượng dữ liệu/thời gian/máy/chi phí + công thức tự hiệu chỉnh).
 11. ✅ **Dataset YouTube tự động** (`data/subtitles.py` + `data/youtube.py`, CLI
-   `youtube-fetch`): phụ đề json3 làm timing, cắt clip + QC (im lặng/trùng/fallback),
-   manifest/SRT/dataset card mở (CC BY 4.0), resume `.done.json`, test offline bằng
-   yt-dlp giả. ⬜ Căn word-level (whisper/MFA) để có `durations` cấp âm tiết;
-   ⬜ publish Hugging Face; ⬜ VAD/speaker tách nhạc – nhiều người nói.
+    `youtube-fetch`): phụ đề json3 làm timing, cắt clip + QC (im lặng/trùng/fallback/thưa),
+    báo cáo OOV + `--overrides` (mẫu `configs/overrides_tech_vi.json`), manifest/SRT/dataset
+    card mở (CC BY 4.0), resume `.done.json`, test offline bằng yt-dlp giả. ⬜ Căn word-level
+    (whisper/MFA) để có `durations` cấp âm tiết; ⬜ publish Hugging Face; ⬜ VAD/speaker
+    tách nhạc – nhiều người nói.
 
 ## 7. Commit tiêu biểu trong phiên
 

@@ -30,7 +30,7 @@ vị trí, và không có "từ lạ" với tiếng Việt chuẩn.
 
 | Hạng mục | Kết quả |
 | --- | --- |
-| Bộ test | **958 test pass**; `ruff` + `mypy` sạch |
+| Bộ test | **1017 test pass**; `ruff` + `mypy` sạch |
 | Parser âm tiết | Vét cạn **49.166 tổ hợp = 0 lỗi**; 39K từ thật: 6.617/6.633 parse OK |
 | Kho âm tiết | 24 âm đầu · 2 âm đệm · 15 âm chính · 11 âm cuối · 6 thanh → **264 vần**, **28.800 âm tiết trừu tượng** |
 | Model | Acoustic **16,4 triệu** tham số; vocoder **3,5 triệu** tham số |
@@ -39,7 +39,7 @@ vị trí, và không có "từ lạ" với tiếng Việt chuẩn.
 | Dịch vụ | `vifasttts serve` (HTTP stdlib: `POST /synthesize` → WAV) · `synthesize-batch` (file → nhiều WAV) · streaming qua `iter_synthesize` |
 | Xuất ONNX | fp32 / fp16 / int8, batch và độ dài **động** (đã kiểm bằng onnxruntime) |
 | Huấn luyện | Train acoustic + train vocoder (GAN tham chiếu) + cache feature |
-| Dữ liệu YouTube | `vifasttts youtube-fetch`: tải audio + phụ đề kênh của bạn → clip 24 kHz mono + manifest + SRT mở + dataset card (CC BY 4.0) |
+| Dữ liệu YouTube | `vifasttts youtube-fetch`: tải audio + phụ đề kênh của bạn → clip 24 kHz mono + manifest + SRT mở + dataset card (CC BY 4.0), báo cáo từ lạ (OOV) + `--overrides` |
 
 ⚠️ **Chưa có sẵn trọng số huấn luyện** trong repo. Muốn có giọng nói thật, cần audio + transcript
 và (khuyến nghị) alignment thật bằng MFA — xem `docs/TRAINING.md`.
@@ -184,9 +184,9 @@ src/vifasttts/
   train.py    vòng huấn luyện acoustic + vocoder
   infer.py    text → WAV (PyTorch)
   export.py   ONNX (acoustic + vocoder) + quantization
-configs/      base_24k.yaml + small_24k.yaml + large_24k.yaml (theo lượng dữ liệu)
+configs/      base_24k.yaml + small_24k.yaml + large_24k.yaml + overrides_tech_vi.json (từ lạ cho youtube-fetch)
 tools/        parser_audit.py, frontend_benchmark.py
-tests/        958 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server, youtube
+tests/        1017 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server, youtube
 docs/         toàn bộ tài liệu (xem mục 10)
 ```
 

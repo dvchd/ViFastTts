@@ -66,9 +66,17 @@ Chi tiết làm sạch:
 - **Gộp câu**: khoảng nghỉ ≤ `--max-gap` (mặc định 0,35 s) thì gộp; dừng gộp khi câu trước
   đã hết câu (`. ! ? …`) và nghỉ đủ lớn — tránh dính hai câu vào một clip.
 - **Lọc**: dưới `--min-duration` (1 s), im lặng dưới `--min-rms-db` (-45 dBFS), trùng chữ
-  (`--dedupe`), fallback > `--max-fallback-ratio` (0,34 — chủ yếu là câu tiếng Anh/typography lạ).
+  (`--dedupe`), fallback > `--max-fallback-ratio` (0,34 — chủ yếu là câu tiếng Anh/typography lạ),
+  và **video phụ đề quá thưa** < `--min-caption-density` (2 ký tự/s — video nhiều nhạc/ít lời;
+  phụ đề nói thật thường 11–16 ký tự/s).
 - **Text** trong `metadata.csv` đã chuẩn hoá số/ngày/giờ theo vùng (`--dialect`), đúng dạng
   "đọc lên" để train; SRT giữ dạng chữ người đọc.
+- **Từ lạ (OOV)**: cuối mỗi lần chạy in top từ lạ + ghi `oov_report.json`; điền cách đọc
+  vào file JSON rồi chạy lại với `--overrides` (mẫu có sẵn: `configs/overrides_tech_vi.json`
+  — `code→cốt`, `copy→cô pi`, `ninja→nin da`...). Một số từ công nghệ phổ biến
+  (`code`, `build`, `copy`, `paste`, `folder`, `github`, `system`, `SDK`, `UI`...) đã nằm
+  trong bảng chuẩn của frontend nên dùng được cho cả lúc suy luận; clip quá nhiều từ lạ
+  vẫn bị lọc bằng `--max-fallback-ratio`.
 - **Lỗi tạm thời** (HTTP 429/5xx, timeout) được thử lại 3 lần với backoff 6 s/12 s rồi mới
   bỏ qua video; chạy lại lệnh sẽ tiếp tục từ chỗ dừng (`.done.json`).
 
@@ -79,7 +87,7 @@ Chi tiết làm sạch:
 | `<channel>` | — | URL kênh (`/videos`), playlist hoặc 1 video |
 | `--out` | `data/youtube` | Thư mục dataset |
 | `--limit` | 0 (tất cả) | Số video tối đa |
-| `--demo` | tắt | Chỉ 1 video ngắn 60–900 s |
+| `--demo` | tắt | Thử lần lượt video ngắn nhất (tối đa 5) tới khi có ít nhất 1 clip |
 | `--langs` | `vi,vi-orig` | Phụ đề ưu tiên, cách nhau dấu phẩy |
 | `--dialect` | `north` | Cách đọc số/ngày: north/central/south |
 | `--min-duration` / `--max-duration` | 1 / 20 giây | Độ dài clip |
@@ -90,6 +98,8 @@ Chi tiết làm sạch:
 | `--dedupe/--no-dedupe` | lọc | Lọc clip trùng chữ |
 | `--min-rms-db` | -45 | Bỏ clip im lặng |
 | `--max-fallback-ratio` | 0,34 | Bỏ clip quá nhiều token lạ |
+| `--min-caption-density` | 2 ký tự/s | Bỏ video phụ đề quá thưa (nhiều nhạc/ít lời) |
+| `--overrides` | — | File JSON `{"mặt chữ": "cách đọc"}` cho từ lạ (OOV) |
 | `--license` | `CC BY 4.0` | Giấy phép ghi vào dataset card (ví dụ `CC0 1.0`) |
 | `--sleep` | 1,0 s | Nghỉ giữa các request |
 | `--dry-run` / `--refresh` | tắt | Xem trước không tải / bỏ cache danh sách video |
@@ -105,7 +115,8 @@ data/codelung/
   metadata.csv                  id|text  (định dạng cho build-manifest)
   manifest.jsonl                text + âm tiết đã parse (đưa thẳng vào train)
   clips.jsonl                   bản ghi chi tiết từng clip (start/end/rms/fallback)
-  stats.json                    thống kê + coverage
+  stats.json                    thống kê + coverage + top OOV
+  oov_report.json               từ lạ cần điền vào overrides
   dataset_card.md               nguồn, giấy phép, cách tái tạo, thống kê
   LICENSE-DATASET.txt           giấy phép dữ liệu
   .done.json / .videos.json     trạng thái resume + danh sách video
@@ -130,6 +141,11 @@ vifasttts build-lexicon --manifest data/codelung/manifest.jsonl --output data/co
 # tính trước feature rồi mới train
 vifasttts cache-features --manifest data/codelung/manifest.jsonl \
   --config configs/base_24k.yaml --cache-dir cache/codelung
+
+# thấy oov_report.json có nhiều từ lạ thì điền cách đọc rồi chạy lại (nhanh, dùng lại raw/ + subs/)
+# ví dụ overrides: {"code": "cốt", "copy": "cô pi"} — mẫu: configs/overrides_tech_vi.json
+vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/codelung \
+  --overrides configs/overrides_tech_vi.json --refresh
 ```
 
 ## 9. Giới hạn (đọc trước khi train)
@@ -142,6 +158,8 @@ vifasttts cache-features --manifest data/codelung/manifest.jsonl \
 - Video nhiều **nhạc/tiếng động** hoặc **nhiều người nói** không được tách tự động — có thể
   lọc bằng `--title-filter` hoặc cắt thủ công.
 - Chia **train/val theo video nguồn** (cột `video` trong `clips.jsonl`) để tránh rò rỉ.
+- Video rất dài sẽ nạp cả WAV vào RAM (~5,8 MB/phút, ≈ 350 MB/giờ ở 24 kHz float32) —
+  dùng `--max-video-duration` nếu máy ít RAM.
 
 ## 10. Roadmap
 

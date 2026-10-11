@@ -27,8 +27,9 @@ import subprocess
 import sys
 import time
 import wave
+from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -38,7 +39,8 @@ import numpy as np
 from vifasttts import __version__
 from vifasttts.data.manifest import build_manifest, coverage_report, validate_manifest
 from vifasttts.data.subtitles import Cue, format_srt, load_subtitles, merge_cues
-from vifasttts.frontend.normalizer import normalize_text
+from vifasttts.frontend.dialect import Dialect
+from vifasttts.frontend.normalizer import NormalizerOptions, normalize_text
 from vifasttts.frontend.pipeline import parse_text
 from vifasttts.runtime.postprocess import fade
 from vifasttts.types import ParseStatus
@@ -77,10 +79,14 @@ class FetchOptions:
     dedupe: bool = True
     min_rms_db: float = -45.0
     max_fallback_ratio: float = 0.34
+    min_caption_density: float = 2.0  # ký tự/giây tối thiểu (video nhiều nhạc → bỏ)
+    overrides: dict[str, str] = field(default_factory=dict)  # "mặt chữ" → cách đọc
+    overrides_source: str | None = None  # đường dẫn file overrides (ghi vào dataset card)
     sample_rate: int = 24000
     license: str = "CC BY 4.0"
     sleep: float = 1.0
     retry_delay: float = 6.0  # giây × lần thử (nội bộ; test đặt 0 để chạy nhanh)
+    demo_candidates: int = 5  # demo thử lần lượt bao nhiêu video ngắn nhất
     dry_run: bool = False
     refresh: bool = False
     ytdlp: list[str] | None = None
@@ -195,8 +201,9 @@ def list_videos(options: FetchOptions, ytdlp: list[str], *, log: LogFn = print) 
         })
 
     if options.demo:
-        short = [v for v in picked if 60.0 <= v["duration"] <= 900.0]
-        picked = (short or picked)[:1]
+        # Demo: thử lần lượt các video ngắn nhất cho tới khi có ít nhất 1 clip.
+        picked = sorted(picked, key=lambda video: video["duration"] or 1e18)
+        picked = picked[: max(1, options.demo_candidates)]
     elif options.limit > 0:
         picked = picked[: options.limit]
     return picked
@@ -299,13 +306,13 @@ def _normalized_key(text: str) -> str:
     return re.sub(r"\s+", " ", lowered).strip()
 
 
-def _fallback_ratio(text: str) -> float:
-    """Tỉ lệ âm tiết không parse được (fallback) của một câu đã chuẩn hoá."""
-    items = parse_text(text)
+def _fallback_items(text: str, options: NormalizerOptions) -> tuple[float, list[str]]:
+    """Tỉ lệ fallback + danh sách token lạ (OOV) của một câu đã chuẩn hoá."""
+    items = parse_text(text, options=options)
     if not items:
-        return 1.0
-    fallback = sum(1 for item in items if item.status is ParseStatus.FALLBACK_REQUIRED)
-    return fallback / len(items)
+        return 1.0, []
+    fallback = [item.raw for item in items if item.status is ParseStatus.FALLBACK_REQUIRED]
+    return len(fallback) / len(items), fallback
 
 
 def cut_clips(
@@ -314,8 +321,10 @@ def cut_clips(
     samples: np.ndarray,
     sample_rate: int,
     options: FetchOptions,
+    normalizer_options: NormalizerOptions,
     seen: set[str],
     stats: dict[str, int],
+    oov_counter: Counter[str],
     *,
     log: LogFn = print,
 ) -> list[dict[str, Any]]:
@@ -344,7 +353,7 @@ def cut_clips(
         if rms_db < options.min_rms_db:
             stats["skipped_silence"] += 1
             continue
-        text = re.sub(r"\s+", " ", normalize_text(cue.text, dialect=options.dialect)).strip()
+        text = re.sub(r"\s+", " ", normalize_text(cue.text, options=normalizer_options)).strip()
         if not text:
             stats["skipped_short"] += 1
             continue
@@ -352,10 +361,12 @@ def cut_clips(
         if options.dedupe and key in seen:
             stats["skipped_duplicate"] += 1
             continue
-        ratio = _fallback_ratio(text)
+        ratio, oov_tokens = _fallback_items(text, normalizer_options)
         if ratio > options.max_fallback_ratio:
             stats["skipped_fallback"] += 1
             continue
+        for token in oov_tokens:
+            oov_counter[token] += 1
         clip_id = f"{video['id']}_{index:04d}"
         clip_path = audio_dir / f"{clip_id}.wav"
         write_wav_mono(clip_path, fade(segment.astype(np.float32), sample_rate), sample_rate)
@@ -407,6 +418,8 @@ def _command_hint(options: FetchOptions) -> str:
         parts.append("--demo")
     if options.limit:
         parts.append(f"--limit {options.limit}")
+    if options.overrides_source:
+        parts.append(f"--overrides {options.overrides_source}")
     parts.append(f'--license "{options.license}"')
     return " ".join(parts)
 
@@ -421,6 +434,10 @@ def write_dataset_card(
     license_link = _LICENSE_LINKS.get(options.license.strip().lower(), "")
     license_line = f"{options.license} — {license_link}" if license_link else options.license
     coverage = stats.get("coverage", {})
+    oov_lines: list[str] = []
+    if stats.get("oov_top"):
+        preview = ", ".join(f"`{token}`×{count}" for token, count in stats["oov_top"][:7])
+        oov_lines = [f"- Từ lạ (OOV) nhiều nhất: {preview} — điền vào overrides rồi chạy lại", ""]
     lines = [
         f"# Dataset: {options.channel}",
         "",
@@ -437,11 +454,15 @@ def write_dataset_card(
             f"{total_seconds / max(1, len(records)):.2f} giây/clip"
         ),
         f"- Âm tiết: {coverage.get('syllables', 0)} · fallback: {coverage.get('fallback', 0)}",
-        f"- Video không có phụ đề: {stats.get('videos_no_subs', 0)} · lỗi: {stats.get('videos_error', 0)}",
+        (
+            f"- Video không có phụ đề: {stats.get('videos_no_subs', 0)} · phụ đề quá thưa: "
+            f"{stats.get('videos_sparse_subs', 0)} · lỗi: {stats.get('videos_error', 0)}"
+        ),
         (
             f"- Đã bỏ: {stats.get('skipped_short', 0)} ngắn · {stats.get('skipped_silence', 0)} im lặng · "
             f"{stats.get('skipped_duplicate', 0)} trùng · {stats.get('skipped_fallback', 0)} fallback cao"
         ),
+        *oov_lines,
         "",
         "## Video nguồn",
         "",
@@ -507,10 +528,19 @@ def fetch_dataset(options: FetchOptions, *, log: LogFn = print) -> dict[str, Any
     options.out.mkdir(parents=True, exist_ok=True)
     ytdlp = options.ytdlp if options.ytdlp is not None else find_ytdlp()
     ffmpeg = options.ffmpeg if options.ffmpeg is not None else find_ffmpeg()
+    # Override "mặt chữ → cách đọc": khớp chính xác và không phân biệt hoa thường.
+    normalizer_options = NormalizerOptions(
+        dialect=Dialect(options.dialect),
+        exact_overrides=dict(options.overrides),
+        english_overrides={key.lower(): value for key, value in options.overrides.items()},
+    )
+    oov_counter: Counter[str] = Counter()
     log(f"yt-dlp: {' '.join(ytdlp)}")
     log(f"ffmpeg: {ffmpeg or 'KHÔNG CÓ (cài imageio-ffmpeg hoặc brew install ffmpeg)'}")
 
     videos = list_videos(options, ytdlp, log=log)
+    candidates = sorted(videos, key=lambda v: v["duration"] or 1e18)[: max(1, options.demo_candidates)] \
+        if options.demo else videos
     stats: dict[str, Any] = {
         "channel": options.channel,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -519,6 +549,7 @@ def fetch_dataset(options: FetchOptions, *, log: LogFn = print) -> dict[str, Any
         "videos_processed": 0,
         "videos_skipped_done": 0,
         "videos_no_subs": 0,
+        "videos_sparse_subs": 0,
         "videos_error": 0,
         "clips": 0,
         "skipped_short": 0,
@@ -527,7 +558,7 @@ def fetch_dataset(options: FetchOptions, *, log: LogFn = print) -> dict[str, Any
         "skipped_fallback": 0,
     }
     log(f"Danh sách: {len(videos)} video")
-    for video in videos:
+    for video in candidates:
         log(f"  - {video['id']} ({video['duration']:.0f}s) {video['title'][:70]}")
     if options.dry_run:
         log("--dry-run: chỉ liệt kê, không tải.")
@@ -548,17 +579,23 @@ def fetch_dataset(options: FetchOptions, *, log: LogFn = print) -> dict[str, Any
     seen = {_normalized_key(str(record.get("text", ""))) for record in records}
     stats["clips"] = len(records)  # gồm clip có sẵn từ lần chạy trước (resume)
 
-    for order, video in enumerate(videos, 1):
+    for order, video in enumerate(candidates, 1):
         if video["id"] in done_ids:
             stats["videos_skipped_done"] += 1
-            log(f"[{order}/{len(videos)}] {video['id']}: đã có, bỏ qua")
+            log(f"[{order}/{len(candidates)}] {video['id']}: đã có, bỏ qua")
             continue
-        log(f"[{order}/{len(videos)}] {video['id']}: {video['title'][:70]}")
+        log(f"[{order}/{len(candidates)}] {video['id']}: {video['title'][:70]}")
         try:
             cues = download_subtitles(video, options, ytdlp, log=log)
             if not cues:
                 stats["videos_no_subs"] += 1
                 log("    không có phụ đề (cần phụ đề để cắt đúng câu) → bỏ qua")
+                continue
+            duration = float(video["duration"] or (cues[-1].end if cues else 1.0))
+            density = sum(len(cue.text) for cue in cues) / max(1.0, duration)
+            if density < options.min_caption_density:
+                stats["videos_sparse_subs"] += 1
+                log(f"    phụ đề quá thưa ({density:.1f} ký tự/s — video nhiều nhạc/ít lời) → bỏ qua")
                 continue
             audio_path = download_audio(video, options, ytdlp, ffmpeg, log=log)
             samples, sample_rate = read_wav_mono(audio_path)
@@ -567,7 +604,8 @@ def fetch_dataset(options: FetchOptions, *, log: LogFn = print) -> dict[str, Any
             # Chạy lại video này thì thay bản ghi cũ (idempotent).
             records = [record for record in records if record.get("video") != video["id"]]
             video_records = cut_clips(
-                video, cues, samples, sample_rate, options, seen, stats, log=log,
+                video, cues, samples, sample_rate, options, normalizer_options,
+                seen, stats, oov_counter, log=log,
             )
             records.extend(video_records)
             stats["videos_processed"] += 1
@@ -577,6 +615,9 @@ def fetch_dataset(options: FetchOptions, *, log: LogFn = print) -> dict[str, Any
             )
             if not options.keep_wav:
                 audio_path.unlink(missing_ok=True)
+            if options.demo and video_records:
+                log("    demo: đã có clip hợp lệ → dừng (dùng lệnh không --demo để chạy cả kênh)")
+                break
         except KeyboardInterrupt:
             raise
         except Exception as error:  # noqa: BLE001 - một video lỗi không làm chết cả kênh
@@ -588,13 +629,20 @@ def fetch_dataset(options: FetchOptions, *, log: LogFn = print) -> dict[str, Any
         "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records),
         encoding="utf-8",
     )
+    oov_top = oov_counter.most_common(30)
+    stats["oov_top"] = oov_top
+    oov_path = options.out / "oov_report.json"
+    oov_path.write_text(json.dumps({
+        "note": "Điền cách đọc cho các từ này vào overrides JSON rồi chạy lại với --overrides.",
+        "tokens": [{"token": token, "count": count} for token, count in oov_top],
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
     manifest_path = options.out / "manifest.jsonl"
     build_manifest(metadata_path, options.out / "audio", manifest_path)
     validation = validate_manifest(manifest_path, options.out / "audio")
     coverage = coverage_report(manifest_path)
     stats["coverage"] = coverage
     stats["manifest_issues"] = validation["issues"]
-    write_dataset_card(options, videos, records, stats)
+    write_dataset_card(options, candidates, records, stats)
     _write_stats(options, stats)
 
     total_seconds = sum(float(record["duration"]) for record in records)
@@ -602,12 +650,17 @@ def fetch_dataset(options: FetchOptions, *, log: LogFn = print) -> dict[str, Any
     log("")
     log("=== Tổng kết ===")
     log(f"Video: {stats['videos_processed']} xử lý · {stats['videos_skipped_done']} đã có · "
-        f"{stats['videos_no_subs']} không phụ đề · {stats['videos_error']} lỗi")
+        f"{stats['videos_no_subs']} không phụ đề · {stats['videos_sparse_subs']} phụ đề thưa · "
+        f"{stats['videos_error']} lỗi")
     log(f"Clip: {stats['clips']} · {total_seconds / 3600.0:.2f} giờ · TB {average:.2f}s")
     log(f"Bỏ: {stats['skipped_short']} ngắn · {stats['skipped_silence']} im lặng · "
         f"{stats['skipped_duplicate']} trùng · {stats['skipped_fallback']} fallback cao")
     log(f"Manifest: {manifest_path} ({validation['total']} dòng, "
         f"{len(validation['issues'])} vấn đề)")
     log(f"Coverage: {coverage['syllables']} âm tiết, {coverage['fallback']} fallback")
+    if oov_top:
+        preview = ", ".join(f"{token}×{count}" for token, count in oov_top[:10])
+        log(f"Từ lạ (OOV) nhiều nhất: {preview}")
+        log(f"  → điền cách đọc vào overrides rồi chạy lại với --overrides (xem {oov_path.name})")
     log(f"Dataset card + license: {options.out / 'dataset_card.md'}")
     return stats
