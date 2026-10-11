@@ -26,7 +26,7 @@ ONSET + MEDIAL + NUCLEUS + CODA + TONE
 - `uy` là medial W + nucleus I, **không** phải U + coda J: `khuy` (KH/W/I) khác `khui` (KH/NONE/U/J); dấu thanh rơi trên y (`thuỷ`, `tuỳ`).
 - `ui` là nucleus U + coda J; dấu thanh rơi trên u (`tủi`, `củi`, `chùi`).
 - `uya` (khuya) dùng medial W + nucleus IÊ; `uyê` (nguyễn) dùng W + IÊ + coda.
-- `oo` trong từ vay đã Việt hoá (xoong, boong, moóc) dùng nucleus O; dấu đặt trên chữ o thứ hai.
+- `oo` trong từ vay đã Việt hoá (xoong, boong, moóc) dùng **nucleus `OO` riêng** (o dài ɔː), phân biệt với `o` thường; dấu đặt trên chữ o thứ hai.
 - `iê/yê/ia/ya`, `uô/ua`, `ươ/ưa` dùng nucleus trừu tượng chung.
 
 ## Lưu ý
@@ -40,9 +40,9 @@ Parser tham chiếu trong repository bao phủ các quy tắc lõi và bộ test
 - `pytest tests/test_parser_matrix.py tests/test_parser_edges.py` — cùng tính chất ở dạng
   test thường trực, kèm corpus từ thật/khó, chữ ngoài Latin và edge Unicode.
 - Tokenizer giữ cả chữ ngoài Latin (CJK, Cyrillic, Thái...) làm token fallback thay vì nuốt mất.
-- Các "alias" đã cố ý: `oo` luôn là nucleus O (từ vay) — narrow IPA ghi `ɔː` vì đây là một
-  nguyên âm dài, **không phải nguyên âm đôi** (`xoong` nghe gần `xong`); `uy` luôn là W + I;
-  `giê` luôn là GI + IÊ (`giếng` cùng vần `tiếng`).
+- Các "alias" đã cố ý: `uy` luôn là W + I (`khuy` ≠ `khui`); `giê` luôn là GI + IÊ
+  (`giếng` cùng vần `tiếng`). `oo` **không còn** là alias: đã tách thành nucleus `OO` riêng (ɔː)
+  vì người bản ngữ phân biệt `xoong` ≠ `xong`; đây là một nguyên âm dài, không phải nguyên âm đôi.
 
 ## Lớp G2P tùy chọn (`frontend/g2p.py`) — IPA chuẩn theo phương ngữ
 
@@ -56,7 +56,7 @@ Parser tham chiếu trong repository bao phủ các quy tắc lõi và bộ test
   - **Bắc (Hà Nội)**: gộp `d/gi/r → z`, `ch/tr → tɕ`, `s/x → s`; thanh ˧, ˨˩, ˧˥, ˧˩˧, ˧ˀ˥, ˧ˀ˨ʔ.
   - **Nam (TP.HCM)**: `d/gi → j`, `r → ʐ`, `s → ʂ`, `x → s`, `tr → ʈ`, `ch → c`; hỏi–ngã gộp `˨˩˦`, nặng `˨˩˨`, ngang `˦`.
   - **Trung**: xấp xỉ (âm đầu kiểu Nam, thanh điệu tạm theo Bắc) — chờ dữ liệu Huế, xem `docs/G2P_VIETNAMESE.md` mục 6.5.
-- Nguyên âm theo Kirby: `a ă ɤ̆ ɛ e i ɔ o ɤ u ɯ`; vần đôi `iə uə ɯə`; không thêm trọng âm (tiếng Việt không có stress từ vựng).
+- Nguyên âm theo Kirby: `a ă ɤ̆ ɛ e i ɔ o ɤ u ɯ`; thêm `OO = ɔː` (o dài, từ vay); vần đôi `iə uə ɯə`; không thêm trọng âm (tiếng Việt không có stress từ vựng).
 - Đây vẫn là kênh nghiên cứu/đối chiếu (lexicon, round-trip, kiểm tra biến thể), **không** thay vocab ID ở runtime. Kế hoạch tích hợp sea-g2p/viG2P, WikiPron, MFA nằm ở `docs/G2P_VIETNAMESE.md`.
 
 ## OOV resolver (`frontend/oov.py`)

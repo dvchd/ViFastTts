@@ -50,10 +50,9 @@ Ví dụ thực hành với **"quốc"**:
 - **`uy` khác `ui`**: "thuỷ" = `W` + `I` (dấu trên `y`); "tủi" = `U` + `J` (dấu trên `u`).
 - **`i/y` cuối đều là `/j/`**: "tai" và "tay" cùng âm vị học; tương tự `u/o` cuối là `/w/`.
 - **`anh/ach` khác `an/ac`**: âm cuối là `nh/ch`, không phải `n/c`.
-- **`oo` trong từ vay**: "xoong", "boong", "moóc" — chữ `oo` là **một nguyên âm** `/ɔ/` viết đôi
-  (không phải nguyên âm đôi như `iê/uô/ươ`), dấu đặt trên chữ `o` thứ hai ("moóc").
-  Nghe gần như "o" dài nên "xoong" gần "xong" — vì vậy tầng âm vị học gộp về `O`,
-  còn IPA narrow ghi độ dài `ɔː`.
+- **`oo` trong từ vay**: "xoong", "boong", "moóc" — chữ `oo` là **một nguyên âm o dài** `[ɔː]`
+  viết đôi (không phải nguyên âm đôi như `iê/uô/ươ`), và được tách thành **nucleus `OO` riêng**
+  (khác `O` thường) vì người bản ngữ phân biệt "xoong" ≠ "xong"; dấu đặt trên chữ `o` thứ hai ("moóc").
 - **Dấu thanh theo chuẩn hiện đại**: "hoà", "thuỷ", "tuỳ" (dấu trên `a/y`) thay cho lối cũ
   "hòa", "thủy", "tùy" — dự án luôn chuẩn hoá về lối hiện đại.
 
@@ -68,7 +67,7 @@ Ví dụ thực hành với **"quốc"**:
 | `giếng` | GI | NONE | IÊ | NG | sắc |
 | `quốc` | K | W | Ô | C | sắc |
 | `anh` | NONE | NONE | A | NH | ngang |
-| `xoong` | X | NONE | O | NG | ngang |
+| `xoong` | X | NONE | OO | NG | ngang |
 | `nghiêng` | NG | NONE | IÊ | NG | ngang |
 | `chuyện` | CH | W | IÊ | N | nặng |
 | `khuy` | KH | W | I | NONE | ngang |

@@ -36,6 +36,9 @@ DISTINCT_GROUPS = [
     ("tủy", "tủi"),
     # uy là vần đóng: khuya (W + IÊ) khác khua (UÔ)
     ("khuya", "khua"),
+    # oo là nucleus riêng (xoong ≠ xong; moóc ≠ móc)
+    ("xoong", "xong"),
+    ("moóc", "móc"),
 ]
 
 
@@ -130,5 +133,5 @@ def test_component_vocab_is_small_and_discrete():
     vocabs = ComponentVocabs.default()
     product = (len(vocabs.onset) * len(vocabs.medial) * len(vocabs.nucleus)
                * len(vocabs.coda) * len(vocabs.tone))
-    assert product == 24 * 2 * 14 * 11 * 6
+    assert product == 24 * 2 * 15 * 11 * 6
     assert product >= 40_000

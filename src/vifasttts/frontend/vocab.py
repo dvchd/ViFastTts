@@ -24,7 +24,7 @@ class ComponentVocabs:
         return cls(
             onset=_map(["NONE", "B", "M", "PH", "V", "T", "TH", "Đ", "N", "D", "GI", "R", "X", "S", "CH", "TR", "NH", "L", "K", "KH", "NG", "G", "H", "P"]),
             medial=_map(["NONE", "W"]),
-            nucleus=_map(["A", "Ă", "Â", "E", "Ê", "I", "O", "Ô", "Ơ", "U", "Ư", "IÊ", "UÔ", "ƯƠ"]),
+            nucleus=_map(["A", "Ă", "Â", "E", "Ê", "I", "O", "Ô", "Ơ", "U", "Ư", "IÊ", "UÔ", "ƯƠ", "OO"]),
             coda=_map(["NONE", "M", "N", "NG", "NH", "P", "T", "C", "CH", "J", "W"]),
             tone=_map(["NGANG", "HUYEN", "SAC", "HOI", "NGA", "NANG"]),
             boundary=_map(["NONE", "WORD", "PHRASE", "SENTENCE"]),

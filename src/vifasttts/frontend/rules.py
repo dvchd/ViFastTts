@@ -26,8 +26,9 @@ SIMPLE_NUCLEI = {"a", "ă", "â", "e", "ê", "i", "y", "o", "ô", "ơ", "u", "ư
 NUCLEUS_ABSTRACT = {
     "a": "A", "ă": "Ă", "â": "Â", "e": "E", "ê": "Ê", "i": "I", "y": "I",
     "o": "O", "ô": "Ô", "ơ": "Ơ", "u": "U", "ư": "Ư",
-    # "oo" chỉ xuất hiện trong từ vay đã Việt hoá: xoong, boong, moóc...
-    "oo": "O",
+    # "oo" tách riêng khỏi "o": người bản ngữ phân biệt "xoong" ≠ "xong"
+    # (o dài [ɔː], từ vay/onomatopoeia: xoong, boong, moóc...).
+    "oo": "OO",
     "iê": "IÊ", "yê": "IÊ", "ia": "IÊ", "ya": "IÊ",
     "uô": "UÔ", "ua": "UÔ", "ươ": "ƯƠ", "ưa": "ƯƠ",
 }

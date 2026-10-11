@@ -95,6 +95,30 @@ Quy tắc dùng tên:
 | `frontend/g2p.py` | dạng ngữ âm (IPA, một chiều, theo vùng) |
 | `ParseStatus.FALLBACK_REQUIRED` | âm tiết chưa chuẩn hoá được (chữ số, từ ngoại lai, URL...) |
 
+## Tính chất ánh xạ (đơn ánh / toàn ánh / song ánh)
+
+- **Hàm**: mỗi nguồn → đúng một đích.
+- **Đơn ánh**: hai nguồn khác nhau không cho cùng đích.
+- **Toàn ánh**: mọi đích đều có ít nhất một nguồn.
+- **Song ánh** = đơn ánh + toàn ánh → tồn tại ánh xạ ngược (round-trip được).
+
+Áp vào ViFastTts:
+
+| Ánh xạ | Hàm? | Đơn ánh? | Toàn ánh? | Kết luận |
+| --- | --- | --- | --- | --- |
+| chữ canonical → bộ âm vị | ✔ | ✘ — đồng âm/chính tả tự do (`tai`/`tay`, `qui`/`quy`, `í`/`ý`) | ✔ — mọi tuple hiện thực hoá đều có chữ (`tests/test_parser_matrix.py`) | **Không** song ánh |
+| bộ âm vị → chữ | ✘ — một tuple ứng nhiều chữ | – | – | Không khả nghịch nếu chỉ giữ tuple |
+| chữ canonical ↔ (bộ âm vị + chính tả dư) | ✔ | ✔ | ✔ | **Song ánh** — round-trip được |
+| bộ âm vị → IPA | ✔ | ✘ — Bắc gộp `d/gi/r`, `ch/tr`, `s/x` | ✘ — chỉ tập ký hiệu của ngôn ngữ | Chiếu "cách đọc", không khả nghịch |
+
+Hệ quả thiết kế: **chữ viết là gốc**. `ParsedSyllable` giữ song song bộ âm vị
+(abstract) và chính tả dư (orthography: `i/y`, `c/k`, vị trí dấu...), nên khả
+nghịch nằm ở cặp đó — xem `tests/test_spelling_bijection.py`.
+
+- Việc tách `OO` (`xoong` ≠ `xong`) là một bước làm bộ âm vị *gần đơn ánh hơn*.
+- Các đồng âm thật (`tai`/`tay`) không thể và không nên tách ở tầng âm vị —
+  đó là chính tả từ vựng, được bảo toàn ở tầng orthography.
+
 ## Tránh dùng
 
 - "trừu tượng"/"abstract" một mình — quá chung, dễ lẫn với lớp lập trình.

@@ -65,10 +65,10 @@ def test_gi_shared_i_reads_as_zi():
     assert syllable_to_phonemes(parse_syllable("gìn")) == ("z", "i", "n", "˨˩")
 
 
-def test_oo_loanword_is_long_monophthong_not_diphthong():
-    # "oo" (xoong, moóc) là một nguyên âm /ɔ/ đọc dài, KHÔNG phải nguyên âm đôi.
-    # Broad gộp với "o" (gần đồng âm); narrow ghi độ dài từ chính tả.
-    assert syllable_to_phonemes(parse_syllable("xoong")) == ("s", "ɔ", "ŋ", "˧")
+def test_oo_loanword_has_distinct_long_nucleus():
+    # "oo" (xoong, moóc) là nucleus OO riêng (o dài ɔː) — người bản ngữ phân biệt với O.
+    # Không phải nguyên âm đôi: âm đôi thật chỉ có iê/uô/ươ (iə/uə/ɯə).
+    assert syllable_to_phonemes(parse_syllable("xoong")) == ("s", "ɔː", "ŋ", "˧")
     assert syllable_to_phonemes(parse_syllable("xoong"), style="narrow") == ("s", "ɔː", "ŋ", "˧")
     assert syllable_to_phonemes(parse_syllable("xong"), style="narrow") == ("s", "ɔ", "ŋ", "˧")
     assert syllable_to_phonemes(parse_syllable("moóc"), "south", style="narrow") == ("m", "ɔː", "k̚", "˧˥")
