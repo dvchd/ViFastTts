@@ -117,6 +117,12 @@ class TtsDataset(Dataset):
         f0 = torch.zeros(syllable_count)
         vuv = torch.zeros(syllable_count)
         energy = torch.zeros(syllable_count)
+        frame_phonation = None
+        if "hnr" in extracted:
+            frame_phonation = torch.stack(
+                [extracted["hnr"], extracted["tilt"], extracted["glottalization"]], dim=-1
+            )
+        phonation = torch.zeros(syllable_count, 3)
         start = 0
         frame_f0 = extracted["f0"]
         frame_vuv = extracted["vuv"]
@@ -127,8 +133,10 @@ class TtsDataset(Dataset):
                 f0[i] = frame_f0[start:end].mean()
                 vuv[i] = (frame_vuv[start:end].mean() > 0.5).float()
                 energy[i] = frame_energy[start:end].mean()
+                if frame_phonation is not None:
+                    phonation[i] = frame_phonation[start:end].mean(dim=0)
             start = end
-        return {
+        item = {
             "features": features,
             "durations": durations,
             "f0": f0,
@@ -136,19 +144,27 @@ class TtsDataset(Dataset):
             "energy": energy,
             "mel": mel,
         }
+        if frame_phonation is not None:
+            item["phonation"] = phonation
+        return item
 
 
 def collate_batch(items: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tensor]:
-    """Pad batch: features [B, Nmax, 7], mel [B, Tmax, M] + length masks."""
+    """Pad batch: features [B, Nmax, 7], mel [B, Tmax, M] + length masks.
+
+    Kèm `phonation` [B, Nmax, 3] khi dataset bật kênh phonation.
+    """
     batch = len(items)
     syllable_max = max(item["features"].size(0) for item in items)
     frame_max = max(item["mel"].size(0) for item in items)
     mel_dim = items[0]["mel"].size(1)
+    has_phonation = "phonation" in items[0]
     features = torch.zeros(batch, syllable_max, 7, dtype=torch.long)
     durations = torch.zeros(batch, syllable_max, dtype=torch.long)
     f0 = torch.zeros(batch, syllable_max)
     vuv = torch.zeros(batch, syllable_max)
     energy = torch.zeros(batch, syllable_max)
+    phonation = torch.zeros(batch, syllable_max, 3)
     mel = torch.zeros(batch, frame_max, mel_dim)
     syllable_lengths = torch.zeros(batch, dtype=torch.long)
     mel_lengths = torch.zeros(batch, dtype=torch.long)
@@ -159,11 +175,69 @@ def collate_batch(items: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tenso
         f0[i, :n] = item["f0"]
         vuv[i, :n] = item["vuv"]
         energy[i, :n] = item["energy"]
+        if has_phonation:
+            phonation[i, :n] = item["phonation"]
         mel[i, :t] = item["mel"]
         syllable_lengths[i] = n
         mel_lengths[i] = t
-    return {
+    output = {
         "features": features, "durations": durations, "f0": f0, "vuv": vuv,
         "energy": energy, "mel": mel,
         "syllable_lengths": syllable_lengths, "mel_lengths": mel_lengths,
     }
+    if has_phonation:
+        output["phonation"] = phonation
+    return output
+
+
+class VocoderDataset(Dataset):
+    """Mel thật + waveform thật cho huấn luyện vocoder.
+
+    Dùng cùng cache feature như `TtsDataset`; waveform được cắt về đúng số
+    mẫu `mel_frames * hop` (center=True) để khớp với đầu ra generator.
+    """
+
+    def __init__(self, manifest: str | Path, config: dict[str, Any], cache_dir: str | Path | None = None) -> None:
+        self.rows = ManifestDataset(manifest).rows
+        self.config = config
+        self.hop_length = int(config["mel"]["hop_length"])
+        self.sample_rate = int(config.get("sample_rate", 24000))
+        self.cache = FeatureCache(cache_dir, config) if cache_dir is not None else None
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
+        from vifasttts.data.features import load_wav
+
+        row = self.rows[index]
+        if self.cache is not None:
+            extracted = self.cache.get(row)
+            if extracted is None:
+                extracted = extract_features(row["audio_path"], self.config)
+                self.cache.put(row, extracted)
+        else:
+            extracted = extract_features(row["audio_path"], self.config)
+        mel = extracted["mel"]
+        wav = load_wav(row["audio_path"], self.sample_rate)
+        target_length = mel.size(0) * self.hop_length
+        if wav.numel() < target_length:
+            wav = torch.nn.functional.pad(wav, (0, target_length - wav.numel()))
+        return {"mel": mel, "wav": wav[:target_length]}
+
+
+def collate_vocoder_batch(items: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tensor]:
+    """Pad batch vocoder: mel [B, Tmax, M], wav [B, Tmax*hop]."""
+    batch = len(items)
+    frame_max = max(item["mel"].size(0) for item in items)
+    mel_dim = items[0]["mel"].size(1)
+    hop_length = items[0]["wav"].numel() // max(1, items[0]["mel"].size(0))
+    mel = torch.zeros(batch, frame_max, mel_dim)
+    wav = torch.zeros(batch, frame_max * hop_length)
+    mel_lengths = torch.zeros(batch, dtype=torch.long)
+    for i, item in enumerate(items):
+        frames = item["mel"].size(0)
+        mel[i, :frames] = item["mel"]
+        wav[i, : item["wav"].numel()] = item["wav"]
+        mel_lengths[i] = frames
+    return {"mel": mel, "wav": wav, "mel_lengths": mel_lengths}

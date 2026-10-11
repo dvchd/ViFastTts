@@ -211,3 +211,29 @@ def test_config_base_loads():
     config = load_config("configs/base_24k.yaml")
     assert config["mel"]["n_mels"] == 100
     assert config["model"]["hidden_size"] == 256
+
+
+def test_model_phonation_branch():
+    config = {**TINY_CONFIG, "model": {**TINY_CONFIG["model"], "use_phonation": True}}
+    sizes = _vocab_sizes()
+    model = ViFastTtsModel(config, sizes)
+    batch_size, syllables = 2, 4
+    features = torch.stack([torch.randint(size, (batch_size, syllables)) for size in sizes], dim=-1)
+    outputs = model(features, input_lengths=torch.tensor([4, 3]))
+    assert outputs["phonation"].shape == (batch_size, syllables, 3)
+
+    batch = {
+        "mel": torch.randn(batch_size, outputs["mel"].size(1), TINY_CONFIG["mel"]["n_mels"]),
+        "mel_lengths": outputs["lengths"],
+        "durations": outputs["durations"],
+        "f0": torch.rand(batch_size, syllables),
+        "vuv": torch.randint(0, 2, (batch_size, syllables)),
+        "energy": torch.rand(batch_size, syllables),
+        "phonation": torch.rand(batch_size, syllables, 3),
+        "tone_ids": features[..., 4],
+        "syllable_lengths": torch.tensor([4, 3]),
+    }
+    loss, parts = acoustic_losses(outputs, batch, {**TINY_CONFIG["loss_weights"], "phonation": 0.5})
+    assert "phonation" in parts
+    loss.backward()
+    assert torch.isfinite(loss)

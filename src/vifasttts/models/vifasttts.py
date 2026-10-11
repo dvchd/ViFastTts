@@ -42,15 +42,19 @@ class ViFastTtsModel(nn.Module):
         super().__init__()
         m = config["model"]
         h = m["hidden_size"]
+        self.use_phonation = bool(m.get("use_phonation", False))
         self.embedding = ComponentEmbedding(vocab_sizes, m["component_dim"], h)
         self.encoder = ConformerLite(m["encoder_layers"], h, m["attention_heads"], m["ffn_size"], m["conv_kernel_size"], m["dropout"])
         self.duration = ConvPredictor(h, 1, m["duration_layers"], m["dropout"])
         self.f0 = ConvPredictor(h, 1, m["variance_layers"], m["dropout"])
         self.vuv = ConvPredictor(h, 1, m["variance_layers"], m["dropout"])
         self.energy = ConvPredictor(h, 1, m["variance_layers"], m["dropout"])
+        if self.use_phonation:
+            # 3 kênh: HNR, spectral tilt, glottalization (xem data/phonation.py).
+            self.phonation = ConvPredictor(h, 3, m["variance_layers"], m["dropout"])
         self.tone_classifier = nn.Linear(h, 6)
         self.length_regulator = LengthRegulator()
-        self.variance_proj = nn.Linear(3, h)
+        self.variance_proj = nn.Linear(3 + (3 if self.use_phonation else 0), h)
         self.position_proj = nn.Linear(1, h)
         self.decoder = ConformerLite(m["decoder_layers"], h, m["attention_heads"], m["ffn_size"], m["conv_kernel_size"], m["dropout"])
         self.mel = nn.Linear(h, config["mel"]["n_mels"])
@@ -89,14 +93,24 @@ class ViFastTtsModel(nn.Module):
         exp_f0, _, _ = self.length_regulator(syllable_f0.unsqueeze(-1), durations)
         exp_vuv, _, _ = self.length_regulator(syllable_vuv.unsqueeze(-1), durations)
         exp_energy, _, _ = self.length_regulator(syllable_energy.unsqueeze(-1), durations)
-        variance = torch.cat([exp_f0, exp_vuv, exp_energy], dim=-1)
+        variance_parts = [exp_f0, exp_vuv, exp_energy]
+        syllable_phonation: torch.Tensor | None = None
+        if self.use_phonation:
+            syllable_phonation = self.phonation(x)
+            exp_phonation, _, _ = self.length_regulator(syllable_phonation, durations)
+            variance_parts.append(exp_phonation)
+        variance = torch.cat(variance_parts, dim=-1)
         positions = self._frame_positions(durations, expanded.size(1))
         decoded = self.decoder(
             expanded + self.variance_proj(variance) + self.position_proj(positions.unsqueeze(-1)),
             frame_mask,
         )
-        return {
+        outputs: dict[str, torch.Tensor] = {
             "mel": self.mel(decoded), "log_duration": log_d, "durations": durations,
             "f0": syllable_f0, "vuv_logits": syllable_vuv, "energy": syllable_energy,
-            "tone_logits": self.tone_classifier(x), "lengths": lengths,
         }
+        if syllable_phonation is not None:
+            outputs["phonation"] = syllable_phonation
+        outputs["tone_logits"] = self.tone_classifier(x)
+        outputs["lengths"] = lengths
+        return outputs

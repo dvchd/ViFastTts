@@ -54,6 +54,8 @@ def test_cache_key_stable_and_config_sensitive(tmp_path: Path):
     assert feature_cache_key(row, CONFIG) == feature_cache_key(row, CONFIG)
     changed = {**CONFIG, "mel": {**CONFIG["mel"], "n_mels": 21}}
     assert feature_cache_key(row, CONFIG) != feature_cache_key(row, changed)
+    with_phonation = {**CONFIG, "phonation": {"enabled": True}}
+    assert feature_cache_key(row, CONFIG) != feature_cache_key(row, with_phonation)
 
 
 def test_dataset_uses_cache_without_recompute(tmp_path: Path, monkeypatch):

@@ -140,6 +140,24 @@ def cache_features_cmd(
     typer.echo(f"Đã cache {done} mẫu vào {cache_dir}")
 
 
+@app.command("train-vocoder")
+def train_vocoder_cmd(
+    config: str = typer.Option(..., help="File YAML cấu hình"),
+    manifest: str = typer.Option(..., help="Manifest (JSONL)"),
+    output: str = typer.Option(..., help="Thư mục run"),
+    max_steps: int | None = typer.Option(None, help="Ghi đè số bước tối đa"),
+    vocoder_checkpoint: str | None = typer.Option(None, help="Checkpoint vocoder để huấn luyện tiếp"),
+) -> None:
+    """Huấn luyện vocoder tham chiếu (iSTFTNetLite + MPD-lite)."""
+    from vifasttts.train import train_vocoder_reference
+
+    train_vocoder_reference(
+        load_config(config), manifest, output,
+        max_steps=max_steps, vocoder_checkpoint=vocoder_checkpoint,
+    )
+    typer.echo(f"Đã lưu vocoder vào {output}")
+
+
 @app.command("synthesize")
 def synthesize_cmd(
     config: str = typer.Option(..., help="File YAML cấu hình"),

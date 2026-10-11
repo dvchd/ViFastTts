@@ -58,16 +58,22 @@ def load_wav(path: str | Path, sample_rate: int) -> torch.Tensor:
 
 def extract_mel_energy(wav: torch.Tensor, mel_config: dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:
     """WAV mono -> mel log [T, M] và log-energy [T]."""
+    mel, energy = extract_mel_energy_batched(wav.unsqueeze(0), mel_config)
+    return mel[0], energy[0]
+
+
+def extract_mel_energy_batched(wav: torch.Tensor, mel_config: dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:
+    """WAV [B, L] -> mel log [B, T, M] và log-energy [B, T]."""
     n_fft = int(mel_config["n_fft"])
     hop = int(mel_config["hop_length"])
     win = int(mel_config.get("win_length", n_fft))
     sample_rate = int(mel_config.get("sample_rate", 24000))
     window = torch.hann_window(win)
     spec = torch.stft(wav, n_fft=n_fft, hop_length=hop, win_length=win, window=window, return_complex=True, center=True)
-    power = spec.abs() ** 2  # [bins, T]
+    power = spec.abs() ** 2  # [B, bins, T]
     bank = mel_filterbank(sample_rate, n_fft, int(mel_config["n_mels"]), float(mel_config.get("f_min", 0)), float(mel_config.get("f_max", 0)))
-    mel = torch.log(bank @ power + 1e-6).transpose(0, 1)  # [T, M]
-    energy = torch.log(power.mean(dim=0) + 1e-6)
+    mel = torch.log(torch.einsum("mb,btc->btm", bank, power) + 1e-6)  # [B, T, M]
+    energy = torch.log(power.mean(dim=1) + 1e-6)  # [B, T]
     return mel, energy
 
 

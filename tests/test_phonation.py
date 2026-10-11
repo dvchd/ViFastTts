@@ -88,3 +88,38 @@ def test_extract_features_optional_phonation(tmp_path: Path):
 
     direct = extract_phonation(path, base_config)
     assert direct["hnr"].numel() > 0
+
+
+def test_dataset_and_collate_include_phonation(tmp_path: Path):
+    import csv
+
+    from vifasttts.data.dataset import TtsDataset, collate_batch
+    from vifasttts.data.manifest import build_manifest
+
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    pcm = (_sine(220.0).clamp(-1, 1) * 32767).to(torch.int16)
+    with wave.open(str(wav_dir / "s1.wav"), "wb") as fh:
+        fh.setnchannels(1)
+        fh.setsampwidth(2)
+        fh.setframerate(SAMPLE_RATE)
+        fh.writeframes(pcm.numpy().tobytes())
+    metadata = tmp_path / "meta.csv"
+    with metadata.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh, delimiter="|")
+        writer.writerow(["s1", "Chào bạn"])
+    manifest = tmp_path / "m.jsonl"
+    build_manifest(str(metadata), str(wav_dir), str(manifest))
+
+    config = {
+        "sample_rate": SAMPLE_RATE,
+        "mel": {"n_fft": 256, "win_length": 256, "hop_length": 64, "n_mels": 20, "f_min": 0, "f_max": 12000},
+        "phonation": {"enabled": True},
+    }
+    item = TtsDataset(str(manifest), config)[0]
+    assert item["phonation"].shape == (item["features"].size(0), 3)
+    batch = collate_batch([item, item])
+    assert batch["phonation"].shape[2] == 3
+
+    plain = TtsDataset(str(manifest), {**config, "phonation": {"enabled": False}})[0]
+    assert "phonation" not in plain

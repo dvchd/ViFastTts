@@ -29,6 +29,8 @@ model:
   dropout: 0.1
   duration_layers: 3
   variance_layers: 3
+  # Bật để dự đoán thêm 3 kênh phonation (HNR, spectral tilt, glottalization).
+  use_phonation: false
 
 training:
   batch_size: 16
@@ -49,6 +51,21 @@ training:
 # Kênh phonation tuỳ chọn (HNR, spectral tilt, glottalization) — xem docs/DATA_PIPELINE.md.
 phonation:
   enabled: false
+
+# Huấn luyện vocoder (MPD-lite + iSTFTNetLite) — xem docs/TRAINING.md.
+vocoder_training:
+  batch_size: 8
+  learning_rate: 0.0002
+  max_steps: 200000
+  num_workers: 4
+  log_every: 100
+  save_every: 5000
+  hidden: 256
+  upsample_ratio: 4
+  discriminator_channels: 16
+  mel_weight: 45.0
+  feature_matching_weight: 2.0
+  adversarial_weight: 1.0
 
 loss_weights:
   mel: 1.0

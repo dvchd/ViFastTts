@@ -25,6 +25,9 @@ def _export_fp32(config: dict, checkpoint: str, output: str, opset_version: int)
         "mel", "log_duration", "durations", "f0",
         "vuv_logits", "energy", "tone_logits", "lengths",
     ]
+    if getattr(model, "use_phonation", False):
+        # Khớp thứ tự dict output: chèn sau "energy", trước "tone_logits".
+        output_names.insert(6, "phonation")
     dynamic_axes = {"features": {0: "batch", 1: "syllables"}}
     # Exporter TorchScript ổn định và không cần onnxscript; chỉ truyền tham số
     # `dynamo` khi torch hỗ trợ để tương thích torch >= 2.3.

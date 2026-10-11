@@ -32,6 +32,7 @@ def feature_cache_key(row: dict[str, Any], config: dict[str, Any]) -> str:
             "stamp": stamp,
             "sample_rate": int(config.get("sample_rate", 24000)),
             "mel": {str(key): mel[key] for key in sorted(mel)},
+            "phonation": config.get("phonation", {}),
         },
         sort_keys=True,
         ensure_ascii=False,

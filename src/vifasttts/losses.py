@@ -43,6 +43,8 @@ def acoustic_losses(outputs: dict[str, torch.Tensor], batch: dict[str, torch.Ten
             syllable_mask,
         ),
     }
+    if "phonation" in outputs and "phonation" in batch:
+        losses["phonation"] = _masked_mean((outputs["phonation"] - batch["phonation"]).abs(), syllable_mask)
     total = torch.zeros((), device=next(iter(losses.values())).device)
     for key, value in losses.items():
         total = total + value * float(weights.get(key, 1.0))
