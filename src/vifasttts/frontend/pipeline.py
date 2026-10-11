@@ -14,7 +14,7 @@ from vifasttts.types import (
     Tone,
 )
 
-_TOKEN_RE = re.compile(r"[A-Za-zÀ-ỹĐđ0-9]+|[^\w\s]", re.UNICODE)
+_TOKEN_RE = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 
 
 def _fallback_syllable(token: str) -> ParsedSyllable:

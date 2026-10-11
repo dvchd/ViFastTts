@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-# Longest spelling forms are checked first.
+# Longest spelling forms are checked first. "q" đứng một mình không phải âm
+# đầu hợp lệ trong tiếng Việt (chỉ tồn tại trong "qu"); "qa", "qi"... là fallback.
 ONSET_SPELLINGS = (
     "ngh", "ng", "gh", "gi", "kh", "nh", "ph", "th", "tr", "ch", "qu",
-    "b", "c", "d", "đ", "g", "h", "k", "l", "m", "n", "p", "q", "r", "s", "t", "v", "x",
+    "b", "c", "d", "đ", "g", "h", "k", "l", "m", "n", "p", "r", "s", "t", "v", "x",
 )
 
 ONSET_ABSTRACT = {
     "": "NONE", "b": "B", "m": "M", "ph": "PH", "v": "V", "t": "T",
     "th": "TH", "đ": "Đ", "n": "N", "d": "D", "gi": "GI", "r": "R",
     "x": "X", "s": "S", "ch": "CH", "tr": "TR", "nh": "NH", "l": "L",
-    "c": "K", "k": "K", "q": "K", "qu": "K", "kh": "KH", "ng": "NG",
+    "c": "K", "k": "K", "qu": "K", "kh": "KH", "ng": "NG",
     "ngh": "NG", "g": "G", "gh": "G", "h": "H", "p": "P",
 }
 

@@ -20,6 +20,7 @@ ONSET + MEDIAL + NUCLEUS + CODA + TONE
 - Giữ S, X riêng.
 - Giữ HỎI, NGÃ riêng.
 - `qu` ánh xạ K + W.
+- `q` chỉ tồn tại trong `qu`; `qa`, `qi`, `qy`... là fallback (không phải âm đầu hợp lệ tiếng Việt).
 - `i/y` cuối có thể ánh xạ J.
 - `u/o` cuối có thể ánh xạ W.
 - `uy` là medial W + nucleus I, **không** phải U + coda J: `khuy` (KH/W/I) khác `khui` (KH/NONE/U/J); dấu thanh rơi trên y (`thuỷ`, `tuỳ`).
@@ -31,6 +32,16 @@ ONSET + MEDIAL + NUCLEUS + CODA + TONE
 ## Lưu ý
 
 Parser tham chiếu trong repository bao phủ các quy tắc lõi và bộ test tối thiểu. Trước khi huấn luyện production, cần mở rộng bảng âm tiết hợp lệ bằng corpus lớn và thêm test cho tên riêng, từ vay mượn, chính tả cũ và trường hợp hiếm.
+
+## Kiểm tra parser
+
+- `python tools/parser_audit.py` — vét cạn ~51k tổ hợp (âm đầu × vần × âm cuối × thanh),
+  kiểm tra bất biến `parse → compose → parse`; thoát mã 1 nếu có vấn đề (chạy được trong CI).
+- `pytest tests/test_parser_matrix.py tests/test_parser_edges.py` — cùng tính chất ở dạng
+  test thường trực, kèm corpus từ thật/khó, chữ ngoài Latin và edge Unicode.
+- Tokenizer giữ cả chữ ngoài Latin (CJK, Cyrillic, Thái...) làm token fallback thay vì nuốt mất.
+- Các "alias" đã cố ý: `oo` luôn là nucleus O (từ vay); `uy` luôn là W + I;
+  `giê` luôn là GI + IÊ (`giếng` cùng vần `tiếng`).
 
 ## Lớp G2P tùy chọn (`frontend/g2p.py`) — IPA chuẩn theo phương ngữ
 
