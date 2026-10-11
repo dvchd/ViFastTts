@@ -46,3 +46,13 @@ ViFastTts (MIT) **không** nhúng code của các hệ G2P bên ngoài. Tài li�
 | --- | --- | --- |
 | duyet/vietnamese-wordlist (Viet11K–74K) | GPL-2.0 | Chỉ chạy audit cục bộ (`tools/parser_audit.py --wordlist`), không sao chép vào repo/package |
 | WikiPron vi (hanoi/hue/saigon) | Code Apache-2.0; dữ liệu theo Wiktionary (thường CC BY-SA) | Dùng build-time để kiểm G2P/đối chiếu; ghi nguồn khi dẫn kết quả |
+
+## Dữ liệu YouTube tự tải (`vifasttts youtube-fetch`)
+
+| Thành phần | Giấy phép | Dùng cho |
+| --- | --- | --- |
+| yt-dlp (extra `[youtube]`) | Unlicense | Tải audio/phụ đề từ kênh của bạn (gọi subprocess, không nhúng) |
+| imageio-ffmpeg (extra `[youtube]`) | BSD-2-Clause (binary ffmpeg bên trong: GPL-3.0) | Giải mã m4a/webm → WAV; dùng như công cụ ngoài, không liên kết vào package |
+| Dataset sinh ra ở `data/...` | Do chủ kênh chọn (`--license`, mặc định CC BY 4.0) | Clip audio + SRT + manifest |
+
+Chỉ tải nội dung bạn sở hữu hoặc có quyền; điều khoản dịch vụ của YouTube vẫn áp dụng cho việc tải.

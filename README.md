@@ -30,7 +30,7 @@ vị trí, và không có "từ lạ" với tiếng Việt chuẩn.
 
 | Hạng mục | Kết quả |
 | --- | --- |
-| Bộ test | **936 test pass**; `ruff` + `mypy` sạch |
+| Bộ test | **958 test pass**; `ruff` + `mypy` sạch |
 | Parser âm tiết | Vét cạn **49.166 tổ hợp = 0 lỗi**; 39K từ thật: 6.617/6.633 parse OK |
 | Kho âm tiết | 24 âm đầu · 2 âm đệm · 15 âm chính · 11 âm cuối · 6 thanh → **264 vần**, **28.800 âm tiết trừu tượng** |
 | Model | Acoustic **16,4 triệu** tham số; vocoder **3,5 triệu** tham số |
@@ -39,6 +39,7 @@ vị trí, và không có "từ lạ" với tiếng Việt chuẩn.
 | Dịch vụ | `vifasttts serve` (HTTP stdlib: `POST /synthesize` → WAV) · `synthesize-batch` (file → nhiều WAV) · streaming qua `iter_synthesize` |
 | Xuất ONNX | fp32 / fp16 / int8, batch và độ dài **động** (đã kiểm bằng onnxruntime) |
 | Huấn luyện | Train acoustic + train vocoder (GAN tham chiếu) + cache feature |
+| Dữ liệu YouTube | `vifasttts youtube-fetch`: tải audio + phụ đề kênh của bạn → clip 24 kHz mono + manifest + SRT mở + dataset card (CC BY 4.0) |
 
 ⚠️ **Chưa có sẵn trọng số huấn luyện** trong repo. Muốn có giọng nói thật, cần audio + transcript
 và (khuyến nghị) alignment thật bằng MFA — xem `docs/TRAINING.md`.
@@ -89,6 +90,9 @@ vifasttts g2p "quốc" --dialect south                   # phiên âm IPA (phân
 # So sánh phiên âm IPA Bắc/Nam (chỉ để phân tích)
 python examples/g2p_demo.py
 
+# Lấy dữ liệu từ kênh YouTube của bạn (demo 1 video ngắn, cần: pip install -e ".[youtube]")
+vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/codelung --demo
+
 # Phiên bản CLI
 vifasttts --version
 ```
@@ -104,7 +108,7 @@ pytest
 | Nhóm | Lệnh |
 | --- | --- |
 | Frontend | `vifasttts parse "<câu>"` · `parse-syllable <từ>` · `check-profile "<câu>" --profile strict` · `g2p "<câu>" [--dialect south]` |
-| Dữ liệu | `build-manifest` · `validate-manifest` (kèm coverage) · `build-lexicon` · `cache-features` |
+| Dữ liệu | `build-manifest` · `validate-manifest` (kèm coverage) · `build-lexicon` · `cache-features` · `youtube-fetch` (tải kênh của bạn) |
 | Huấn luyện | `vifasttts train ...` · `vifasttts train-vocoder ...` |
 | Sinh giọng | `vifasttts synthesize --text "..." --output out.wav [--dialect south] [--speed 0.9] [--overrides file.json] [--peak-normalize]` |
 | Batch / dịch vụ | `synthesize-batch --input list.txt --output-dir out/` · `serve --host 127.0.0.1 --port 8000` |
@@ -174,7 +178,7 @@ Giải thích từ đầu cho người không chuyên: `docs/SYLLABLE_GUIDE.md`.
 ```text
 src/vifasttts/
   frontend/   chuẩn hoá text, tách âm tiết, vocab, G2P (phân tích), lexicon/profile, segments, chunking
-  data/       manifest, features (mel/f0/vuv/energy/phonation), dataset, cache
+  data/       manifest, features (mel/f0/vuv/energy/phonation), dataset, cache, subtitles + youtube (tải kênh của bạn)
   models/     acoustic model, conformer, iSTFTNet vocoder, discriminator
   runtime/    chạy ONNX (acoustic + vocoder), iSTFT numpy, postprocess
   train.py    vòng huấn luyện acoustic + vocoder
@@ -182,13 +186,13 @@ src/vifasttts/
   export.py   ONNX (acoustic + vocoder) + quantization
 configs/      base_24k.yaml + small_24k.yaml + large_24k.yaml (theo lượng dữ liệu)
 tools/        parser_audit.py, frontend_benchmark.py
-tests/        936 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server
+tests/        958 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server, youtube
 docs/         toàn bộ tài liệu (xem mục 10)
 ```
 
 ## 9. Giới hạn hiện tại & việc còn lại
 
-- **Alignment**: chưa có thời lượng thật → mặc định chia theo trọng số (placeholder). Cần MFA/aligner để chất lượng tốt hơn.
+- **Alignment**: chưa có thời lượng thật → mặc định chia theo trọng số (placeholder). Cần MFA/aligner để chất lượng tốt hơn (kể cả khi lấy dữ liệu nhanh từ YouTube của bạn bằng `youtube-fetch` — thời lượng mới ở mức câu).
 - **Vocoder**: bản tham chiếu (GAN nhẹ), chưa phải cấu hình production.
 - **ONNX**: đã có runtime đầy đủ (acoustic + vocoder spectrum + iSTFT numpy). Điểm còn để ngỏ: gộp vocoder vào **một graph duy nhất** và calibration INT8 đầy đủ.
 - **OOV**: từ ngoài tiếng Việt đọc bằng fallback — muốn kiểm soát thì bật `resolve_oov=True`, dùng `--overrides file.json` hoặc thêm override.
@@ -210,6 +214,7 @@ Roadmap chi tiết có đánh dấu ✅/⬜: `docs/PROJECT_STATUS.md`.
 | | `docs/G2P_VIETNAMESE.md` | Khảo sát sea-g2p, viG2P... và bảng IPA nội bộ |
 | **Model & dữ liệu** | `docs/ARCHITECTURE.md` | Sơ đồ as-built, quyết định thiết kế |
 | | `docs/DATA_PIPELINE.md` | 15 bước chuẩn bị dữ liệu |
+| | `docs/YOUTUBE_DATASET.md` | Lấy dataset sạch từ kênh YouTube của bạn (demo + chạy thật, giấy phép mở) |
 | | `docs/TRAINING.md` | Hướng dẫn train + cảnh báo alignment |
 | | `docs/TRAINING_ESTIMATES.md` | **Ước lượng** dữ liệu/tham số/thời gian/máy/chi phí trước khi train |
 | | `docs/APPLE_SILICON.md` | **Mac/M-series**: MPS, MLX, ANE, provider ONNX (đo thật + quyết định) |
@@ -224,4 +229,6 @@ Roadmap chi tiết có đánh dấu ✅/⬜: `docs/PROJECT_STATUS.md`.
 
 MIT cho code trong repo. Dữ liệu giọng nói, lexicon và checkpoint do người dùng tạo có
 giấy phép riêng; các công cụ tham chiếu (sea-g2p, MFA, vPhon...) giữ giấy phép gốc —
-chi tiết ở `docs/LICENSES.md`.
+chi tiết ở `docs/LICENSES.md`. Dataset lấy từ kênh YouTube của bạn mặc định ghi giấy phép
+mở **CC BY 4.0** (ghi nguồn kênh khi tái sử dụng); đổi bằng `--license`, ví dụ
+`--license "CC0 1.0"`.

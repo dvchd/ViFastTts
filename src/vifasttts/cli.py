@@ -97,6 +97,56 @@ def validate_manifest_cmd(
         typer.echo(f"  thiếu thanh: {coverage['missing_tones']}")
 
 
+@app.command("youtube-fetch")
+def youtube_fetch_cmd(
+    channel: str = typer.Argument(..., help="URL kênh (/videos), playlist hoặc video YouTube của bạn"),
+    out: str = typer.Option("data/youtube", help="Thư mục dataset đầu ra"),
+    limit: int = typer.Option(0, help="Số video tối đa (0 = tất cả)"),
+    demo: bool = typer.Option(False, help="Chạy demo: chỉ 1 video ngắn (60–900 giây)"),
+    langs: str = typer.Option("vi,vi-orig", help="Phụ đề ưu tiên, cách nhau dấu phẩy"),
+    dialect: str = typer.Option("north", help="Cách đọc số/ngày: north, central, south"),
+    min_duration: float = typer.Option(1.0, help="Độ dài clip tối thiểu (giây)"),
+    max_duration: float = typer.Option(20.0, help="Độ dài clip tối đa (giây)"),
+    max_gap: float = typer.Option(0.35, help="Khoảng nghỉ tối đa để gộp câu (giây)"),
+    max_chars: int = typer.Option(220, help="Độ dài text tối đa mỗi clip"),
+    min_video_duration: float = typer.Option(0.0, help="Bỏ video ngắn hơn mức này (giây)"),
+    max_video_duration: float = typer.Option(0.0, help="Bỏ video dài hơn mức này (0 = không giới hạn)"),
+    title_filter: str | None = typer.Option(None, help="Chỉ lấy video có tiêu đề khớp regex"),
+    keep_wav: bool = typer.Option(True, "--keep-wav/--no-keep-wav",
+                                  help="Giữ WAV gốc 24 kHz để căn chỉnh lại sau này"),
+    dedupe: bool = typer.Option(True, "--dedupe/--no-dedupe", help="Lọc clip trùng chữ"),
+    min_rms_db: float = typer.Option(-45.0, help="Bỏ clip im lặng dưới mức RMS này (dBFS)"),
+    max_fallback_ratio: float = typer.Option(0.34, help="Bỏ clip có tỉ lệ fallback cao hơn"),
+    license: str = typer.Option("CC BY 4.0", help="Giấy phép mở ghi vào dataset card"),
+    sleep: float = typer.Option(1.0, help="Nghỉ giữa các request (giây)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Chỉ liệt kê video, không tải"),
+    refresh: bool = typer.Option(False, help="Bỏ cache danh sách video (.videos.json)"),
+    ytdlp_bin: str | None = typer.Option(None, "--ytdlp-bin", hidden=True,
+                                          help="Lệnh yt-dlp thay thế (test/đường dẫn riêng)"),
+    ffmpeg_bin: str | None = typer.Option(None, "--ffmpeg-bin", hidden=True,
+                                          help="Đường dẫn ffmpeg thay thế"),
+) -> None:
+    """Tải audio + phụ đề kênh YouTube của bạn → clip sạch + manifest + SRT mở.
+
+    Chi tiết luồng và giấy phép dữ liệu: `docs/YOUTUBE_DATASET.md`.
+    """
+    import shlex
+
+    from vifasttts.data.youtube import FetchOptions, fetch_dataset
+
+    fetch_dataset(FetchOptions(
+        channel=channel, out=Path(out), limit=limit, demo=demo,
+        langs=tuple(lang.strip() for lang in langs.split(",") if lang.strip()),
+        dialect=dialect, min_duration=min_duration, max_duration=max_duration,
+        max_gap=max_gap, max_chars=max_chars,
+        min_video_duration=min_video_duration, max_video_duration=max_video_duration,
+        title_filter=title_filter, keep_wav=keep_wav, dedupe=dedupe,
+        min_rms_db=min_rms_db, max_fallback_ratio=max_fallback_ratio,
+        license=license, sleep=sleep, dry_run=dry_run, refresh=refresh,
+        ytdlp=shlex.split(ytdlp_bin) if ytdlp_bin else None, ffmpeg=ffmpeg_bin,
+    ))
+
+
 @app.command("train")
 def train(
     config: str = typer.Option(..., help="File YAML cấu hình"),

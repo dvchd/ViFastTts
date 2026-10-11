@@ -23,10 +23,14 @@ train = ["torch>=2.3", "torchaudio>=2.3", "tensorboard>=2.17"]
 # onnxscript chỉ cần cho exporter mặc định mới của torch; export.py dùng
 # exporter TorchScript (dynamo=False) nên graph vẫn xuất được nếu thiếu.
 onnx = ["onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.1"]
+# Lấy dữ liệu từ kênh YouTube của bạn: yt-dlp tải, imageio-ffmpeg cấp binary
+# ffmpeg tích hợp (khỏi cần brew) để giải mã m4a/webm → WAV 24 kHz mono.
+youtube = ["yt-dlp>=2023.12.30", "imageio-ffmpeg>=0.5"]
 all = [
   "soundfile>=0.12", "scipy>=1.12", "librosa>=0.10",
   "torch>=2.3", "torchaudio>=2.3", "tensorboard>=2.17",
   "onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.1",
+  "yt-dlp>=2023.12.30", "imageio-ffmpeg>=0.5",
   "pytest>=8", "ruff>=0.6", "mypy>=1.11"
 ]
 

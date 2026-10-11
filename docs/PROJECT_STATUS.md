@@ -1,14 +1,14 @@
 # Trạng thái dự án (PROJECT_STATUS)
 
 > **Tài liệu "compact"** — tóm tắt phiên làm việc, trạng thái as-built, nhật ký
-> quyết định, kết quả audit và việc còn lại. Cập nhật: 11/10/2026.
+> quyết định, kết quả audit và việc còn lại. Cập nhật: 12/10/2026.
 > Nguồn sự thật as-built: `docs/ARCHITECTURE.md`; thuật ngữ: `docs/GLOSSARY.md`.
 
 ## 1. TL;DR
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **936 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **958 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối
@@ -32,6 +32,9 @@
 - Đã triển khai hết lớp frontend/data của roadmap: profile `open/strict/corpus` +
   lexicon, `AbstractSyllable.rime`, Segment Expander + `distribute_frames`, benchmark
   biểu diễn, cache feature, kênh phonation, G2P Nam cho `OO`/`ưu/ươu`.
+- **Dữ liệu YouTube**: `vifasttts youtube-fetch` lấy audio + phụ đề (json3) từ kênh
+  của bạn, làm sạch caption cuộn, cắt clip 1–20 s có QC (im lặng/trùng/fallback),
+  xuất manifest + SRT mở + dataset card (mặc định CC BY 4.0) — `docs/YOUTUBE_DATASET.md`.
 
 ## 2. Kiến trúc chốt
 
@@ -72,6 +75,10 @@ dạng chính tả (Orthography) → dạng âm vị học (AbstractSyllable: 5 
   tham chiếu Kirby 2011 / Thompson 1965 / Huỳnh Công 2003 (xem `docs/G2P_VIETNAMESE.md`).
 - OOV resolver opt-in (`resolve_oov=True`) theo quy trình 5 bước viG2P; English
   fallback có bất biến "mọi reading phải parse được".
+- Dữ liệu YouTube: dùng **yt-dlp + imageio-ffmpeg** qua subprocess (extra `[youtube]`),
+  phụ đề **json3** làm timing (không dùng SRT chưa căn), QC im lặng/trùng/fallback,
+  resume bằng `.done.json`; dataset card + giấy phép mặc định **CC BY 4.0** (kênh
+  tham chiếu `@codelung` — audio mở, ai dùng cũng được).
 
 ## 4. Kết quả audit (bằng chứng)
 
@@ -100,6 +107,8 @@ vifasttts build-manifest --metadata data/metadata.csv --wav-dir data/wavs --outp
 vifasttts validate-manifest --manifest data/manifest.jsonl --wav-dir data/wavs   # kèm coverage tone/coda
 vifasttts build-lexicon --manifest data/manifest.jsonl --output data/lexicon.json
 vifasttts cache-features --manifest data/train.jsonl --config configs/base_24k.yaml --cache-dir cache/train
+vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/codelung --demo       # demo 1 video
+vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/codelung --sleep 1.5  # cả kênh
 
 # huấn luyện / suy luận / export
 vifasttts train --config configs/base_24k.yaml --train-manifest ... --val-manifest ... --output runs/base
@@ -155,6 +164,11 @@ python tools/parser_audit.py --wordlist words.txt   # audit từ điển (+ --pr
 10. 📄 **Tài liệu luồng model as-built**: `docs/MODEL_FLOW.md` (data → train → infer → export,
    tensor shape, loss, số tham số, khác biệt train/infer) và `docs/TRAINING_ESTIMATES.md`
    (ước lượng dữ liệu/thời gian/máy/chi phí + công thức tự hiệu chỉnh).
+11. ✅ **Dataset YouTube tự động** (`data/subtitles.py` + `data/youtube.py`, CLI
+   `youtube-fetch`): phụ đề json3 làm timing, cắt clip + QC (im lặng/trùng/fallback),
+   manifest/SRT/dataset card mở (CC BY 4.0), resume `.done.json`, test offline bằng
+   yt-dlp giả. ⬜ Căn word-level (whisper/MFA) để có `durations` cấp âm tiết;
+   ⬜ publish Hugging Face; ⬜ VAD/speaker tách nhạc – nhiều người nói.
 
 ## 7. Commit tiêu biểu trong phiên
 

@@ -7,6 +7,8 @@ __pycache__/
 runs/
 artifacts/
 data/wavs/
+data/codelung/
+data/youtube/
 *.pt
 *.onnx
 *.wav

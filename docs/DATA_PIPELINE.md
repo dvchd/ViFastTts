@@ -19,3 +19,12 @@
 Không train trực tiếp bằng SRT chưa căn chỉnh.
 
 Manifest do `build-manifest` sinh ra chứa `audio_path`, `text` và danh sách `syllables` đã parse; có thể bổ sung trường `durations` (số frame mỗi âm tiết) từ forced alignment ở bước 6 — vòng train đọc trường này nếu có.
+
+## Nguồn: kênh YouTube của bạn (tùy chọn)
+
+Nếu dữ liệu nằm trên kênh YouTube bạn sở hữu, dùng `vifasttts youtube-fetch` để chạy sẵn
+các bước 1–5 và 7–10 ở mức câu: tải audio + phụ đề json3 → làm sạch caption cuộn →
+cắt clip 1–20 giây có fade → lọc im lặng/trùng/fallback → `metadata.csv` +
+`manifest.jsonl` + SRT mở + dataset card (giấy phép mặc định CC BY 4.0). Bước 6
+(forced alignment) vẫn chạy riêng để có `durations` cấp âm tiết. Lệnh demo/chạy thật và
+tuỳ chọn chi tiết: `docs/YOUTUBE_DATASET.md`.
