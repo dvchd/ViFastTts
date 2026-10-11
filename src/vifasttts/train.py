@@ -123,7 +123,9 @@ def train_reference(
     vocabs = ComponentVocabs.default()
     sizes = [len(vocabs.onset), len(vocabs.medial), len(vocabs.nucleus), len(vocabs.coda), len(vocabs.tone), len(vocabs.boundary), len(vocabs.punctuation)]
     model = ViFastTtsModel(config, sizes)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    from vifasttts.device import resolve_device
+
+    device = torch.device(resolve_device(training.get("device", "auto")))
     model.to(device)
     model.train()
 
@@ -244,7 +246,17 @@ def train_vocoder_reference(
         generator.load_state_dict(state.get("vocoder", state))
     discriminator = MultiPeriodDiscriminatorLite(channels=int(vt.get("discriminator_channels", 16)))
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    from vifasttts.device import resolve_device
+
+    requested = vt.get("device") or training.get("device") or "auto"
+    resolved = resolve_device(requested)
+    if resolved == "mps" and str(requested) == "auto":
+        # Đo thực tế trên Mac Apple Silicon: vocoder batch nhỏ chậm hơn CPU
+        # (0,93 vs 0,39 s/bước) do overhead kernel; chỉ dùng MPS khi được ép.
+        print("Ghi chú: MPS chậm hơn CPU cho vocoder batch nhỏ → dùng CPU "
+              "(ép bằng vocoder_training.device=mps nếu muốn).")
+        resolved = "cpu"
+    device = torch.device(resolved)
     generator.to(device)
     discriminator.to(device)
     generator.train()
@@ -297,9 +309,16 @@ def train_vocoder_reference(
                 fake_outputs = discriminator(fake_crop)
                 g_adv = generator_adversarial_loss(fake_outputs)
                 g_fm = feature_matching_loss(real_outputs, fake_outputs)
-                mel_fake, _ = extract_mel_energy_batched(fake_crop, mel_config)
-                frames = min(mel_fake.size(1), mel_real.size(1))
-                g_mel = (mel_fake[:, :frames] - mel_real[:, :frames]).abs().mean()
+                # torch.stft (complex) không chạy trên MPS → tính mel trên CPU;
+                # autograd vẫn truyền ngược qua phép copy thiết bị về generator.
+                if device.type == "mps":
+                    mel_fake, _ = extract_mel_energy_batched(fake_crop.cpu(), mel_config)
+                    mel_target = mel_real.cpu()
+                else:
+                    mel_fake, _ = extract_mel_energy_batched(fake_crop, mel_config)
+                    mel_target = mel_real
+                frames = min(mel_fake.size(1), mel_target.size(1))
+                g_mel = (mel_fake[:, :frames] - mel_target[:, :frames]).abs().mean()
                 g_loss = adv_weight * g_adv + fm_weight * g_fm + mel_weight * g_mel
                 g_loss.backward()
                 opt_g.step()

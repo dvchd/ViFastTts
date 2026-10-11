@@ -173,3 +173,16 @@ def test_synthesize_uses_trained_vocoder(tmp_path: Path):
     # Không truyền vocoder → cảnh báo RuntimeWarning thay vì im lặng.
     with pytest.warns(RuntimeWarning):
         synthesize(ACOUSTIC_TINY, str(acoustic_out / "last.pt"), "Chào", str(tmp_path / "warn.wav"))
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="MPS không khả dụng")
+def test_vocoder_mps_smoke(tmp_path: Path):
+    """Mac Apple Silicon: 1 bước train vocoder trên MPS (torch.istft phải chạy được)."""
+    manifest = _manifest(tmp_path)
+    config = {
+        **VOC_CONFIG,
+        "vocoder_training": {**VOC_CONFIG["vocoder_training"], "device": "mps"},
+    }
+    out = tmp_path / "vocoder_mps"
+    train_vocoder_reference(config, str(manifest), str(out), max_steps=1)
+    assert (out / "last.pt").exists()

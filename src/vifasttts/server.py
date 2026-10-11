@@ -44,8 +44,15 @@ def wav_bytes(waveform: np.ndarray, sample_rate: int) -> bytes:
 class TtsEngine:
     """Nạp model một lần; synthesize an toàn đa luồng bằng lock."""
 
-    def __init__(self, config: dict, checkpoint: str, vocoder_checkpoint: str | None = None) -> None:
-        self.synthesizer = Synthesizer(config, checkpoint, vocoder_checkpoint)
+    def __init__(
+        self,
+        config: dict,
+        checkpoint: str,
+        vocoder_checkpoint: str | None = None,
+        *,
+        device: str | None = None,
+    ) -> None:
+        self.synthesizer = Synthesizer(config, checkpoint, vocoder_checkpoint, device=device)
         self.lock = threading.Lock()
 
     @property
@@ -164,9 +171,10 @@ def serve(
     vocoder_checkpoint: str | None = None,
     host: str = "127.0.0.1",
     port: int = 8000,
+    device: str | None = None,
 ) -> None:
     """Chạy server tới khi Ctrl-C (blocking)."""
-    engine = TtsEngine(config, checkpoint, vocoder_checkpoint)
+    engine = TtsEngine(config, checkpoint, vocoder_checkpoint, device=device)
     httpd = create_server(engine, host, port)
     print(f"ViFastTts server: http://{host}:{httpd.server_address[1]} (Ctrl-C để dừng)")
     try:

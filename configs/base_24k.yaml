@@ -44,6 +44,8 @@ training:
   save_every: 5000
   num_workers: 4
   mixed_precision: true
+  # auto -> cuda nếu có, rồi Apple MPS, cuối cùng CPU.
+  device: auto
   # Cache feature mel/f0/vuv: true -> <output>/feature_cache, hoặc đặt cache_dir tường minh.
   cache_features: false
   cache_dir: null

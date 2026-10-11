@@ -217,13 +217,14 @@ def synthesize_cmd(
     overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc'"),
     peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
     max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
+    device: str = typer.Option("auto", help="auto | cpu | cuda | mps"),
 ) -> None:
     from vifasttts.infer import load_overrides, synthesize
     samples, sample_rate = synthesize(
         load_config(config), checkpoint, text, output,
         dialect=dialect, speed=speed, vocoder_checkpoint=vocoder_checkpoint,
         overrides=load_overrides(overrides) if overrides else None,
-        peak_normalize=peak_normalize, max_chars=max_chars,
+        peak_normalize=peak_normalize, max_chars=max_chars, device=device,
     )
     typer.echo(f"Đã ghi {output} ({samples} mẫu @ {sample_rate} Hz)")
 
@@ -265,6 +266,7 @@ def synthesize_batch_cmd(
     overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc'"),
     peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
     max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
+    device: str = typer.Option("auto", help="auto | cpu | cuda | mps"),
 ) -> None:
     """Tổng hợp nhiều câu từ file → thư mục WAV (nạp model một lần)."""
     from vifasttts.infer import load_overrides, synthesize_batch
@@ -285,7 +287,7 @@ def synthesize_batch_cmd(
         load_config(config), checkpoint, rows, output_dir,
         vocoder_checkpoint=vocoder_checkpoint, dialect=dialect, speed=speed,
         overrides=load_overrides(overrides) if overrides else None,
-        peak_normalize=peak_normalize, max_chars=max_chars,
+        peak_normalize=peak_normalize, max_chars=max_chars, device=device,
     )
     typer.echo(f"Đã ghi {len(paths)} file vào {output_dir}")
 
@@ -297,11 +299,13 @@ def serve_cmd(
     vocoder_checkpoint: str | None = typer.Option(None, help="Checkpoint vocoder (tùy chọn)"),
     host: str = typer.Option("127.0.0.1", help="Địa chỉ lắng nghe"),
     port: int = typer.Option(8000, help="Cổng"),
+    device: str = typer.Option("auto", help="auto | cpu | cuda | mps"),
 ) -> None:
     """HTTP server tối giản: POST /synthesize (JSON → WAV), GET /health, /info."""
     from vifasttts.server import serve
 
-    serve(load_config(config), checkpoint, vocoder_checkpoint=vocoder_checkpoint, host=host, port=port)
+    serve(load_config(config), checkpoint, vocoder_checkpoint=vocoder_checkpoint,
+          host=host, port=port, device=device)
 
 
 if __name__ == "__main__":

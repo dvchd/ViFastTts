@@ -259,6 +259,30 @@ def test_variant_configs_match_estimated_params():
     assert sum(p.numel() for p in ViFastTtsModel(large, sizes).parameters()) == 32_156_654
 
 
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="MPS không khả dụng")
+def test_mps_training_and_synthesis_smoke(tmp_path: Path):
+    """Mac Apple Silicon: train 1 bước + tổng hợp bằng MPS phải chạy được."""
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "s1.wav", freq=220)
+    metadata = tmp_path / "meta.csv"
+    with metadata.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh, delimiter="|")
+        writer.writerow(["s1", "Chào bạn"])
+    manifest = tmp_path / "manifest.jsonl"
+    build_manifest(str(metadata), str(wav_dir), str(manifest))
+
+    config = {**TINY_CONFIG, "training": {**TINY_CONFIG["training"], "device": "mps"}}
+    out = tmp_path / "mps_run"
+    train_reference(config, str(manifest), str(manifest), str(out), max_steps=1)
+    assert (out / "last.pt").exists()
+
+    wav_out = tmp_path / "mps.wav"
+    with pytest.warns(RuntimeWarning):  # chưa có vocoder riêng
+        samples, rate = synthesize(config, str(out / "last.pt"), "Chào", str(wav_out), device="mps")
+    assert wav_out.exists() and samples > 0 and rate == 24000
+
+
 def test_model_phonation_branch():
     config = {**TINY_CONFIG, "model": {**TINY_CONFIG["model"], "use_phonation": True}}
     sizes = _vocab_sizes()

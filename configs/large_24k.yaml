@@ -45,6 +45,8 @@ training:
   save_every: 5000
   num_workers: 4
   mixed_precision: true
+  # auto -> cuda nếu có, rồi Apple MPS, cuối cùng CPU.
+  device: auto
   cache_features: false
   cache_dir: null
 

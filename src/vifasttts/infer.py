@@ -34,15 +34,24 @@ class Synthesizer:
     — dùng cho streaming hoặc server; `synthesize` ghép lại + hậu xử lý + ghi WAV.
     """
 
-    def __init__(self, config: dict, checkpoint: str, vocoder_checkpoint: str | None = None) -> None:
+    def __init__(
+        self,
+        config: dict,
+        checkpoint: str,
+        vocoder_checkpoint: str | None = None,
+        *,
+        device: str | None = None,
+    ) -> None:
         import torch
 
+        from vifasttts.device import resolve_device
         from vifasttts.frontend.vocab import ComponentVocabs
         from vifasttts.models.istftnet import ISTFTNetLite
         from vifasttts.models.vifasttts import ViFastTtsModel
 
         validate_config(config, "acoustic")
         self.config = config
+        self.device = torch.device(resolve_device(device))
         self.sample_rate = int(config.get("sample_rate", 24000))
         self.vocabs = ComponentVocabs.default()
         sizes = [len(self.vocabs.onset), len(self.vocabs.medial), len(self.vocabs.nucleus),
@@ -51,6 +60,7 @@ class Synthesizer:
         self.model = ViFastTtsModel(config, sizes)
         state = torch.load(checkpoint, map_location="cpu")
         self.model.load_state_dict(state.get("model", state))
+        self.model.to(self.device)
         self.model.eval()
 
         mel_config = config["mel"]
@@ -75,6 +85,7 @@ class Synthesizer:
                 RuntimeWarning,
                 stacklevel=2,
             )
+        self.vocoder.to(self.device)
         self.vocoder.eval()
 
     def _render(self, text: str, dialect: str, speed: float, options) -> np.ndarray | None:
@@ -83,7 +94,9 @@ class Synthesizer:
         items = parse_text(text, dialect=dialect, options=options)
         if not items:
             return None
-        features = torch.tensor([[self.vocabs.encode(item) for item in items]], dtype=torch.long)
+        features = torch.tensor(
+            [[self.vocabs.encode(item) for item in items]], dtype=torch.long, device=self.device,
+        )
         with torch.no_grad():
             outputs = self.model(features)
             if speed != 1.0:
@@ -158,9 +171,10 @@ def synthesize(
     overrides: dict[str, str] | None = None,
     peak_normalize: bool = False,
     max_chars: int = 400,
+    device: str | None = None,
 ) -> tuple[int, int]:
     """text -> WAV (nạp model một lần). Trả về (số mẫu, sample_rate)."""
-    engine = Synthesizer(config, checkpoint, vocoder_checkpoint)
+    engine = Synthesizer(config, checkpoint, vocoder_checkpoint, device=device)
     return engine.synthesize(
         text, output, dialect=dialect, speed=speed, overrides=overrides,
         peak_normalize=peak_normalize, max_chars=max_chars,
@@ -177,9 +191,10 @@ def iter_synthesize(
     vocoder_checkpoint: str | None = None,
     overrides: dict[str, str] | None = None,
     max_chars: int = 400,
+    device: str | None = None,
 ) -> Iterator[tuple[np.ndarray, int]]:
     """Streaming: yield từng đoạn waveform khi tổng hợp (xem `Synthesizer`)."""
-    engine = Synthesizer(config, checkpoint, vocoder_checkpoint)
+    engine = Synthesizer(config, checkpoint, vocoder_checkpoint, device=device)
     return engine.iter_synthesize(
         text, dialect=dialect, speed=speed, overrides=overrides, max_chars=max_chars,
     )
@@ -197,9 +212,10 @@ def synthesize_batch(
     overrides: dict[str, str] | None = None,
     peak_normalize: bool = False,
     max_chars: int = 400,
+    device: str | None = None,
 ) -> list[Path]:
     """Tổng hợp danh sách (id, text) → `<output_dir>/<id>.wav` (nạp model một lần)."""
-    engine = Synthesizer(config, checkpoint, vocoder_checkpoint)
+    engine = Synthesizer(config, checkpoint, vocoder_checkpoint, device=device)
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
