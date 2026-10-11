@@ -40,7 +40,8 @@ Parser tham chiếu trong repository bao phủ các quy tắc lõi và bộ test
 - `pytest tests/test_parser_matrix.py tests/test_parser_edges.py` — cùng tính chất ở dạng
   test thường trực, kèm corpus từ thật/khó, chữ ngoài Latin và edge Unicode.
 - Tokenizer giữ cả chữ ngoài Latin (CJK, Cyrillic, Thái...) làm token fallback thay vì nuốt mất.
-- Các "alias" đã cố ý: `oo` luôn là nucleus O (từ vay); `uy` luôn là W + I;
+- Các "alias" đã cố ý: `oo` luôn là nucleus O (từ vay) — narrow IPA ghi `ɔː` vì đây là một
+  nguyên âm dài, **không phải nguyên âm đôi** (`xoong` nghe gần `xong`); `uy` luôn là W + I;
   `giê` luôn là GI + IÊ (`giếng` cùng vần `tiếng`).
 
 ## Lớp G2P tùy chọn (`frontend/g2p.py`) — IPA chuẩn theo phương ngữ

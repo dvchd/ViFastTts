@@ -65,6 +65,15 @@ def test_gi_shared_i_reads_as_zi():
     assert syllable_to_phonemes(parse_syllable("gìn")) == ("z", "i", "n", "˨˩")
 
 
+def test_oo_loanword_is_long_monophthong_not_diphthong():
+    # "oo" (xoong, moóc) là một nguyên âm /ɔ/ đọc dài, KHÔNG phải nguyên âm đôi.
+    # Broad gộp với "o" (gần đồng âm); narrow ghi độ dài từ chính tả.
+    assert syllable_to_phonemes(parse_syllable("xoong")) == ("s", "ɔ", "ŋ", "˧")
+    assert syllable_to_phonemes(parse_syllable("xoong"), style="narrow") == ("s", "ɔː", "ŋ", "˧")
+    assert syllable_to_phonemes(parse_syllable("xong"), style="narrow") == ("s", "ɔ", "ŋ", "˧")
+    assert syllable_to_phonemes(parse_syllable("moóc"), "south", style="narrow") == ("m", "ɔː", "k̚", "˧˥")
+
+
 def test_fallback_returns_empty():
     items = text_to_phonemes("Hello world")
     assert all(phonemes == () for phonemes in items)

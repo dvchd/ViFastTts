@@ -76,8 +76,10 @@ NUCLEUS_BROAD: dict[str, tuple[str, ...]] = {
     "Ơ": ("ɤ",), "U": ("u",), "Ư": ("ɯ",),
     "IÊ": ("iə",), "UÔ": ("uə",), "ƯƠ": ("ɯə",),
 }
-# Lưu ý: "oo" trong từ vay (xoong) được parser gộp vào nucleus trừu tượng "O"
-# (không phân biệt độ dài ở tầng thành phần), nên IPA cũng dùng "ɔ".
+# Lưu ý: "oo" (xoong, moóc) KHÔNG phải nguyên âm đôi — chỉ là một nguyên âm
+# /ɔ/ viết đôi trong từ vay/onomatopoeia, thường dài [ɔː]. Tầng thành phần gộp
+# vào nucleus "O" (gần đồng âm với "o"); style="narrow" dùng chính tả để ghi
+# độ dài [ɔː]. Nguyên âm đôi thật của tiếng Việt chỉ có IÊ/UÔ/ƯƠ (iə/uə/ɯə).
 
 # --- Phụ âm cuối ---
 
@@ -155,7 +157,15 @@ def syllable_to_phonemes(
     coda = list(CODA_BROAD[a.coda])
     if style == "narrow":
         coda = list(CODA_NARROW_OVERRIDES.get(a.coda, tuple(coda)))
-    phonemes = tuple(onset) + MEDIAL_BROAD[a.medial] + NUCLEUS_BROAD[a.nucleus] + tuple(coda)
+    nucleus = list(NUCLEUS_BROAD[a.nucleus])
+    if (
+        style == "narrow"
+        and a.nucleus == "O"
+        and (parsed.orthography.nucleus or "").lower() == "oo"
+    ):
+        # "oo" là o dài trong từ vay (xoong, boong, moóc); không phải âm đôi.
+        nucleus = ["ɔː"]
+    phonemes = tuple(onset) + MEDIAL_BROAD[a.medial] + tuple(nucleus) + tuple(coda)
     if not with_tone or tone_format == "none":
         return phonemes
     if tone_format == "number":
