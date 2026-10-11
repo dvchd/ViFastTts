@@ -8,7 +8,7 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **1838 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **2037 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối
@@ -79,12 +79,12 @@ dạng chính tả (Orthography) → dạng âm vị học (AbstractSyllable: 5 
   phụ đề **json3** làm timing (không dùng SRT chưa căn), QC im lặng/trùng/fallback/thưa,
   resume bằng `.done.json`; dataset card + giấy phép mặc định **CC BY 4.0** (kênh
   tham chiếu `@codelung` — audio mở, ai dùng cũng được).
-- Làm sạch dữ liệu lần 2 (kênh `@codelung`): mở rộng bảng fallback frontend lên ~470 từ
-  công nghệ + tên chữ cái, thêm `--respell-codes` (tách chữ-số, `MP3→em pê ba`,
-  `1.13.1→một mười ba một`) và overrides kênh; **kết quả thật: 31 video → 13.204 clip ·
-  51,04 giờ · fallback 1,69% âm tiết (từ 7,1%) · 63% clip 0 fallback · 0 vấn đề manifest**;
-  `train.jsonl`/`val.jsonl` chia theo video (44,36h/6,68h), không tải lại audio/phụ đề
-  (dùng `raw/` + `subs/` cache).
+- Làm sạch dữ liệu lần 2 (kênh `@codelung`): mở rộng bảng fallback frontend lên ~580 từ
+  công nghệ + 31 acronym + 149 overrides kênh, thêm `--respell-codes` (tách chữ-số,
+  `MP3→em pê ba`, `1.13.1→một mười ba một`) và cờ `--recut` (làm lại không tải);
+  **kết quả thật: 31 video → 13.217 clip · 51,05 giờ · fallback 1,40% âm tiết (từ 7,1%) ·
+  68% clip 0 fallback · đủ 6 thanh/11 coda · 0 vấn đề manifest**; `train.jsonl`/`val.jsonl`
+  chia theo video (44,37h/6,68h).
 
 ## 4. Kết quả audit (bằng chứng)
 

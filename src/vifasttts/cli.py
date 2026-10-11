@@ -124,6 +124,8 @@ def youtube_fetch_cmd(
     license: str = typer.Option("CC BY 4.0", help="Giấy phép mở ghi vào dataset card"),
     sleep: float = typer.Option(1.0, help="Nghỉ giữa các request (giây)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Chỉ liệt kê video, không tải"),
+    recut: bool = typer.Option(False, "--recut",
+                               help="Xoá kết quả cũ, cắt lại từ raw/ + subs/ (không tải lại)"),
     refresh: bool = typer.Option(False, help="Bỏ cache danh sách video (.videos.json)"),
     ytdlp_bin: str | None = typer.Option(None, "--ytdlp-bin", hidden=True,
                                           help="Lệnh yt-dlp thay thế (test/đường dẫn riêng)"),
@@ -158,6 +160,7 @@ def youtube_fetch_cmd(
         min_caption_density=min_caption_density, overrides=overrides_map,
         overrides_source=overrides, respell_codes=respell_codes,
         license=license, sleep=sleep, dry_run=dry_run, refresh=refresh,
+        recut=recut,
         ytdlp=shlex.split(ytdlp_bin) if ytdlp_bin else None, ffmpeg=ffmpeg_bin,
     ))
 

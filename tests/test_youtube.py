@@ -34,6 +34,11 @@ FAKE_YTDLP = textwrap.dedent(
             return args[args.index(name) + 1]
         return default
 
+    log = os.environ.get("FAKE_LOG")
+    if log:
+        mode = "list" if "-J" in args else "subs" if "--write-subs" in args else "audio"
+        Path(log).open("a", encoding="utf-8").write(mode + "\\n")
+
     if "-J" in args:
         print(os.environ["FAKE_ENTRIES"])
         sys.exit(0)
@@ -250,6 +255,21 @@ def test_fetch_dataset_respells_codes_end_to_end(tmp_path: Path, fake_ytdlp: Pat
     assert "phai" in records[0]["text"]
     assert "vê hai" in records[0]["text"]
     assert "em pê ba" in records[0]["text"]
+
+
+def test_fetch_dataset_recut_reuses_cache(tmp_path: Path, fake_ytdlp: Path, monkeypatch):
+    import dataclasses
+
+    _set_fake_env(monkeypatch, entries=ENTRIES[:1], subs={"vidA": SUBS["vidA"]})
+    calls = tmp_path / "calls.log"
+    monkeypatch.setenv("FAKE_LOG", str(calls))
+    options = _options(tmp_path, fake_ytdlp)
+    fetch_dataset(options, log=lambda _: None)
+    calls.write_text("", encoding="utf-8")
+    stats = fetch_dataset(dataclasses.replace(options, recut=True), log=lambda _: None)
+    assert stats["clips"] == 2
+    assert calls.read_text(encoding="utf-8") == ""  # không gọi yt-dlp lại lần nào
+    assert (options.out / "manifest.jsonl").exists()
 
 
 def test_fetch_dataset_retries_transient_error(tmp_path: Path, fake_ytdlp: Path, monkeypatch):

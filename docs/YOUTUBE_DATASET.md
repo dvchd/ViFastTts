@@ -45,10 +45,10 @@ vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/co
 Kết quả cuối in dạng "Tổng kết": số video xử lý, số clip, tổng giờ, số bị lọc, số âm tiết
 theo coverage. Dataset card ở `data/codelung/dataset_card.md`.
 
-> **Lần chạy thật tham chiếu** (kênh `@codelung`, 12/10/2026): 31 video → **13.204 clip ·
-> 51,04 giờ · fallback 1,69% âm tiết (7,1% trước khi làm sạch) · 63% clip 0 fallback ·
-> 0 vấn đề manifest**; `train.jsonl`/`val.jsonl` chia theo video (44,36h / 6,68h) bằng
-> `tools/split_manifest.py`.
+> **Lần chạy thật tham chiếu** (kênh `@codelung`, 12/10/2026): 31 video → **13.217 clip ·
+> 51,05 giờ · fallback 1,40% âm tiết (7,1% trước khi làm sạch) · 68% clip 0 fallback ·
+> đủ 6 thanh/11 coda · 0 vấn đề manifest**; `train.jsonl`/`val.jsonl` chia theo video
+> (44,37h / 6,68h) bằng `tools/split_manifest.py`.
 
 ## 4. Luồng hoạt động
 
@@ -76,7 +76,7 @@ Chi tiết làm sạch:
   phụ đề nói thật thường 11–16 ký tự/s).
 - **Text** trong `metadata.csv` đã chuẩn hoá số/ngày/giờ theo vùng (`--dialect`), đúng dạng
   "đọc lên" để train; SRT giữ dạng chữ người đọc.
-- **Từ lạ (OOV)**: bảng chuẩn frontend phủ sẵn ~450 từ công nghệ + tên chữ cái
+- **Từ lạ (OOV)**: bảng chuẩn frontend phủ sẵn ~580 từ công nghệ + 31 acronym + tên chữ cái
   (`code→cốt`, `user→iu dơ`, `b→bê`...); phần còn lại in top từ lạ + ghi `oov_report.json`
   để điền vào `--overrides` (mẫu: `configs/overrides_tech_vi.json` — `clot→cờ lốt`,
   `clon→cờ lon`, `grock→gờ rốc`...). Clip quá nhiều từ lạ bị lọc bằng `--max-fallback-ratio`.
@@ -110,6 +110,7 @@ Chi tiết làm sạch:
 | `--license` | `CC BY 4.0` | Giấy phép ghi vào dataset card (ví dụ `CC0 1.0`) |
 | `--sleep` | 1,0 s | Nghỉ giữa các request |
 | `--dry-run` / `--refresh` | tắt | Xem trước không tải / bỏ cache danh sách video |
+| `--recut` | tắt | Xoá kết quả cũ, cắt lại từ `raw/` + `subs/` (không tải lại) — dùng sau khi sửa overrides |
 
 ## 6. Cấu trúc output
 
@@ -149,10 +150,10 @@ vifasttts build-lexicon --manifest data/codelung/manifest.jsonl --output data/co
 vifasttts cache-features --manifest data/codelung/manifest.jsonl \
   --config configs/base_24k.yaml --cache-dir cache/codelung
 
-# thấy oov_report.json có nhiều từ lạ thì điền cách đọc rồi chạy lại (nhanh, dùng lại raw/ + subs/)
+# thấy oov_report.json có nhiều từ lạ thì điền cách đọc rồi cắt lại từ cache (không tải lại)
 # ví dụ overrides: {"code": "cốt", "copy": "cô pi"} — mẫu: configs/overrides_tech_vi.json
 vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/codelung \
-  --overrides configs/overrides_tech_vi.json --refresh
+  --overrides configs/overrides_tech_vi.json --recut
 
 # báo cáo dataset + chia train/val theo video (tránh rò rỉ)
 python tools/dataset_report.py --dataset data/codelung

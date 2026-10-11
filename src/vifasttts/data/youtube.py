@@ -90,6 +90,7 @@ class FetchOptions:
     sleep: float = 1.0
     retry_delay: float = 6.0  # giây × lần thử (nội bộ; test đặt 0 để chạy nhanh)
     demo_candidates: int = 5  # demo thử lần lượt bao nhiêu video ngắn nhất
+    recut: bool = False  # xoá kết quả cũ rồi cắt lại từ raw/subs cache (không tải)
     dry_run: bool = False
     refresh: bool = False
     ytdlp: list[str] | None = None
@@ -564,6 +565,20 @@ def _write_stats(options: FetchOptions, stats: dict[str, Any]) -> Path:
     return path
 
 
+def _clear_derived(options: FetchOptions, *, log: LogFn) -> None:
+    """Xoá kết quả đã sinh (audio/clip/manifest/card) để cắt lại từ cache raw/ + subs/."""
+    for name in ("audio", "clips.jsonl", ".done.json", "manifest.jsonl", "metadata.csv",
+                 "stats.json", "oov_report.json", "dataset_card.md", "LICENSE-DATASET.txt"):
+        path = options.out / name
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
+    for srt in (options.out / "subs").glob("*.srt"):
+        srt.unlink()
+    log("--recut: đã xoá kết quả cũ; cắt lại từ raw/ + subs/ (không tải lại)")
+
+
 def fetch_dataset(options: FetchOptions, *, log: LogFn = print) -> dict[str, Any]:
     """Chạy toàn bộ luồng lấy dữ liệu YouTube → dataset sạch, trả dict thống kê.
 
@@ -581,6 +596,8 @@ def fetch_dataset(options: FetchOptions, *, log: LogFn = print) -> dict[str, Any
         english_overrides={key.lower(): value for key, value in options.overrides.items()},
     )
     oov_counter: Counter[str] = Counter()
+    if options.recut and not options.dry_run:
+        _clear_derived(options, log=log)
     log(f"yt-dlp: {' '.join(ytdlp)}")
     log(f"ffmpeg: {ffmpeg or 'KHÔNG CÓ (cài imageio-ffmpeg hoặc brew install ffmpeg)'}")
 
