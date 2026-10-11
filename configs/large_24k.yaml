@@ -1,0 +1,74 @@
+project: ViFastTts
+seed: 42
+language: vi
+sample_rate: 24000
+
+# Biến thể LỚN (≈ 32,1 triệu tham số) — khuyến nghị khi dữ liệu ≥ 40-50 giờ.
+# Ước lượng: docs/TRAINING_ESTIMATES.md
+input:
+  unit: syllable
+  features: [onset, medial, nucleus, coda, tone, boundary, punctuation]
+  dialect_conditioning: false
+  speaker_conditioning: false
+  style_conditioning: false
+
+mel:
+  n_fft: 1024
+  win_length: 1024
+  hop_length: 256
+  n_mels: 100
+  f_min: 0
+  f_max: 12000
+
+model:
+  component_dim: 128
+  hidden_size: 320
+  encoder_layers: 8
+  decoder_layers: 5
+  attention_heads: 8
+  ffn_size: 1280
+  conv_kernel_size: 15
+  dropout: 0.1
+  duration_layers: 3
+  variance_layers: 3
+  use_phonation: false
+
+training:
+  batch_size: 16
+  learning_rate: 0.0002
+  weight_decay: 0.0001
+  max_steps: 800000
+  warmup_steps: 15000
+  grad_clip: 1.0
+  log_every: 50
+  validate_every: 2000
+  save_every: 5000
+  num_workers: 4
+  mixed_precision: true
+  cache_features: false
+  cache_dir: null
+
+phonation:
+  enabled: false
+
+vocoder_training:
+  batch_size: 8
+  learning_rate: 0.0002
+  max_steps: 400000
+  num_workers: 4
+  log_every: 100
+  save_every: 5000
+  hidden: 384
+  upsample_ratio: 4
+  discriminator_channels: 32
+  mel_weight: 45.0
+  feature_matching_weight: 2.0
+  adversarial_weight: 1.0
+
+loss_weights:
+  mel: 1.0
+  duration: 1.0
+  f0: 1.0
+  vuv: 0.5
+  energy: 0.5
+  tone: 0.25

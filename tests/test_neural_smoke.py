@@ -246,6 +246,19 @@ def test_config_base_loads():
     assert config["model"]["hidden_size"] == 256
 
 
+def test_variant_configs_match_estimated_params():
+    """Config biến thể phải khớp số tham số ghi trong TRAINING_ESTIMATES.md."""
+    from vifasttts.config import validate_config
+
+    sizes = _vocab_sizes()
+    small = load_config("configs/small_24k.yaml")
+    large = load_config("configs/large_24k.yaml")
+    validate_config(small, "acoustic")
+    validate_config(large, "acoustic")
+    assert sum(p.numel() for p in ViFastTtsModel(small, sizes).parameters()) == 6_139_054
+    assert sum(p.numel() for p in ViFastTtsModel(large, sizes).parameters()) == 32_156_654
+
+
 def test_model_phonation_branch():
     config = {**TINY_CONFIG, "model": {**TINY_CONFIG["model"], "use_phonation": True}}
     sizes = _vocab_sizes()
