@@ -45,3 +45,44 @@ def validate_manifest(manifest: str | Path, wav_dir: str | Path | None = None) -
             if not row.get("syllables"):
                 issues.append({"line": lineno, "id": row.get("id"), "issue": "empty_syllables"})
     return {"total": total, "issues": issues}
+
+
+def coverage_report(manifest: str | Path) -> dict[str, Any]:
+    """Đếm coverage âm vị học của manifest để kiểm tra trước khi train.
+
+    Trả về số âm tiết, số fallback, phân bố onset/nucleus/coda/tone và các
+    thanh còn thiếu so với 6 thanh (dùng cho bước "coverage report" trong
+    docs/DATA_PIPELINE.md).
+    """
+    from collections import Counter
+
+    onsets: Counter[str] = Counter()
+    nuclei: Counter[str] = Counter()
+    codas: Counter[str] = Counter()
+    tones: Counter[str] = Counter()
+    total = 0
+    fallback = 0
+    with Path(manifest).open("r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            for syllable in row.get("syllables", []):
+                total += 1
+                if syllable.get("status") == "FALLBACK_REQUIRED":
+                    fallback += 1
+                abstract = syllable.get("abstract", {})
+                onsets[abstract.get("onset")] += 1
+                nuclei[abstract.get("nucleus")] += 1
+                codas[abstract.get("coda")] += 1
+                tones[abstract.get("tone")] += 1
+    all_tones = ["NGANG", "HUYEN", "SAC", "HOI", "NGA", "NANG"]
+    return {
+        "syllables": total,
+        "fallback": fallback,
+        "onset": dict(onsets),
+        "nucleus": dict(nuclei),
+        "coda": dict(codas),
+        "tone": dict(tones),
+        "missing_tones": [tone for tone in all_tones if tone not in tones],
+    }

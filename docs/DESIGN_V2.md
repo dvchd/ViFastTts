@@ -1,5 +1,9 @@
 # Thiết kế hệ thống TTS tiếng Việt một giọng, chất lượng cao và tốc độ nhanh
 
+> **Tài liệu thiết kế gốc (v2.0, 09/10/2026).** Trạng thái as-built hiện tại và các
+> sai khác so với thiết kế nằm ở `docs/ARCHITECTURE.md` và `docs/PROJECT_STATUS.md`;
+> đề xuất nâng cấp chi tiết ở `docs/TTS_ARCHITECTURE_RESEARCH.md` (mục 9).
+
 **Phiên bản:** 2.0, kiến trúc đã cải tiến  
 **Ngày:** 09/10/2026  
 **Phạm vi phiên bản đầu:** một người nói, một checkpoint, tiếng Việt, ưu tiên giọng miền Bắc, 24 kHz, chạy nhanh trên CPU, Apple Silicon, NVIDIA và ARM  

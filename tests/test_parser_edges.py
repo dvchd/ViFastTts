@@ -19,9 +19,15 @@ def test_bare_q_is_invalid(word):
     assert safe_parse_syllable(word) is None
 
 
-@pytest.mark.parametrize("word", ["quả", "quy", "quốc", "quánh", "quạnh", "quyên"])
+@pytest.mark.parametrize("word", ["quả", "quy", "quốc", "quánh", "quạnh", "quyên", "quơ", "quân", "quay", "quê"])
 def test_qu_forms_still_parse(word):
     assert safe_parse_syllable(word) is not None
+
+
+@pytest.mark.parametrize("word", ["quo", "quom", "quò", "quu", "quoo", "quuô"])
+def test_qu_with_invalid_nucleus_is_fallback(word):
+    """Sau qu, âm đệm W chỉ kết hợp với a ă â e ê i/y ô ơ (quốc, quơ...)."""
+    assert safe_parse_syllable(word) is None
 
 
 @pytest.mark.parametrize("text,expected", [

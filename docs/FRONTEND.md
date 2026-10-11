@@ -20,6 +20,7 @@ ONSET + MEDIAL + NUCLEUS + CODA + TONE
 - Giữ S, X riêng.
 - Giữ HỎI, NGÃ riêng.
 - `qu` ánh xạ K + W.
+- Sau `qu`, âm đệm W chỉ kết hợp với `a ă â e ê i/y ô ơ` (`qua`, `quăn`, `quân`, `que`, `quê`, `quy`, `quốc`, `quơ`) — `quo`, `quu` là fallback.
 - `q` chỉ tồn tại trong `qu`; `qa`, `qi`, `qy`... là fallback (không phải âm đầu hợp lệ tiếng Việt).
 - `i/y` cuối có thể ánh xạ J.
 - `u/o` cuối có thể ánh xạ W.

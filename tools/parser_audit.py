@@ -19,6 +19,8 @@ from itertools import product
 from vifasttts.frontend.orthography import compose_canonical
 from vifasttts.frontend.rules import (
     CODA_ABSTRACT,
+    CODA_TONE_COMPATIBILITY,
+    MEDIAL_NUCLEUS_COMPATIBILITY,
     NUCLEUS_ABSTRACT,
     ONSET_ABSTRACT,
     SPECIAL_VOWELS,
@@ -26,7 +28,6 @@ from vifasttts.frontend.rules import (
 from vifasttts.frontend.syllable import _parse_vowel, safe_parse_syllable
 from vifasttts.types import Tone
 
-STOP_CODAS = {"p", "t", "c", "ch"}
 _WORD_RE = re.compile(r"[A-Za-zÀ-ỹĐđ]+")
 
 
@@ -36,12 +37,14 @@ def run_matrix() -> list[str]:
     onsets = [onset for onset in ONSET_ABSTRACT if onset]
     vowel_parts = list(NUCLEUS_ABSTRACT) + list(SPECIAL_VOWELS)
     for onset, vowel_part, coda, tone in product(onsets, vowel_parts, list(CODA_ABSTRACT), list(Tone)):
-        if coda in STOP_CODAS and tone not in (Tone.SAC, Tone.NANG):
+        if tone.value not in CODA_TONE_COMPATIBILITY[CODA_ABSTRACT[coda]]:
             continue
         try:
-            medial_s, nucleus_s, _, _ = _parse_vowel(vowel_part, onset == "qu")
+            medial_s, nucleus_s, medial_a, nucleus_a = _parse_vowel(vowel_part, onset == "qu")
         except ValueError:
             continue  # vần không hợp lệ sau qu
+        if nucleus_a not in MEDIAL_NUCLEUS_COMPATIBILITY[medial_a]:
+            continue  # ví dụ qu + o/u: không hợp lệ (xem rules.py)
         word = compose_canonical(onset, medial_s, nucleus_s, coda, tone)
         parsed = safe_parse_syllable(word)
         total += 1
@@ -49,6 +52,10 @@ def run_matrix() -> list[str]:
             problems.append(f"FALLBACK: {word!r} ({onset}|{vowel_part}|{coda}|{tone.value})")
             continue
         first = parsed.abstract
+        if first.nucleus not in MEDIAL_NUCLEUS_COMPATIBILITY[first.medial]:
+            problems.append(f"MEDIAL-NUCLEUS: {word!r}: {first.medial}+{first.nucleus}")
+        if first.tone.value not in CODA_TONE_COMPATIBILITY[first.coda]:
+            problems.append(f"CODA-TONE: {word!r}: {first.coda}+{first.tone.value}")
         canonical = compose_canonical(
             parsed.orthography.onset, parsed.orthography.medial,
             parsed.orthography.nucleus, parsed.orthography.coda, first.tone,

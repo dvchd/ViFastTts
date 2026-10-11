@@ -74,6 +74,8 @@ Ví dụ mới: `25/12/2023` → "ngày hai mươi lăm tháng mười hai năm 
 pytest
 ruff check .
 mypy src/vifasttts
+python tools/parser_audit.py                       # audit parser: ma trận ~49k tổ hợp
+python tools/parser_audit.py --wordlist data.txt   # audit trên danh sách từ (1 từ/dòng)
 ```
 
 ## Tạo manifest từ WAV và metadata
@@ -86,6 +88,8 @@ vifasttts build-manifest \
 
 vifasttts validate-manifest --manifest data/manifest.jsonl --wav-dir data/wavs
 ```
+
+`validate-manifest` kiểm tra WAV tồn tại và in **coverage** (số âm tiết, fallback, phân bố tone/coda, thanh còn thiếu) để đối chiếu với `docs/DATA_PIPELINE.md` bước 10.
 
 Định dạng `metadata.csv`:
 
@@ -143,6 +147,7 @@ PyO3 hoặc C ABI có thể được dùng để gọi Rust từ Python. Việc 
 ## Tài liệu
 
 - `docs/ARCHITECTURE.md` — kiến trúc as-built và lộ trình.
+- `docs/PROJECT_STATUS.md` — trạng thái tổng hợp, nhật ký quyết định, kết quả audit, việc còn lại.
 - `docs/GLOSSARY.md` — thuật ngữ: cấu trúc âm tiết (nguồn gốc, âm đầu–đệm–chính–cuối), dạng âm vị học, ngữ âm; quy ước đặt tên.
 - `docs/SYLLABLE_GUIDE.md` — hướng dẫn tách âm tiết cho người không chuyên (5 bước, ví dụ, bài tập, tài liệu tham khảo).
 - `docs/FRONTEND.md` — parser, G2P, OOV.

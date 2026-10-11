@@ -13,7 +13,13 @@ Quy ước quan trọng:
   Huế đủ tin cậy — xem mục "Trung" trong docs/G2P_VIETNAMESE.md.
 - Thanh điệu: mặc định ký hiệu Chao (˧ ˨˩ ...); có thể xuất số theo
   quy ước viG2P (1 ngang, 2 huyền, 3 ngã, 4 hỏi, 5 sắc, 6 nặng) để
-  đối chiếu với hệ bên ngoài.
+  đối chiếu với hệ bên ngoài. Đường nét theo Kirby 2011 (Hà Nội) và
+  Huỳnh Công 2003 (TP.HCM); Help:IPA/Vietnamese có bảng khác đôi chỗ
+  (ví dụ hỏi Hà Nội ˧˩ thay vì ˧˩˧) — dự án giữ nguồn đã chọn.
+- Nguyên âm: `OO` là nucleus riêng [ɔː] (xoong, moóc); `ay/au` dùng ă
+  ngắn [a] còn `ai/ao` dùng a dài [aː] (Help:IPA/Vietnamese).
+- Ghi chú phương ngữ: Hà Nội đọc `ưu/ươu` ngả về [iw/iəw] (Thompson 1965)
+  — bảng broad giữ /ɯw/ɯəw/ theo âm vị, không hạ xuống i.
 - Không có trọng âm từ vựng trong tiếng Việt; không thêm dấu ˈ.
 
 LƯU Ý KIẾN TRÚC: module này KHÔNG được import bởi `models/`, `train.py`,

@@ -38,13 +38,19 @@ def validate_manifest_cmd(
     manifest: str = typer.Option(..., help="File JSONL cần kiểm tra"),
     wav_dir: str | None = typer.Option(None, help="Thư mục WAV (nếu manifest chỉ có id)"),
 ) -> None:
-    from vifasttts.data.manifest import validate_manifest
+    from vifasttts.data.manifest import coverage_report, validate_manifest
     report = validate_manifest(manifest, wav_dir)
     typer.echo(f"Tổng {report['total']} dòng, {len(report['issues'])} vấn đề")
     for issue in report["issues"][:20]:
         typer.echo(f"  dòng {issue['line']}: {issue['id']} - {issue['issue']} ({issue.get('path', '')})")
     if len(report["issues"]) > 20:
         typer.echo(f"  ... và {len(report['issues']) - 20} vấn đề khác")
+    coverage = coverage_report(manifest)
+    typer.echo(f"Coverage: {coverage['syllables']} âm tiết, {coverage['fallback']} fallback")
+    typer.echo(f"  tone: {coverage['tone']}")
+    typer.echo(f"  coda: {coverage['coda']}")
+    if coverage["missing_tones"]:
+        typer.echo(f"  thiếu thanh: {coverage['missing_tones']}")
 
 
 @app.command("train")

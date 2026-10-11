@@ -2,7 +2,7 @@ import csv
 import json
 from pathlib import Path
 
-from vifasttts.data.manifest import build_manifest, validate_manifest
+from vifasttts.data.manifest import build_manifest, coverage_report, validate_manifest
 
 
 def test_build_manifest_skips_bad_rows(tmp_path: Path):
@@ -65,3 +65,37 @@ def test_validate_manifest_uses_audio_path(tmp_path: Path):
     (wav_dir / "s1.wav").write_bytes(b"RIFF")
     report = validate_manifest(str(out))
     assert report["issues"] == []
+
+
+def test_coverage_report(tmp_path: Path):
+    meta = tmp_path / "meta.csv"
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    out = tmp_path / "out.jsonl"
+    with open(meta, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f, delimiter="|")
+        w.writerow(["s1", "Chào bạn"])
+        w.writerow(["s2", "Hôm nay"])
+    build_manifest(str(meta), str(wav_dir), str(out))
+
+    coverage = coverage_report(str(out))
+    assert coverage["syllables"] == 4
+    assert coverage["fallback"] == 0
+    assert coverage["tone"] == {"NGANG": 2, "HUYEN": 1, "NANG": 1}
+    assert coverage["coda"] == {"W": 1, "N": 1, "M": 1, "J": 1}
+    assert "SAC" in coverage["missing_tones"]
+
+
+def test_coverage_report_counts_fallback(tmp_path: Path):
+    meta = tmp_path / "meta.csv"
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    out = tmp_path / "out.jsonl"
+    with open(meta, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f, delimiter="|")
+        w.writerow(["s1", "Hello"])
+    build_manifest(str(meta), str(wav_dir), str(out))
+
+    coverage = coverage_report(str(out))
+    assert coverage["syllables"] == 1
+    assert coverage["fallback"] == 1

@@ -46,9 +46,12 @@ STOP_CODAS = {"P", "T", "C", "CH"}
 # Productive legal combinations used by validators, coverage reports and future
 # Rust parity tests. Orthographic validity should still be checked against a
 # generated syllable lexicon before production training.
+# W (âm đệm o/u) chỉ kết hợp với: oa, oă, oe, uâ, uê, uy, uyê, uô?, uơ — xác
+# minh trên wordlist 39k từ: W+{A,Ă,Â,E,Ê,I,IÊ,Ô,Ơ} (Ô từ "quốc"); không có
+# W+O hay W+U trong từ thật.
 MEDIAL_NUCLEUS_COMPATIBILITY = {
     "NONE": set(NUCLEUS_ABSTRACT.values()),
-    "W": {"A", "Ă", "Â", "E", "Ê", "I", "Ơ", "IÊ"},
+    "W": {"A", "Ă", "Â", "E", "Ê", "I", "Ô", "Ơ", "IÊ"},
 }
 
 CODA_TONE_COMPATIBILITY = {

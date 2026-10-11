@@ -5,6 +5,7 @@ import re
 from vifasttts.frontend.rules import (
     CODA_ABSTRACT,
     CONSONANT_CODAS,
+    MEDIAL_NUCLEUS_COMPATIBILITY,
     NUCLEUS_ABSTRACT,
     ONSET_ABSTRACT,
     ONSET_SPELLINGS,
@@ -85,6 +86,8 @@ def validate(parsed: ParsedSyllable) -> None:
     a = parsed.abstract
     if not a.nucleus or a.nucleus == "NONE":
         raise ValueError("Âm tiết phải có nucleus")
+    if a.nucleus not in MEDIAL_NUCLEUS_COMPATIBILITY.get(a.medial, set()):
+        raise ValueError(f"Âm đệm {a.medial} không kết hợp với nguyên âm {a.nucleus}")
     if a.coda in STOP_CODAS and a.tone not in {Tone.SAC, Tone.NANG}:
         raise ValueError("Coda tắc P/T/C/CH chỉ kết hợp với thanh sắc hoặc nặng")
 
