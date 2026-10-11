@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "vifasttts"
 version = "0.1.0"
-description = "Structured single-speaker Vietnamese TTS research toolkit"
+description = "Vietnamese single-speaker TTS toolkit: structured 5-component syllable frontend, non-autoregressive model, ONNX export"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
