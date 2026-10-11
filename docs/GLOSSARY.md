@@ -122,6 +122,23 @@ nghịch nằm ở cặp đó — xem `tests/test_spelling_bijection.py`.
   và không nên tách ở tầng âm vị — đó là quy ước chính tả, được bảo toàn ở tầng
   orthography (xem `docs/NORMALIZER.md` mục "Biến thể i/y").
 
+## Mô hình âm tiết quốc tế (tham chiếu nhanh)
+
+Khi đọc tài liệu nước ngoài, các thuật ngữ dưới đây tương ứng với mô hình của repo
+(chi tiết + nguồn: `docs/SYLLABLE_SYSTEMS_RESEARCH.md`):
+
+| Thuật ngữ quốc tế | Tiếng Việt | Tương ứng repo |
+| --- | --- | --- |
+| onset / initial | âm đầu | `ONSET` (+ `MEDIAL` tách riêng) |
+| medial / onglide | âm đệm | `MEDIAL = W` (không có slot riêng cho onglide khác) |
+| nucleus | âm chính | `NUCLEUS` (gồm cả `IÊ/UÔ/ƯƠ/OO`) |
+| coda / offglide | âm cuối (bán âm cuối `j/w` + phụ âm cuối) | `CODA` (`J`, `W`, `M`, `N`...) |
+| rime / rhyme / final | vần | `MEDIAL + NUCLEUS + CODA` (repo tách rời, có thể gộp lại) |
+| tone / toneme | thanh điệu | `TONE` — thành phần riêng (autosegmental) |
+| mora | đơn vị thời lượng (Nhật) | **Không dùng** cho tiếng Việt |
+| syllabification | tách ranh giới âm tiết trong chuỗi âm vị | **Không cần**: ranh giới đã là khoảng trắng |
+| tone sandhi | biến điệu theo ngữ cảnh | Không áp dụng ở tầng syllable (tiếng Việt không có sandhi bắt buộc như Trung/Thái) |
+
 ## Tránh dùng
 
 - "trừu tượng"/"abstract" một mình — quá chung, dễ lẫn với lớp lập trình.

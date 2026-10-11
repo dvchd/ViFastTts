@@ -8,9 +8,13 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **834 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **847 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
+- Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối
+  **0 lỗi cấu trúc**; **0 rime ngoài bảng**; đo được mức "nhận rộng" (180/264 rime,
+  2.663/6.336 shape có trong ngữ liệu) — chi tiết: `docs/SYLLABLE_SYSTEMS_RESEARCH.md`.
+  `tools/parser_audit.py --wordlist` nay in luôn coverage (shape/rime/hapax).
 - Export ONNX chạy với batch/số âm tiết/độ dài frame động (kiểm chứng onnxruntime).
 
 ## 2. Kiến trúc chốt
@@ -90,9 +94,14 @@ python tools/parser_audit.py --wordlist words.txt   # audit từ điển
    ONNX (ConvTranspose) cho phần vocoder — §9.9/§9.12.
 4. **Quantization** FP16/INT8 từng phần, calibration đủ 6 thanh × coda tắc.
 5. **Strict mode / lexicon** cho chính tả không hợp lệ; mở rộng OOV resolver cho
-   từ vay viết liền (`palăng`, `a-xít`...).
-6. **G2P Trung**: bảng thanh Huế (WikiPron hue / MFA Huế); tùy chọn quy ước i/y.
+   từ vay viết liền (`palăng`, `a-xít`...). Thiết kế 3 mức `open/strict/corpus`
+   và bằng chứng "nhận rộng" (84 rime, 6 cặp onset×nucleus chưa gặp):
+   `docs/SYLLABLE_SYSTEMS_RESEARCH.md` mục 7.3.
+6. **G2P Trung**: bảng thanh Huế (WikiPron hue ~30.242 mục / MFA Huế); thêm
+   biến thể Nam cho `OO` (`xoong`≈`xong`) và ghi chú `ưu/ươu` Hà Nội.
 7. **Cache feature/duration** cho training quy mô lớn (hiện trích tại chỗ).
+8. **Benchmark A/B frontend** (char/BPE vs phoneme vs vần vs 5 slot) trên cùng
+   corpus — literature hiện chưa có so sánh trực tiếp (research gap).
 
 ## 7. Commit tiêu biểu trong phiên
 

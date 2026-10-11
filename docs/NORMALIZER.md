@@ -26,6 +26,14 @@ Quy tắc hiện đại: `oa/oe/uy` đặt dấu trên chữ thứ hai (`hoà`, 
 Dấu thanh **chỉ** nằm trên chữ nguyên âm; parser bóc dấu ở bất kỳ đâu rồi
 `compose_canonical` đặt lại đúng âm chính (kể cả khi dấu lỡ nằm trên phụ âm).
 
+**Cơ sở văn bản:** lối đặt dấu trên âm chính là lối được
+**Quyết định 1989/2018/QĐ-BGDĐT** (Điều 8 — chính tả trong Chương trình, SGK phổ thông)
+quy định: `hoà nhạc`, `quý hoá`, `thuỷ thủ`, `mạnh khoẻ`. Lưu ý: Quyết định 240/QĐ (1984)
+thường bị gán nhầm nội dung này — văn bản 1984 chỉ quy định các trường hợp chính tả
+chưa thống nhất và tên riêng nước ngoài. Thực tế văn bản nhà nước vẫn trộn hai lối
+(Quốc hội dùng "cộng hoà", cổng Chính phủ dùng "cộng hòa"), nên repo chọn lối hiện đại
+làm mặc định và cho phép giữ lối cũ bằng `canonical_tone_spelling=False`.
+
 **Vì sao dấu nằm trên âm chính?** Theo hệ thống âm vị, dấu thanh là thuộc tính của
 âm tiết gắn với **nucleus**: `hoa` = `(H, W, A, NONE, HUYEN)`, âm đệm `W` viết bằng
 `o` không mang thanh, nên dấu đặt trên `a` → `hoà`. Lối cũ `hòa` cho **cùng bộ âm vị**

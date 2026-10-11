@@ -101,6 +101,27 @@ def run_wordlist(path: str) -> None:
     for key, words in sorted(collisions.items()):
         print("  ", key, sorted(words))
 
+    # Coverage: ngữ liệu phủ bao nhiêu rime/shape, và phần parser "nhận rộng"
+    accepted_rimes = {
+        (medial, nucleus, coda)
+        for medial, nuclei in MEDIAL_NUCLEUS_COMPATIBILITY.items()
+        for nucleus in nuclei
+        for coda in CODA_ABSTRACT.values()
+    }
+    seen_rimes = {(medial, nucleus, coda) for (_o, medial, nucleus, coda, _t) in ok}
+    seen_shapes = {(onset, medial, nucleus, coda) for (onset, medial, nucleus, coda, _t) in ok}
+    shape_words: dict[tuple[str, str, str, str], set[str]] = defaultdict(set)
+    for (onset, medial, nucleus, coda, _tone), words in ok.items():
+        shape_words[(onset, medial, nucleus, coda)].update(words)
+    hapax = sum(1 for words in shape_words.values() if len(words) == 1)
+    missing = sorted(accepted_rimes - seen_rimes)
+    print(f"Coverage: shape (onset×rime) {len(seen_shapes)} | rime {len(seen_rimes)}/{len(accepted_rimes)} | "
+          f"shape chỉ có 1 âm tiết: {hapax}")
+    if missing:
+        preview = ", ".join(f"{m}+{n}+{c}" for m, n, c in missing[:12])
+        print(f"Rime bảng chấp nhận nhưng ngữ liệu chưa từng thấy ({len(missing)}): {preview}"
+              + (" ..." if len(missing) > 12 else ""))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

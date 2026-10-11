@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from vifasttts.frontend.orthography import compose_canonical
 from vifasttts.frontend.pipeline import parse_text
 from vifasttts.frontend.syllable import parse_syllable, safe_parse_syllable
 from vifasttts.types import ParseStatus
@@ -56,6 +57,38 @@ def test_uppercase_and_diacritics():
     assert parse_syllable("QUỐC").abstract.nucleus == "Ô"
     assert parse_syllable("GÌ").abstract.onset == "GI"
     assert parse_syllable("ĐƯỜNG").abstract.nucleus == "ƯƠ"
+
+
+@pytest.mark.parametrize("word", ["ooc", "moc", "hoch", "mach", "cêt"])
+def test_stop_coda_requires_sac_or_nang(word):
+    """Coda tắc P/T/C/CH chỉ đi với sắc/nặng: "ooc" ngang là fallback."""
+    assert safe_parse_syllable(word) is None
+
+
+@pytest.mark.parametrize("word", ["moóc", "mọc", "hoạch", "mách", "tết"])
+def test_stop_coda_with_valid_tone_parses(word):
+    assert safe_parse_syllable(word) is not None
+
+
+def test_hyphenated_loan_splits_into_syllables():
+    items = parse_text("a-xít và pa-lăng")
+    assert [item.raw for item in items] == ["a", "xít", "và", "pa", "lăng"]
+    assert all(item.status == ParseStatus.VALID for item in items)
+
+
+def test_single_tone_mark_doubled_is_canonicalized():
+    # "hòà" (cùng một dấu huyền dán hai lần) vẫn parse; compose về dạng chuẩn.
+    parsed = parse_syllable("hòà")
+    o = parsed.orthography
+    composed = compose_canonical(o.onset, o.medial, o.nucleus, o.coda, parsed.abstract.tone)
+    assert composed == "hoà"
+
+
+def test_nfd_text_parses_via_parse_text():
+    import unicodedata
+    items = parse_text(unicodedata.normalize("NFD", "Hoà bình"))
+    assert [item.status for item in items] == [ParseStatus.VALID, ParseStatus.VALID]
+
 
 
 PARSABLE_CORPUS = sorted({"khuya", "khuỷu", "khoeo", "ngoằn", "ngoèo", "ngoéo", "ngoạm", "ngoạc", "oai", "oái", "oanh", "oách", "uông", "uôm", "uốc", "uống", "ươm", "ướp", "ương", "yêu", "yếu", "yểng", "yên", "uyên", "uyển", "quán", "quạnh", "quắt", "quặn", "quang", "quạu", "quấy", "quây", "quờ", "quở", "quơ", "thuở", "huơ", "huých", "khuấy", "khuây", "khuếch", "khuynh", "huynh", "xoong", "boong", "moóc", "xoài", "khoai", "ngoài", "ngoáy", "oáy", "khoắng", "hoẵng", "toạch", "ngoạch", "oạch", "ướt", "khuất", "khuân", "quốc", "quyến", "quyệt", "nguyệt", "khuyết", "khuyên", "chuyển", "chuyện", "nguyện", "duyệt", "tuyết", "thuyền", "quyền", "quyển", "nguệch", "oẹ", "oe", "loè", "xoè", "ngoè", "nhòe", "khỏe", "hòa", "ạch", "ếch", "ích", "ốc", "ộc", "ợp", "ớp", "ứp", "ụp", "ắc", "ấc", "ật", "ất", "ết", "ệt", "ịt", "ọt", "ột", "ụt", "ựt", "hộp", "hợp", "rộp", "nghiêng", "nghiệng", "nghiến", "nghiệt", "nguyễn", "giếng", "giết", "giêng", "giữ", "già", "gì", "gìn", "đường", "đượng", "được", "tưởng", "tượng", "hưởng", "thưởng", "ngưỡng", "cưỡng", "quẽ", "quánh", "uých", "oắt", "oăn", "oăng", "oóc", "quỳnh", "huỳnh", "khuỳnh", "oong", "eng", "éc", "ếc", "âu", "ấu", "ầu", "ếu", "ều", "lau", "láu", "lâu", "lều"})

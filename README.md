@@ -156,6 +156,7 @@ PyO3 hoặc C ABI có thể được dùng để gọi Rust từ Python. Việc 
 - `docs/DEPLOYMENT.md`
 - `docs/RUST_ROADMAP.md`
 - `docs/G2P_VIETNAMESE.md` — sea-g2p, viG2P và các hệ G2P tiếng Việt; cách tích hợp.
+- `docs/SYLLABLE_SYSTEMS_RESEARCH.md` — so sánh mô hình tách/gộp âm tiết (lý thuyết quốc tế + nghiên cứu Việt Nam) và audit biên.
 - `docs/TTS_ARCHITECTURE_RESEARCH.md` — khảo sát toàn bộ họ kiến trúc TTS và đề xuất v2.1.
 - `docs/FULL_DESIGN.md` — tách frontend dùng chung / checkpoint riêng, âm tiết, dấu, dialect, English fallback, neural.
 - `docs/NORMALIZER.md` — số theo vùng miền, dấu canonical, fallback tiếng Anh, thứ tự token.

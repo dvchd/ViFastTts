@@ -54,7 +54,9 @@ Ví dụ thực hành với **"quốc"**:
   viết đôi (không phải nguyên âm đôi như `iê/uô/ươ`), và được tách thành **nucleus `OO` riêng**
   (khác `O` thường) vì người bản ngữ phân biệt "xoong" ≠ "xong"; dấu đặt trên chữ `o` thứ hai ("moóc").
 - **Dấu thanh theo chuẩn hiện đại**: "hoà", "thuỷ", "tuỳ" (dấu trên `a/y`) thay cho lối cũ
-  "hòa", "thủy", "tùy" — dự án luôn chuẩn hoá về lối hiện đại.
+  "hòa", "thủy", "tùy" — dự án luôn chuẩn hoá về lối hiện đại. Lối này được
+  **Quyết định 1989/2018/QĐ-BGDĐT** (Điều 8) quy định cho SGK; văn bản ngoài đời vẫn
+  trộn hai lối (xem `docs/NORMALIZER.md` mục "Chính tả dấu thanh").
 
 ### Vì sao "hoà" đánh dấu trên `a` mà không phải trên `o`?
 
