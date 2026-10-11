@@ -10,7 +10,7 @@ ViFastTts tách frontend tiếng Việt dùng chung khỏi checkpoint âm thanh.
 ONSET + MEDIAL + NUCLEUS + CODA + TONE
 ```
 
-Parser lưu song song chính tả và category trừu tượng. Onset giữ riêng D, GI, R, TR, CH, S, X. Medial gồm NONE/W. Nucleus gồm nguyên âm đơn và IÊ/UÔ/ƯƠ. Coda gồm NONE, M, N, NG, NH, P, T, C, CH, J, W. Tone gồm sáu thanh.
+Parser lưu song song chính tả (orthography) và dạng âm vị học (`AbstractSyllable`; thuật ngữ: `docs/GLOSSARY.md`). Onset giữ riêng D, GI, R, TR, CH, S, X. Medial gồm NONE/W. Nucleus gồm nguyên âm đơn và IÊ/UÔ/ƯƠ. Coda gồm NONE, M, N, NG, NH, P, T, C, CH, J, W. Tone gồm sáu thanh.
 
 ## Chuẩn hoá dấu
 

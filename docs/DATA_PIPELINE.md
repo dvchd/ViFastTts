@@ -11,5 +11,8 @@
 9. Chuẩn hóa sample rate một lần.
 10. Tạo manifest và coverage report.
 11. Chia train/validation/test theo video nguồn.
+12. Chạy `vifasttts validate-manifest` để kiểm tra WAV tồn tại và âm tiết trước khi train.
 
 Không train trực tiếp bằng SRT chưa căn chỉnh.
+
+Manifest do `build-manifest` sinh ra chứa `audio_path`, `text` và danh sách `syllables` đã parse; có thể bổ sung trường `durations` (số frame mỗi âm tiết) từ forced alignment ở bước 6 — vòng train đọc trường này nếu có.

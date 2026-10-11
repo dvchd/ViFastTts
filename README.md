@@ -9,26 +9,28 @@ ViFastTts là dự án nghiên cứu và triển khai TTS tiếng Việt một g
 - Không cần `dialect_id`, `speaker_id`, `style_id` hoặc audio tham chiếu ở runtime.
 - Mỗi âm tiết được mô tả bằng `ONSET + MEDIAL + NUCLEUS + CODA + TONE`.
 - Mô hình non-autoregressive và deterministic.
-- Conformer ở cấp âm tiết, Segment Expander ở cấp thành phần âm tiết, iSTFTNet ở đầu ra.
-- ONNX là định dạng triển khai chính.
+- Conformer ở cấp âm tiết, Length Regulator ở cấp frame, iSTFTNet ở đầu ra.
+- ONNX là định dạng triển khai chính (đã kiểm chứng export với batch/độ dài động).
 
 ## Trạng thái
 
-Repository này là một nền tảng đầy đủ để tiếp tục nghiên cứu và huấn luyện. Những phần có thể chạy ngay:
+Những phần chạy được ngay trong repository:
 
-- Chuẩn hóa Unicode và tách câu cơ bản.
-- Parser âm tiết tiếng Việt có cấu trúc.
-- Normalizer theo vùng miền (`north`, `central`, `south`), chuẩn hoá dấu thanh, số, La Mã, tiếng Anh fallback và công thức STEM.
-- Orthography canonical, dialect profile, roman numerals, English fallback, STEM (Toán/Hoá/đơn vị).
-- Vocabulary thành phần.
-- Manifest và kiểm tra dữ liệu.
-- Mô hình PyTorch ViFastTts (Conformer + Length Regulator + variance predictors + iSTFTNet).
-- Loss, training loop, inference và export ONNX.
-- Unit test, CLI và tài liệu.
+- Chuẩn hóa Unicode, tách câu, tách token.
+- Parser âm tiết tiếng Việt có cấu trúc, fallback không crash.
+- Normalizer theo vùng miền (`north`, `central`, `south`): số, ngày/tháng/năm, giờ, phân số, khoảng giá trị, phần trăm, tiền tệ, điện thoại, La Mã, STEM (Toán/Hoá/Lý), English fallback có kiểm chứng "reading phải là âm tiết Việt hợp lệ".
+- Lớp G2P tùy chọn (`frontend/g2p.py`, chỉ dùng cho phân tích — không nằm trong đường runtime) và OOV resolver (`frontend/oov.py`, opt-in qua `parse_text(..., resolve_oov=True)`).
+- Vocabulary thành phần, manifest JSONL và `validate-manifest`.
+- Mô hình PyTorch: Conformer + positional encoding + variance predictors + LengthRegulator vector hoá + frame-position + iSTFTNet có upsampling.
+- Vòng huấn luyện thật: trích mel/energy/F0/VUV từ WAV, collate có mask, teacher forcing duration, lưu `best.pt`/`last.pt`.
+- Suy luận end-to-end `vifasttts synthesize` (WAV 16-bit, không cần thư viện ngoài).
+- Export ONNX acoustic model (đã kiểm chứng bằng onnxruntime: batch, số âm tiết và tổng frame động).
 
-Để có giọng nói thực tế, bạn vẫn cần dataset audio và transcript, alignment target, sau đó huấn luyện checkpoint. Repository không kèm trọng số đã huấn luyện.
+Để có giọng nói chất lượng thực tế bạn vẫn cần dataset audio + transcript và alignment thật (MFA hoặc aligner tương đương); repository dùng alignment tạm (chia đều frame) và không kèm trọng số đã huấn luyện. Xem `docs/TRAINING.md` và `docs/TTS_ARCHITECTURE_RESEARCH.md`.
 
 ## Cài đặt
+
+Yêu cầu Python >= 3.11.
 
 ```bash
 python -m venv .venv
@@ -49,6 +51,7 @@ pip install -e ".[dev,audio,train,onnx]"
 ```bash
 vifasttts parse "Hôm nay trời đẹp."
 vifasttts parse-syllable "ngoài"
+python examples/g2p_demo.py   # phiên âm IPA Bắc/Nam, broad/narrow, 6 thanh
 ```
 
 ## Normalizer theo vùng miền
@@ -59,9 +62,11 @@ vifasttts parse-syllable "ngoài"
 - Trung: `ngàn`, `lẻ`, mặc định `tư`.
 - Nam: `ngàn`, `lẻ`, mặc định `bốn`.
 
-Mọi văn bản được chuẩn hoá vị trí dấu thanh về dạng âm vị học chính: `hòa` thành `hoà`, `hóa` thành `hoá`, `thủy` thành `thuỷ`. Parser chấp nhận cả hai lối viết, normalizer chỉ xuất một dạng canonical.
+Mọi văn bản được chuẩn hoá vị trí dấu thanh về dạng âm vị học chính: `hòa` thành `hoà`, `hóa` thành `hoá`, `thủy` thành `thuỷ`.
 
 Thứ tự phân loại token: exact override → acronym viết hoa chính xác → tên sản phẩm → số La Mã viết hoa chuẩn (≥2 ký tự) → âm tiết tiếng Việt → English fallback không phân biệt hoa thường → giữ nguyên.
+
+Ví dụ mới: `25/12/2023` → "ngày hai mươi lăm tháng mười hai năm hai nghìn không trăm hai mươi ba"; `14h30` → "mười bốn giờ ba mươi phút"; `2/3` → "hai phần ba"; `10-20%` → "mười đến hai mươi phần trăm"; `1.005.000` → "một triệu không trăm linh năm nghìn".
 
 ## Kiểm tra dự án
 
@@ -78,6 +83,8 @@ vifasttts build-manifest \
   --metadata data/metadata.csv \
   --wav-dir data/wavs \
   --output data/manifest.jsonl
+
+vifasttts validate-manifest --manifest data/manifest.jsonl --wav-dir data/wavs
 ```
 
 Định dạng `metadata.csv`:
@@ -94,7 +101,20 @@ vifasttts train \
   --config configs/base_24k.yaml \
   --train-manifest data/train.jsonl \
   --val-manifest data/val.jsonl \
-  --output runs/base
+  --output runs/base \
+  --max-steps 200000
+```
+
+Manifest có thể chứa trường `durations` (số frame mỗi âm tiết từ forced alignment). Nếu thiếu, duration được chia đều theo số frame — chỉ là placeholder, xem cảnh báo trong `docs/TRAINING.md`.
+
+## Tổng hợp
+
+```bash
+vifasttts synthesize \
+  --config configs/base_24k.yaml \
+  --checkpoint runs/base/best.pt \
+  --text "Xin chào, đây là hệ thống thử nghiệm." \
+  --output out.wav
 ```
 
 ## Export ONNX
@@ -112,7 +132,7 @@ Phiên bản đầu dùng Python để dễ nghiên cứu, kiểm thử và thay
 
 - Unicode normalization.
 - Text lexer và normalizer.
-- Syllable parser.
+- Syllable parser và OOV resolver.
 - Vocabulary mapping.
 - Manifest validation.
 - ONNX Runtime inference.
@@ -122,17 +142,22 @@ PyO3 hoặc C ABI có thể được dùng để gọi Rust từ Python. Việc 
 
 ## Tài liệu
 
-- `docs/ARCHITECTURE.md`
-- `docs/FRONTEND.md`
+- `docs/ARCHITECTURE.md` — kiến trúc as-built và lộ trình.
+- `docs/GLOSSARY.md` — thuật ngữ: cấu trúc âm tiết (nguồn gốc, âm đầu–đệm–chính–cuối), dạng âm vị học, ngữ âm; quy ước đặt tên.
+- `docs/SYLLABLE_GUIDE.md` — hướng dẫn tách âm tiết cho người không chuyên (5 bước, ví dụ, bài tập, tài liệu tham khảo).
+- `docs/FRONTEND.md` — parser, G2P, OOV.
 - `docs/DATA_PIPELINE.md`
 - `docs/TRAINING.md`
 - `docs/DEPLOYMENT.md`
 - `docs/RUST_ROADMAP.md`
+- `docs/G2P_VIETNAMESE.md` — sea-g2p, viG2P và các hệ G2P tiếng Việt; cách tích hợp.
+- `docs/TTS_ARCHITECTURE_RESEARCH.md` — khảo sát toàn bộ họ kiến trúc TTS và đề xuất v2.1.
 - `docs/FULL_DESIGN.md` — tách frontend dùng chung / checkpoint riêng, âm tiết, dấu, dialect, English fallback, neural.
 - `docs/NORMALIZER.md` — số theo vùng miền, dấu canonical, fallback tiếng Anh, thứ tự token.
 - `docs/STEM_NORMALIZER.md` — Toán/LaTeX, Hoá học, đơn vị vật lý.
 - `docs/DESIGN_V1_MIEN_BAC.md` — thiết kế chi tiết v1 miền Bắc (tài liệu gốc).
 - `docs/DESIGN_V2.md` — thiết kế hệ thống v2 cải tiến (tài liệu gốc).
+- `docs/LICENSES.md` — ghi chú giấy phép các thành phần tham chiếu.
 
 ## Giấy phép
 

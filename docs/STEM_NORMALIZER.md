@@ -20,3 +20,10 @@ Hỗ trợ số kèm đơn vị SI phổ biến, lũy thừa và đơn vị ghé
 - Nên dùng `\\ce{}` cho công thức hoá học hiếm hoặc dễ nhập nhằng.
 - Có thể tắt toàn bộ bằng `NormalizerOptions(stem_formulas=False)`.
 - Đây là normalizer đọc thành lời, không phải hệ đại số máy tính và không tính kết quả biểu thức.
+
+## Guard chống nhận nhầm (mới)
+
+- Công thức độc lập chỉ được đọc khi có **≥ 2 nguyên tố đã biết**, hoặc là đơn chất hai/ba nguyên tử phổ biến (`O2`, `O3`, `H2`, `N2`, `F2`, `Cl2`, `Br2`, `I2`), hoặc là ion có điện tích tường minh (`Fe3+`, `O2-`, `NH4+`).
+- Mã sản phẩm/phiên bản được giữ nguyên: `MP3`, `N95`, `K2`, `B2B`, `RTX3080`, `v2`.
+- Trong `\\ce{}`/`\\chem{}` (người dùng chỉ định rõ) guard được nới để đọc mọi công thức.
+- Token chứa chữ số không bị tokenizer nuốt mất; chúng thành fallback thô nếu không parse được.
