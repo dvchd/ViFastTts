@@ -68,6 +68,24 @@ Tổng cộng **68 ID** cho toàn bộ tiếng Việt chuẩn — không UNK, kh
 Token ngoài tiếng Việt vẫn được mã hoá (xem §6.3): `FALLBACK_REQUIRED` dùng
 `(NONE, NONE, A, NONE, NGANG)` để pipeline không crash.
 
+**`boundary` (vị trí 5) để làm gì?** Đây là **nhãn ranh giới ngữ điệu cuối âm tiết**,
+sinh tự động từ dấu câu trong câu gốc:
+
+| Giá trị | Sinh ra khi | Ý nghĩa |
+| --- | --- | --- |
+| `WORD` | mặc định | hết một từ, chưa hết mệnh đề |
+| `PHRASE` | âm tiết đứng trước `,` `;` `:` | hết mệnh đề, còn câu |
+| `SENTENCE` | âm tiết đứng trước `.` `!` `?` `…` | hết câu |
+| `NONE` | chỉ dùng khi **padding** trong collate | không có ranh giới / không áp dụng |
+
+Model dùng embedding của ID này để **học ngắt nghỉ**: kéo dài âm tiết cuối mệnh đề/câu
+(final lengthening), hạ đường F0 cuối câu, và chuẩn bị khoảng lặng — các predictor
+duration/f0/vuv/energy nhìn thấy nó nên prosody tự nhiên hơn. Ở khâu tổng hợp, việc
+chèn khoảng nghỉ (`frontend/chunking.py: pause_seconds`) dựa trên cùng dấu câu, nên hai
+tầng nhất quán. Lưu ý: hiện `word_end` luôn `True` (tokenizer chưa gộp từ đa âm tiết),
+nên thực tế chỉ có 3 trạng thái WORD/PHRASE/SENTENCE; `NONE` là giá trị padding
+(ô số 0 trong batch) và dành chỗ cho tương lai (ví dụ đơn vị dưới âm tiết).
+
 ## 3. Luồng dữ liệu (offline)
 
 ```text
@@ -167,6 +185,9 @@ chỉ giúp encoder học biểu diễn phân biệt thanh; ở inference `tone_
 ### 4.5 Optimizer, validation, checkpoint
 
 - AdamW, `lr 2e-4`, `weight_decay 1e-4`, warmup tuyến tính, grad clip 1.0.
+- Thiết bị: `training.device` = `auto` (mặc định: CUDA → Apple MPS → CPU) | `cpu` |
+  `cuda` | `mps`. Trên Mac Apple Silicon, acoustic model chạy MPS nhanh hơn CPU;
+  vocoder mặc định quay về CPU (đo thực tế nhanh hơn — xem `docs/TRAINING_ESTIMATES.md`).
 - AMP tự bật khi CUDA (`training.mixed_precision`).
 - Validation mỗi `validate_every` bước: forward **cùng duration thật**, không backward;
   ghi `history.csv` (`step, train_total, train_mel, val_total`); lưu `last.pt` và
@@ -388,7 +409,7 @@ vifasttts serve --config configs/base_24k.yaml --checkpoint runs/base/best.pt --
 | `tests/test_phonation.py` | HNR/tilt/glottalization đúng dải; kênh đi vào dataset |
 | `tests/test_losses*` (qua smoke) | công thức loss/trọng số không NaN, backward chạy |
 
-Chạy tất cả: `pytest` (926 test). Ma trận parser: `python tools/parser_audit.py`.
+Chạy tất cả: `pytest` (933 test). Ma trận parser: `python tools/parser_audit.py`.
 
 ## 13. Tài liệu liên quan
 

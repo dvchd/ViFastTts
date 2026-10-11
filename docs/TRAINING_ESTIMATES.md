@@ -85,6 +85,36 @@ Base config, batch 8, câu 30 âm tiết × 20 frame = 600 frame/sample.
 | Train vocoder (G+D mỗi bước) | **0,38 s/bước** (19.200 mẫu ≈ 0,8 s audio) | ≈ 2,1× thời gian thực |
 | Inference (acoustic+vocoder, base) | **0,019 s** cho 0,23 s audio | **RTF ≈ 0,08** (nhanh hơn ~12× thời gian thực) |
 
+### 3.1 Mac Apple Silicon (MPS) — đo trên Mac mini M6, 32 GB
+
+Máy: **Mac mini M6** (12 nhân: 2 Super + 4 Performance + 6 Efficiency), 32 GB RAM hợp
+nhất, torch 2.14 với MPS. Cùng batch đo như trên:
+
+| Việc | CPU (2 luồng) | CPU (12 luồng) | MPS | Kết luận |
+| --- | --- | --- | --- | --- |
+| Train acoustic | 0,53 s/bước | 0,74 s/bước | **0,31 s/bước** | MPS nhanh nhất (~1,7× CPU 2 luồng); 12 luồng chậm hơn 2 luồng vì overhead trên batch nhỏ |
+| Train vocoder (G+D) | **0,39 s/bước** | – | 0,93 s/bước | CPU nhanh hơn 2,4× → **mặc định vocoder dùng CPU trên Mac** (`vocoder_training.device=mps` để ép) |
+| Vocoder inference | – | – | ~0,004 s cho 2×50 frame mel | Rất nhanh, dùng tốt cho tổng hợp |
+
+**Ước lượng thời gian train trên Mac mini M6 32 GB** (từ số đo/bước, cộng ~10–20% cho
+dataloader nếu **không** cache feature):
+
+| Kịch bản | Acoustic | Vocoder | Tổng ước lượng |
+| --- | --- | --- | --- |
+| Demo (100k + 100k bước) | ~8,6 h | ~11 h | **~20–24 h** |
+| Chuẩn (200k + 150k bước) | ~17 h | ~16 h | **~1,5–2 ngày** |
+| Cao cấp (500k+) | ~43 h | ~54 h | **~4–5 ngày** |
+
+**Kết luận cho Mac mini M6 32 GB:** train được thoải mái với `small`/`base` và dữ liệu
+5–20 giờ; 32 GB hợp nhất là đủ (model chỉ ~16M tham số, activation nhỏ). Nên:
+
+1. `cache-features` trước (giảm nghẽn đọc/STFT).
+2. Để `device: auto`: acoustic chạy MPS, vocoder tự về CPU.
+3. `num_workers` 4–6 là hợp lý trên máy 12 nhân (đừng đặt quá cao).
+4. Muốn nhanh hơn nhiều (3–10×) thì mới cần GPU rời/NVIDIA; chi phí xem mục 6.
+5. `torch.stft` complex không chạy trên MPS — pipeline đã tự tính mel loss của vocoder
+   trên CPU rồi truyền ngược qua thiết bị, nên không cần cấu hình gì thêm.
+
 ## 4. Ước lượng thời gian train theo cấu hình máy
 
 Hệ số tăng tốc GPU so với CPU 2 luồng ở mục 3 (ước lượng thô cho workload nhỏ, TF32/AMP):
@@ -111,7 +141,8 @@ Số bước tham khảo: mô hình NAR kiểu này thường cần **100k–300
 
 | Mức | Cấu hình | Dùng cho |
 | --- | --- | --- |
-| Tối thiểu (dev) | CPU bất kỳ, 8 GB RAM | Chạy test (926 test), parse, thử ONNX |
+| Tối thiểu (dev) | CPU bất kỳ, 8 GB RAM | Chạy test (933 test), parse, thử ONNX |
+| **Mac Apple Silicon** | ≥ 16 GB RAM hợp nhất (M-series); đo trên Mac mini M6 32 GB | Train small/base cỡ vừa; acoustic dùng MPS, vocoder CPU — xem mục 3.1 |
 | Vừa (khuyến nghị) | 1× GPU ≥ 12 GB VRAM (3060/4070), 32 GB RAM, SSD 100 GB | Train base với 10–20 h |
 | Thoải mái | 1× 4090 24 GB / A10G, 64 GB RAM | Train + nhiều thí nghiệm A/B, vocoder lớn |
 | Lớn | A100/H100 40–80 GB | large/xl, dataset 50 h+, tuning nhiều |

@@ -30,7 +30,7 @@ vị trí, và không có "từ lạ" với tiếng Việt chuẩn.
 
 | Hạng mục | Kết quả |
 | --- | --- |
-| Bộ test | **926 test pass**; `ruff` + `mypy` sạch |
+| Bộ test | **933 test pass**; `ruff` + `mypy` sạch |
 | Parser âm tiết | Vét cạn **49.166 tổ hợp = 0 lỗi**; 39K từ thật: 6.617/6.633 parse OK |
 | Kho âm tiết | 24 âm đầu · 2 âm đệm · 15 âm chính · 11 âm cuối · 6 thanh → **264 vần**, **28.800 âm tiết trừu tượng** |
 | Model | Acoustic **16,4 triệu** tham số; vocoder **3,5 triệu** tham số |
@@ -150,6 +150,10 @@ vifasttts serve --config configs/base_24k.yaml --checkpoint runs/base/best.pt --
 
 </details>
 
+Trên **Mac Apple Silicon**: `training.device: auto` (mặc định) chạy acoustic bằng **MPS**,
+vocoder bằng **CPU** (đo thực tế nhanh hơn trên máy nhỏ); số đo và ước lượng thời gian cho
+Mac mini M6 32GB nằm ở `docs/TRAINING_ESTIMATES.md` §3.1.
+
 ## 7. Âm tiết tiếng Việt trong dự án (dễ hiểu)
 
 Mỗi âm tiết (một "tiếng") gồm 5 phần + dấu câu. Ví dụ `quốc`:
@@ -178,7 +182,7 @@ src/vifasttts/
   export.py   ONNX (acoustic + vocoder) + quantization
 configs/      base_24k.yaml + small_24k.yaml + large_24k.yaml (theo lượng dữ liệu)
 tools/        parser_audit.py, frontend_benchmark.py
-tests/        926 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server
+tests/        933 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server
 docs/         toàn bộ tài liệu (xem mục 10)
 ```
 

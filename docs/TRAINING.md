@@ -67,6 +67,12 @@ Cache feature tự khoá theo cấu hình phonation nên không lẫn bản có/
 
 `configs/base_24k.yaml` giữ nguyên các nhóm `mel`, `model`, `training`, `loss_weights`. Các khóa `training.*` được đọc bởi `train.py`; `loss_weights` được đọc bởi `losses.py`.
 
+Thiết bị: `training.device: auto` (mặc định) → CUDA nếu có, rồi Apple MPS, cuối cùng CPU;
+đặt tường minh `cpu|cuda|mps` khi cần. Trên Mac Apple Silicon, acoustic chạy MPS còn
+vocoder tự về CPU (đo thực tế nhanh hơn — `docs/TRAINING_ESTIMATES.md` §3.1). AMP chỉ
+bật trên CUDA; `torch.stft` complex không có trên MPS nên mel loss của vocoder được
+tính trên CPU tự động.
+
 Chọn biến thể theo lượng dữ liệu (ước lượng: `docs/TRAINING_ESTIMATES.md`):
 
 | Dữ liệu | Config | Tham số acoustic |
