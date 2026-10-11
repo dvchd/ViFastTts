@@ -18,6 +18,9 @@ from vifasttts.frontend.syllable import parse_syllable, safe_parse_syllable
     # uy modern: tone on y
     ("thủy", "thuỷ"), ("thuỷ", "thuỷ"),
     ("tùy", "tuỳ"), ("tuỳ", "tuỳ"),
+    ("thùy", "thuỳ"), ("thúy", "thuý"), ("thụy", "thuỵ"),
+    ("hủy", "huỷ"), ("huỷ", "huỷ"),
+    ("qùy", "quỳ"), ("qúy", "quý"), ("qũy", "quỹ"),
     ("quý", "quý"),
     # neighboring valid, unchanged
     ("thuế", "thuế"), ("người", "người"), ("tiếng", "tiếng"),
@@ -81,3 +84,11 @@ def test_qu_medial():
 def test_gi_cluster():
     a = parse_syllable("gia").abstract
     assert a.onset == "GI"
+
+
+def test_tone_mark_relocated_to_vowel():
+    """Dấu thanh chỉ thuộc nguyên âm: dấu lỡ nằm trên phụ âm (NFD) được đặt lại."""
+    assert canonicalize_vietnamese_tokens("h\u0300àng") == "hàng"
+    assert canonicalize_vietnamese_tokens("ba\u0323") == "bạ"
+    # Nguyên âm đứng một mình vẫn giữ dấu trên nguyên âm.
+    assert canonicalize_vietnamese_tokens("y\u0301") == "ý"

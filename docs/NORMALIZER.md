@@ -16,7 +16,15 @@ Normalizer dùng vị trí dấu trên âm chính:
 hòa → hoà
 hóa → hoá
 thủy → thuỷ
+tùy → tuỳ
+hủy → huỷ
+qúy → quý
 ```
+
+Quy tắc hiện đại: `oa/oe/uy` đặt dấu trên chữ thứ hai (`hoà`, `khoẻ`, `thuỷ`);
+`qu` coi `u` thuộc âm đầu nên dấu rơi trên nguyên âm sau (`quỳ`, `quý`).
+Dấu thanh **chỉ** nằm trên chữ nguyên âm; parser bóc dấu ở bất kỳ đâu rồi
+`compose_canonical` đặt lại đúng âm chính (kể cả khi dấu lỡ nằm trên phụ âm).
 
 Cả hai lối viết được parser chấp nhận, nhưng output normalizer chỉ có một dạng canonical.
 
