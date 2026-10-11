@@ -96,3 +96,29 @@ def test_oo_split_strengthens_injectivity(first, second):
     assert parsed_second.abstract.nucleus == "O"
     assert _compose(parsed_first) == first
     assert _compose(parsed_second) == second
+
+
+@pytest.mark.parametrize("first,second", [
+    ("tùy", "tuỳ"),
+    ("hòa", "hoà"),
+    ("thủy", "thuỷ"),
+    ("hủy", "huỷ"),
+])
+def test_tone_position_variants_give_identical_model_input(first, second):
+    """Vị trí dấu thanh không tồn tại ở tầng âm vị: hai cách ghi cho cùng 7 ID."""
+    from vifasttts.frontend.vocab import ComponentVocabs
+
+    vocabs = ComponentVocabs.default()
+    parsed_first, parsed_second = parse_syllable(first), parse_syllable(second)
+    assert parsed_first.abstract == parsed_second.abstract
+    assert vocabs.encode(parsed_first) == vocabs.encode(parsed_second)
+
+
+def test_canonical_tone_spelling_option():
+    """Quy ước chữ cài đặt được; cả hai chế độ cho cùng tuple."""
+    from vifasttts.frontend.normalizer import NormalizerOptions, normalize_text
+
+    modern = NormalizerOptions(canonical_tone_spelling=True)
+    preserve = NormalizerOptions(canonical_tone_spelling=False)
+    assert normalize_text("tùy hòa thủy", options=modern) == "tuỳ hoà thuỷ"
+    assert normalize_text("tùy hòa thủy", options=preserve) == "tùy hòa thủy"

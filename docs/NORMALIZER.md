@@ -28,6 +28,30 @@ Dấu thanh **chỉ** nằm trên chữ nguyên âm; parser bóc dấu ở bất
 
 Cả hai lối viết được parser chấp nhận, nhưng output normalizer chỉ có một dạng canonical.
 
+### Chuẩn hoá vị trí dấu có cài đặt được không?
+
+Có — `NormalizerOptions.canonical_tone_spelling`:
+
+- `True` (mặc định): đổi hết về lối hiện đại (`tùy → tuỳ`, `hòa → hoà`, `thủy → thuỷ`).
+  Dùng khi cần tầng chữ thống nhất (caption, log, metric, round-trip chuẩn).
+- `False`: giữ nguyên cách viết của người viết (`tùy`, `hòa`, `thủy`).
+
+**Lựa chọn này chỉ ảnh hưởng tầng chữ, không ảnh hưởng model.** Hai cách ghi cho
+cùng bộ âm vị và cùng 7 ID đầu vào:
+
+```text
+tùy / tuỳ  → (T, W, I, NONE, HUYEN) → [5, 1, 5, 0, 1, 1, 0]
+```
+
+Hệ quả thực hành:
+
+- Training/inference **không bị ảnh hưởng** dù dữ liệu trộn cả hai lối viết —
+  model chỉ thấy tuple (xem `tests/test_spelling_bijection.py`).
+- Nên chọn **một quy ước cố định cho tầng chữ** (repo mặc định lối hiện đại) để
+  caption/log/cache ổn định, không lẫn hai lối trong cùng một pipeline.
+- Nếu dùng text làm cache key, hãy chuẩn hoá trước hoặc key theo tuple để
+  `tùy` và `tuỳ` không thành hai mục cache khác nhau.
+
 ## Số và nhóm số
 
 - Nhóm ba chữ số có hàng trăm bằng 0 được đọc đúng chuẩn: `1.005.000` → "một triệu không trăm linh năm nghìn", `1.050.000` → "một triệu không trăm năm mươi nghìn", `1.010.101` → "một triệu không trăm mười nghìn một trăm linh một".
