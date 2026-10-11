@@ -133,7 +133,7 @@ def test_six_tones_have_distinct_contours():
 
 
 def test_component_vocab_is_small_and_discrete():
-    """44.352 tổ hợp lý thuyết phủ toàn bộ âm tiết bản ngữ, không cần UNK."""
+    """47.520 tổ hợp lý thuyết phủ toàn bộ âm tiết bản ngữ, không cần UNK."""
     from vifasttts.frontend.vocab import ComponentVocabs
 
     vocabs = ComponentVocabs.default()
