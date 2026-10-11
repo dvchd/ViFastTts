@@ -139,6 +139,15 @@ Khi đọc tài liệu nước ngoài, các thuật ngữ dưới đây tương 
 | syllabification | tách ranh giới âm tiết trong chuỗi âm vị | **Không cần**: ranh giới đã là khoảng trắng |
 | tone sandhi | biến điệu theo ngữ cảnh | Không áp dụng ở tầng syllable (tiếng Việt không có sandhi bắt buộc như Trung/Thái) |
 
+## Lớp kiểm tra và phép chiếu (trong code)
+
+| Khái niệm | Ở đâu | Ý nghĩa |
+| --- | --- | --- |
+| Phép chiếu vần (rime projection) | `AbstractSyllable.rime` | Gộp (đệm, chính, cuối) — view "onset + vần + thanh", không mất thông tin gốc |
+| Profile | `frontend/lexicon.py` | `open` / `strict` / `corpus` — mức kiểm chính tả/ngữ âm, chỉ cảnh báo chứ không chặn dữ liệu |
+| Lexicon | `frontend/lexicon.py` | Tập shape (onset + vần) quan sát được, dùng cho profile `corpus` |
+| Segment | `frontend/segments.py` | Đơn vị cấp âm vị (đệm/chính tách đôi khi là âm đôi) + trọng số duration cho aligner |
+
 ## Tránh dùng
 
 - "trừu tượng"/"abstract" một mình — quá chung, dễ lẫn với lớp lập trình.

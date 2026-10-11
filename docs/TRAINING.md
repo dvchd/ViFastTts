@@ -10,12 +10,19 @@
 4. Train với teacher forcing: decoder mở rộng theo **duration thật** để sinh mel đúng độ dài; duration/f0/vuv/energy/tone dự đoán từ syllable state (chuẩn FastSpeech 2).
 5. Mask được áp cho encoder, decoder và mọi loss (không tính vào vùng pad).
 6. Lưu `best.pt`, `last.pt` (kèm config, step), `history.csv`; có warmup LR, grad clip, AMP nếu chạy CUDA.
+7. (Tùy chọn) Cache feature mel/f0/vuv theo hash(audio, config): đặt `training.cache_features: true` hoặc `cache_dir`, hoặc chạy trước `vifasttts cache-features`. (Tùy chọn) Bật `phonation.enabled: true` để trích thêm HNR/spectral tilt/glottalization cấp frame cho nghiên cứu chất giọng.
 
 ```bash
 vifasttts train --config configs/base_24k.yaml \
   --train-manifest data/train.jsonl --val-manifest data/val.jsonl \
   --output runs/base --max-steps 5000
+
+vifasttts cache-features --manifest data/train.jsonl \
+  --config configs/base_24k.yaml --cache-dir cache/train
 ```
+
+Cache khoá theo `(đường dẫn audio, size, mtime, mel config)` nên đổi dữ liệu/cấu hình sẽ tự
+trích lại. Bật phonation thì nhớ tính lại cache.
 
 ## Cảnh báo alignment
 
@@ -30,7 +37,7 @@ vifasttts train --config configs/base_24k.yaml \
 3. Train predictors (đóng băng decoder hoặc giảm LR).
 4. Suy luận hoàn toàn bằng predicted features.
 5. Joint fine-tuning acoustic + vocoder (JETS-style).
-6. Export ONNX → kiểm tra tương đương → FP16/INT8 từng phần (xem `docs/TTS_ARCHITECTURE_RESEARCH.md` mục 9.12).
+6. Export ONNX → kiểm tra tương đương → FP16/INT8 từng phần. `export-onnx --precision fp16|int8` đã chạy được cho acoustic model (kiểm bằng onnxruntime trong `tests/test_neural_smoke.py`); phần vocoder và calibration INT8 đầy đủ vẫn là việc tiếp theo (xem `docs/TTS_ARCHITECTURE_RESEARCH.md` mục 9.12).
 
 ## Cấu hình
 

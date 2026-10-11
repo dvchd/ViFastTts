@@ -376,16 +376,23 @@ Strict không ảnh hưởng model input (vẫn 7 ID); nó chỉ là bộ lọc 
 
 ## 8. Đề xuất cập nhật roadmap
 
-1. **Strict/lexicon profile** (7.3) — ưu tiên 1; dùng Viet39K/74K + lexicon dự án.
-2. **Rime projection** công khai (`abstract.rime`), kèm test đối chiếu với biểu
-   diễn "onset + vần + thanh" cho mô hình prosody.
-3. **Segment Expander** (đã có trong roadmap) — nối 5 thành phần với phoneme
-   string; là "view" chuẩn cho so khớp hệ ngoài.
-4. **Dialect G2P**: thêm biến thể Nam cho `OO`, ghi chú `ưu/ươu`; muốn đủ Huế
-   cần WikiPron `hue` (~30.242 mục) hoặc MFA Huế.
-5. **Benchmark A/B frontend** (char/BPE vs phoneme vs vần vs 5-slot) trên cùng
-   corpus (VAIS-1000/PhoAudiobook) với normalizer cố định — đóng gap học thuật.
-6. Duy trì audit trong CI: `tools/parser_audit.py` + `pytest`.
+Trạng thái sau khi triển khai (11/10/2026):
+
+1. ✅ **Strict/lexicon profile** (7.3) — `frontend/lexicon.py` (mức `open/strict/corpus`,
+   `Lexicon.from_words/from_manifest`, save/load), CLI `check-profile`/`build-lexicon`,
+   audit `--profile`; đo trên ngữ liệu: strict chỉ còn ~35 cảnh báo từ thật.
+2. ✅ **Rime projection** — `AbstractSyllable.rime`/`.rime_key` (view "onset + vần + thanh").
+3. ✅ **Segment Expander** — `frontend/segments.py` (tách `IÊ/UÔ/ƯƠ`, trọng số role,
+   `distribute_frames`); ⬜ thay placeholder bằng forced alignment thật.
+4. ✅ **Dialect G2P**: Nam `OO→ɔ`; Bắc narrow `ưu/ươu → [iw]/[iəw]`; ⬜ bảng thanh Huế
+   (WikiPron hue ~30.242 mục hoặc MFA Huế).
+5. ✅ **Benchmark biểu diễn** — `frontend/benchmark.py` + `tools/frontend_benchmark.py`
+   (char 3.3 / slot 5.0 / phoneme 4.0 / rime 2.0 đơn vị/âm tiết trên mẫu); ⬜ thí nghiệm
+   huấn luyện A/B thật.
+6. ✅ **Cache feature** — `data/cache.py` + CLI `cache-features` + `training.cache_features`.
+7. ✅ **Phonation extraction** — `data/phonation.py` (HNR/tilt/glottalization, `phonation.enabled`);
+   ⬜ điều kiện hoá vào model.
+8. ✅ Audit trong CI: `tools/parser_audit.py` (+ `--profile`), `pytest`.
 
 ## 9. Kết luận
 

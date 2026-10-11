@@ -51,6 +51,7 @@ pip install -e ".[dev,audio,train,onnx]"
 ```bash
 vifasttts parse "Hôm nay trời đẹp."
 vifasttts parse-syllable "ngoài"
+vifasttts check-profile "voan bình" --profile strict   # cảnh báo chính tả/ngữ âm
 python examples/g2p_demo.py   # phiên âm IPA Bắc/Nam, broad/narrow, 6 thanh
 ```
 
@@ -76,6 +77,9 @@ ruff check .
 mypy src/vifasttts
 python tools/parser_audit.py                       # audit parser: ma trận ~49k tổ hợp
 python tools/parser_audit.py --wordlist data.txt   # audit trên danh sách từ (1 từ/dòng)
+python tools/parser_audit.py --wordlist data.txt --profile strict   # cảnh báo chính tả/ngữ âm
+python tools/parser_audit.py --wordlist data.txt --write-lexicon data/lexicon.json
+python tools/frontend_benchmark.py --text "Chào bạn"                # so sánh biểu diễn char/slot/phoneme/rime
 ```
 
 ## Tạo manifest từ WAV và metadata
@@ -90,6 +94,13 @@ vifasttts validate-manifest --manifest data/manifest.jsonl --wav-dir data/wavs
 ```
 
 `validate-manifest` kiểm tra WAV tồn tại và in **coverage** (số âm tiết, fallback, phân bố tone/coda, thanh còn thiếu) để đối chiếu với `docs/DATA_PIPELINE.md` bước 10.
+
+Sinh lexicon shape để siết dữ liệu bằng `profile` (xem `docs/FRONTEND.md`):
+
+```bash
+vifasttts build-lexicon --manifest data/manifest.jsonl --output data/lexicon.json
+vifasttts check-profile "khoai lang" --profile corpus --lexicon data/lexicon.json
+```
 
 Định dạng `metadata.csv`:
 
@@ -111,6 +122,17 @@ vifasttts train \
 
 Manifest có thể chứa trường `durations` (số frame mỗi âm tiết từ forced alignment). Nếu thiếu, duration được chia đều theo số frame — chỉ là placeholder, xem cảnh báo trong `docs/TRAINING.md`.
 
+Để train nhanh hơn ở epoch sau, tính trước feature vào cache:
+
+```bash
+vifasttts cache-features \
+  --manifest data/train.jsonl \
+  --config configs/base_24k.yaml \
+  --cache-dir cache/train
+```
+
+hoặc đặt `training.cache_features: true` trong config (dùng `<run>/feature_cache`).
+
 ## Tổng hợp
 
 ```bash
@@ -129,6 +151,8 @@ vifasttts export-onnx \
   --checkpoint runs/base/best.pt \
   --output artifacts/vifasttts.onnx
 ```
+
+Thêm `--precision fp16` hoặc `--precision int8` để xuất bản lượng tử hoá (xem `docs/DEPLOYMENT.md`).
 
 ## Hướng Rust sau này
 

@@ -12,6 +12,9 @@
 10. Tạo manifest và coverage report.
 11. Chia train/validation/test theo video nguồn.
 12. Chạy `vifasttts validate-manifest` để kiểm tra WAV tồn tại và âm tiết trước khi train.
+13. (Tùy chọn) Siết chất lượng chính tả: `vifasttts build-lexicon` + `tools/parser_audit.py --profile strict|corpus` (xem `docs/FRONTEND.md` mục profile).
+14. (Tùy chọn) `vifasttts cache-features` để tính trước mel/f0/vuv; bật `training.cache_features: true` khi train.
+15. (Tùy chọn) Bật `phonation.enabled: true` để trích thêm HNR/spectral tilt/glottalization cấp frame (nghiên cứu chất giọng); nhớ tính lại cache sau khi đổi cấu hình.
 
 Không train trực tiếp bằng SRT chưa căn chỉnh.
 

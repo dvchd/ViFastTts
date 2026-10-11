@@ -8,14 +8,18 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **847 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **893 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối
   **0 lỗi cấu trúc**; **0 rime ngoài bảng**; đo được mức "nhận rộng" (180/264 rime,
   2.663/6.336 shape có trong ngữ liệu) — chi tiết: `docs/SYLLABLE_SYSTEMS_RESEARCH.md`.
   `tools/parser_audit.py --wordlist` nay in luôn coverage (shape/rime/hapax).
-- Export ONNX chạy với batch/số âm tiết/độ dài frame động (kiểm chứng onnxruntime).
+- Export ONNX chạy với batch/số âm tiết/độ dài frame động (kiểm chứng onnxruntime);
+  thêm `--precision fp16|int8` (đã kiểm bằng onnxruntime).
+- Đã triển khai hết lớp frontend/data của roadmap: profile `open/strict/corpus` +
+  lexicon, `AbstractSyllable.rime`, Segment Expander + `distribute_frames`, benchmark
+  biểu diễn, cache feature, kênh phonation, G2P Nam cho `OO`/`ưu/ươu`.
 
 ## 2. Kiến trúc chốt
 
@@ -32,6 +36,10 @@ dạng chính tả (Orthography) → dạng âm vị học (AbstractSyllable: 5 
   Tuple thuần là toàn ánh nhưng không đơn ánh (đồng âm/biến thể tự do).
 - Inventory: **24 onset / 15 nucleus / 11 coda / 6 tone** — phủ đủ tiếng Việt chuẩn
   (đối chiếu Kirby 2011; xác minh trên từ điển 39k từ).
+- Các **phép chiếu** từ mô hình 5 thành phần (đều tất định, không mất thông tin gốc):
+  `rime` (đệm+chính+cuối) cho view "onset+vần+thanh"; `segments.py` mở ra chuỗi
+  segment cấp âm vị + trọng số duration; `g2p.py` chiếu IPA. Lớp **profile**
+  (`open/strict/corpus` + lexicon) kiểm chính tả/ngữ âm mà không chặn dữ liệu.
 
 ## 3. Nhật ký quyết định chính
 
@@ -69,39 +77,51 @@ dạng chính tả (Orthography) → dạng âm vị học (AbstractSyllable: 5 
 # frontend
 vifasttts parse "Hôm nay trời đẹp."
 vifasttts parse-syllable "giếng"
+vifasttts check-profile "voan bình" --profile strict
 python examples/g2p_demo.py            # IPA Bắc/Nam, broad/narrow, 6 thanh
+python tools/frontend_benchmark.py --text "Chào bạn"   # char/slot/phoneme/rime
 
 # dữ liệu
 vifasttts build-manifest --metadata data/metadata.csv --wav-dir data/wavs --output data/manifest.jsonl
 vifasttts validate-manifest --manifest data/manifest.jsonl --wav-dir data/wavs   # kèm coverage tone/coda
+vifasttts build-lexicon --manifest data/manifest.jsonl --output data/lexicon.json
+vifasttts cache-features --manifest data/train.jsonl --config configs/base_24k.yaml --cache-dir cache/train
 
 # huấn luyện / suy luận / export
 vifasttts train --config configs/base_24k.yaml --train-manifest ... --val-manifest ... --output runs/base
 vifasttts synthesize --config configs/base_24k.yaml --checkpoint runs/base/best.pt --text "Xin chào" --output out.wav
-vifasttts export-onnx --config configs/base_24k.yaml --checkpoint runs/base/best.pt --output model.onnx
+vifasttts export-onnx --config configs/base_24k.yaml --checkpoint runs/base/best.pt --output model.onnx --precision fp16
 
 # kiểm tra
 pytest && ruff check . && mypy src/vifasttts
 python tools/parser_audit.py                        # ma trận ~49k
-python tools/parser_audit.py --wordlist words.txt   # audit từ điển
+python tools/parser_audit.py --wordlist words.txt   # audit từ điển (+ --profile strict|corpus)
 ```
 
 ## 6. Việc còn lại (roadmap)
 
-1. **Segment Expander** duration cấp role + aligner (MFA/forward-sum) — §9.4 khảo sát.
-2. **Phonation** (spectral tilt, HNR, glottalization) — §9.7.
-3. **Vocoder production**: discriminator + spectral loss, A/B HiFi-GAN; iSTFT-based
+Đã xong trong phiên này (✅) và phần còn lại (⬜):
+
+1. ✅ **Segment Expander** (`frontend/segments.py`): mở `IÊ/UÔ/ƯƠ` thành hai đích,
+   trọng số duration theo role, `distribute_frames`. ⬜ Aligner thật (MFA/forward-sum)
+   và học duration từ alignment — hiện vẫn placeholder chia theo trọng số/frame.
+2. ✅ **Phonation** extraction (`data/phonation.py`: HNR, spectral tilt, glottalization,
+   bật bằng `phonation.enabled`). ⬜ Điều kiện hoá các kênh này vào model/vocoder.
+3. ⬜ **Vocoder production**: discriminator + spectral loss, A/B HiFi-GAN; iSTFT-based
    ONNX (ConvTranspose) cho phần vocoder — §9.9/§9.12.
-4. **Quantization** FP16/INT8 từng phần, calibration đủ 6 thanh × coda tắc.
-5. **Strict mode / lexicon** cho chính tả không hợp lệ; mở rộng OOV resolver cho
-   từ vay viết liền (`palăng`, `a-xít`...). Thiết kế 3 mức `open/strict/corpus`
-   và bằng chứng "nhận rộng" (84 rime, 6 cặp onset×nucleus chưa gặp):
-   `docs/SYLLABLE_SYSTEMS_RESEARCH.md` mục 7.3.
-6. **G2P Trung**: bảng thanh Huế (WikiPron hue ~30.242 mục / MFA Huế); thêm
-   biến thể Nam cho `OO` (`xoong`≈`xong`) và ghi chú `ưu/ươu` Hà Nội.
-7. **Cache feature/duration** cho training quy mô lớn (hiện trích tại chỗ).
-8. **Benchmark A/B frontend** (char/BPE vs phoneme vs vần vs 5 slot) trên cùng
-   corpus — literature hiện chưa có so sánh trực tiếp (research gap).
+4. ✅ **Quantization** khởi điểm: `--precision fp16|int8` + test onnxruntime.
+   ⬜ Calibration INT8 đầy đủ (6 thanh × coda tắc) và lượng tử từng phần vocoder.
+5. ✅ **Strict/lexicon**: 3 mức `open/strict/corpus`, `Lexicon` (from_words/from_manifest,
+   save/load), CLI `check-profile`/`build-lexicon`, tool audit `--profile`. ⬜ Mở rộng
+   OOV resolver cho từ vay viết liền (`palăng`, `a-xít`...).
+6. ✅ **G2P phương ngữ**: Nam gộp `OO→ɔ`; Bắc narrow `ưu/ươu → [iw]/[iəw]`.
+   ⬜ Bảng thanh Huế (WikiPron hue ~30.242 mục / MFA Huế).
+7. ✅ **Cache feature/duration** (`data/cache.py`, CLI `cache-features`,
+   `training.cache_features`) khoá theo hash(audio, config).
+8. ✅ **Benchmark biểu diễn** (`frontend/benchmark.py`, `tools/frontend_benchmark.py`):
+   char 3.3 / slot 5.0 / phoneme 4.0 / rime 2.0 đơn vị mỗi âm tiết (đo mẫu).
+   ⬜ Thí nghiệm A/B huấn luyện thật (char/BPE vs phoneme vs vần vs 5 slot) — research gap.
+9. ⬜ **Feature/duration cache tầng phonation**: hiện cache chỉ lưu mel/energy/f0/vuv.
 
 ## 7. Commit tiêu biểu trong phiên
 
