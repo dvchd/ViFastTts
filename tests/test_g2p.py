@@ -74,6 +74,18 @@ def test_oo_loanword_has_distinct_long_nucleus():
     assert syllable_to_phonemes(parse_syllable("moóc"), "south", style="narrow") == ("m", "ɔː", "k̚", "˧˥")
 
 
+def test_ai_ay_ao_au_have_length_contrast():
+    # Help:IPA/Vietnamese: "ai" [aːj] vs "ay" [aj]; bảng nguyên âm lấy "may", "cau" = [a].
+    assert syllable_to_phonemes(parse_syllable("tai")) == ("t", "a", "j", "˧")
+    assert syllable_to_phonemes(parse_syllable("tay")) == ("t", "ă", "j", "˧")
+    assert syllable_to_phonemes(parse_syllable("cao")) == ("k", "a", "w", "˧")
+    assert syllable_to_phonemes(parse_syllable("cau")) == ("k", "ă", "w", "˧")
+    assert syllable_to_phonemes(parse_syllable("quay")) == ("k", "w", "ă", "j", "˧")
+    assert syllable_to_phonemes(parse_syllable("quai")) == ("k", "w", "a", "j", "˧")
+    # coda /j/ giống nhau, chỉ nguyên âm khác (không phải khác âm cuối).
+    assert syllable_to_phonemes(parse_syllable("tai"))[-2:] == syllable_to_phonemes(parse_syllable("tay"))[-2:]
+
+
 def test_fallback_returns_empty():
     items = text_to_phonemes("Hello world")
     assert all(phonemes == () for phonemes in items)

@@ -25,7 +25,7 @@ def signature(word):
     ("oán", ("NONE", "W", "A", "N", "SAC")),
     ("oách", ("NONE", "W", "A", "CH", "SAC")),
     ("khoai", ("KH", "W", "A", "J", "NGANG")),
-    ("xoay", ("X", "W", "A", "J", "NGANG")),
+    ("xoay", ("X", "W", "Ă", "J", "NGANG")),
     ("khuấy", ("KH", "W", "Â", "J", "SAC")),
     ("thuế", ("TH", "W", "Ê", "NONE", "SAC")),
     ("huyền", ("H", "W", "IÊ", "N", "HUYEN")),

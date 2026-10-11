@@ -106,7 +106,7 @@ Quy tắc dùng tên:
 
 | Ánh xạ | Hàm? | Đơn ánh? | Toàn ánh? | Kết luận |
 | --- | --- | --- | --- | --- |
-| chữ canonical → bộ âm vị | ✔ | ✘ — đồng âm/chính tả tự do (`tai`/`tay`, `qui`/`quy`, `í`/`ý`) | ✔ — mọi tuple hiện thực hoá đều có chữ (`tests/test_parser_matrix.py`) | **Không** song ánh |
+| chữ canonical → bộ âm vị | ✔ | ✘ — đồng âm/chính tả tự do (`qui`/`quy`, `mĩ`/`mỹ`, `í`/`ý`) | ✔ — mọi tuple hiện thực hoá đều có chữ (`tests/test_parser_matrix.py`) | **Không** song ánh |
 | bộ âm vị → chữ | ✘ — một tuple ứng nhiều chữ | – | – | Không khả nghịch nếu chỉ giữ tuple |
 | chữ canonical ↔ (bộ âm vị + chính tả dư) | ✔ | ✔ | ✔ | **Song ánh** — round-trip được |
 | bộ âm vị → IPA | ✔ | ✘ — Bắc gộp `d/gi/r`, `ch/tr`, `s/x` | ✘ — chỉ tập ký hiệu của ngôn ngữ | Chiếu "cách đọc", không khả nghịch |
@@ -115,9 +115,12 @@ Hệ quả thiết kế: **chữ viết là gốc**. `ParsedSyllable` giữ song
 (abstract) và chính tả dư (orthography: `i/y`, `c/k`, vị trí dấu...), nên khả
 nghịch nằm ở cặp đó — xem `tests/test_spelling_bijection.py`.
 
-- Việc tách `OO` (`xoong` ≠ `xong`) là một bước làm bộ âm vị *gần đơn ánh hơn*.
-- Các đồng âm thật (`tai`/`tay`) không thể và không nên tách ở tầng âm vị —
-  đó là chính tả từ vựng, được bảo toàn ở tầng orthography.
+- Việc tách `OO` (`xoong` ≠ `xong`) và tách `A`/`Ă` theo chính tả (`tai` [aːj] ≠
+  `tay` [aj]; `rao` ≠ `rau` — Help:IPA/Vietnamese) là những bước làm bộ âm vị
+  *gần đơn ánh hơn*.
+- Các biến thể chính tả tự do thật (`qui`/`quy`, `mĩ`/`mỹ`, `í`/`ý`) không thể
+  và không nên tách ở tầng âm vị — đó là quy ước chính tả, được bảo toàn ở tầng
+  orthography (xem `docs/NORMALIZER.md` mục "Biến thể i/y").
 
 ## Tránh dùng
 

@@ -9,10 +9,12 @@
 Với tiếng Việt:
 - chữ canonical → bộ âm vị: TOÀN ÁNH (mọi tuple hiện thực hoá đều có chữ, xem
   `test_parser_matrix.py`) nhưng KHÔNG ĐƠN ÁNH vì đồng âm/chính tả tự do
-  (tai/tay, qui/quy, í/ý cùng tuple).
+  (qui/quy, mĩ/mỹ, í/ý cùng tuple).
 - bộ âm vị thuần → chữ: không phải hàm (một tuple ứng nhiều chữ).
 - chữ canonical ↔ (bộ âm vị + chính tả dư) = `ParsedSyllable`: SONG ÁNH —
   compose trả lại đúng chữ gốc, parse trả lại đúng tuple.
+- `tai`/`tay` KHÔNG còn là đồng âm: "ai" đọc a dài [aː], "ay" đọc ă ngắn
+  (Help:IPA/Vietnamese), nên hai tuple khác nhau — xem test dưới.
 """
 from __future__ import annotations
 
@@ -56,17 +58,33 @@ def test_old_style_variants_normalize_without_losing_phonology(variant, canonica
 
 
 @pytest.mark.parametrize("first,second", [
-    ("tai", "tay"),
     ("qui", "quy"),
+    ("mĩ", "mỹ"),
     ("í", "ý"),
 ])
-def test_homophones_share_tuple_but_spelling_is_preserved(first, second):
-    """Tuple không đơn ánh (đồng âm/chính tả tự do), nhưng chữ vẫn khả nghịch
-    nhờ tầng chính tả dư — đúng ca `tai`/`tay`."""
+def test_free_spelling_variants_share_tuple_but_spelling_is_preserved(first, second):
+    """Biến thể chính tả tự do (i/y) dùng chung tuple, nhưng chữ vẫn khả nghịch
+    nhờ tầng chính tả dư."""
     parsed_first, parsed_second = parse_syllable(first), parse_syllable(second)
     assert parsed_first.abstract == parsed_second.abstract
     assert _compose(parsed_first) == first
     assert _compose(parsed_second) == second
+
+
+@pytest.mark.parametrize("long_vowel, short_vowel", [
+    ("tai", "tay"),
+    ("mai", "may"),
+    ("rao", "rau"),
+    ("quai", "quay"),
+])
+def test_ai_ay_ao_au_are_distinct(long_vowel, short_vowel):
+    """a dài [aː] (ai/ao) vs ă ngắn [a] (ay/au) — hai tuple khác nhau."""
+    long_parsed, short_parsed = parse_syllable(long_vowel), parse_syllable(short_vowel)
+    assert long_parsed.abstract != short_parsed.abstract
+    assert long_parsed.abstract.nucleus == "A"
+    assert short_parsed.abstract.nucleus == "Ă"
+    assert _compose(long_parsed) == long_vowel
+    assert _compose(short_parsed) == short_vowel
 
 
 @pytest.mark.parametrize("first,second", [("xoong", "xong"), ("moóc", "móc")])

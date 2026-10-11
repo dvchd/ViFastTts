@@ -1,16 +1,19 @@
-"""Audit parser: vét cạn tổ hợp âm tiết và kiểm tra bất biến chuẩn hoá.
+"""Audit parser: ma trận tổ hợp âm tiết và/hoặc danh sách từ thật.
 
-Sinh mọi tổ hợp (âm đầu × vần × âm cuối × thanh) bằng `compose_canonical`,
-parse lại, rồi kiểm tra:
-- không tổ hợp hợp lệ nào rơi vào FALLBACK;
-- `parse → compose → parse` ổn định (cùng abstract, cùng canonical).
+Chạy:
+    python tools/parser_audit.py                     # ma trận ~49k tổ hợp
+    python tools/parser_audit.py --wordlist FILE     # audit trên 1 từ/dòng
 
-Chạy: python tools/parser_audit.py
-Thoát mã 1 nếu có vấn đề (dùng được trong CI).
+Chế độ ma trận kiểm tra bất biến `parse → compose → parse`; thoát mã 1 nếu có
+vấn đề (dùng được trong CI). Chế độ từ điển in danh sách fallback và các nhóm
+va chạm (nhiều chữ cùng một tuple) để phân loại thủ công.
 """
 from __future__ import annotations
 
+import argparse
+import re
 import sys
+from collections import defaultdict
 from itertools import product
 
 from vifasttts.frontend.orthography import compose_canonical
@@ -24,9 +27,10 @@ from vifasttts.frontend.syllable import _parse_vowel, safe_parse_syllable
 from vifasttts.types import Tone
 
 STOP_CODAS = {"p", "t", "c", "ch"}
+_WORD_RE = re.compile(r"[A-Za-zÀ-ỹĐđ]+")
 
 
-def run() -> list[str]:
+def run_matrix() -> list[str]:
     problems: list[str] = []
     total = 0
     onsets = [onset for onset in ONSET_ABSTRACT if onset]
@@ -62,12 +66,43 @@ def run() -> list[str]:
         )
         if recanonical != canonical:
             problems.append(f"UNSTABLE: {word!r} -> {canonical!r} -> {recanonical!r}")
-    print(f"Đã kiểm {total} tổ hợp; {len(problems)} vấn đề")
+    print(f"Ma trận: đã kiểm {total} tổ hợp; {len(problems)} vấn đề")
     return problems
 
 
+def run_wordlist(path: str) -> None:
+    syllables: set[str] = set()
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            for token in re.split(r"[\s\-]+", line.strip()):
+                if _WORD_RE.fullmatch(token):
+                    syllables.add(token)
+    ok: dict[tuple[str, str, str, str, str], set[str]] = defaultdict(set)
+    fallback: list[str] = []
+    for syllable in syllables:
+        parsed = safe_parse_syllable(syllable)
+        if parsed is None:
+            fallback.append(syllable)
+            continue
+        a = parsed.abstract
+        ok[(a.onset, a.medial, a.nucleus, a.coda, a.tone.value)].add(syllable)
+    collisions = {key: value for key, value in ok.items() if len(value) > 1}
+    print(f"Wordlist: {len(syllables)} âm tiết duy nhất | "
+          f"parse OK: {len(syllables) - len(fallback)} | fallback: {len(fallback)}")
+    print("Fallback:", sorted(fallback))
+    print(f"Nhóm va chạm (nhiều chữ cùng tuple): {len(collisions)}")
+    for key, words in sorted(collisions.items()):
+        print("  ", key, sorted(words))
+
+
 if __name__ == "__main__":
-    found = run()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--wordlist", help="File văn bản, mỗi dòng một từ/câu")
+    args = parser.parse_args()
+    if args.wordlist:
+        run_wordlist(args.wordlist)
+        sys.exit(0)
+    found = run_matrix()
     for item in found[:20]:
         print(" ", item)
     sys.exit(1 if found else 0)

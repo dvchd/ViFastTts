@@ -48,7 +48,7 @@ Ví dụ thực hành với **"quốc"**:
   "gì" = `GI` + `I`. Quy tắc: sau `gi`, nếu gặp `ê`, hết tiếng, hoặc phụ âm thì `i` thuộc vần;
   nếu gặp nguyên âm khác (`a, u, ư, o...`) thì `i` câm ("già", "giữ", "giường").
 - **`uy` khác `ui`**: "thuỷ" = `W` + `I` (dấu trên `y`); "tủi" = `U` + `J` (dấu trên `u`).
-- **`i/y` cuối đều là `/j/`**: "tai" và "tay" cùng âm vị học; tương tự `u/o` cuối là `/w/`.
+- **`i/y` cuối đều là `/j/`**: "tai" = `A` + `J` (a dài), "tay" = `Ă` + `J` (ă ngắn) — khác ở **nguyên âm**, giống ở âm cuối; tương tự "rao" ≠ "rau", "mai" ≠ "may".
 - **`anh/ach` khác `an/ac`**: âm cuối là `nh/ch`, không phải `n/c`.
 - **`oo` trong từ vay**: "xoong", "boong", "moóc" — chữ `oo` là **một nguyên âm o dài** `[ɔː]`
   viết đôi (không phải nguyên âm đôi như `iê/uô/ươ`), và được tách thành **nucleus `OO` riêng**

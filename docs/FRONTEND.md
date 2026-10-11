@@ -27,6 +27,7 @@ ONSET + MEDIAL + NUCLEUS + CODA + TONE
 - `ui` là nucleus U + coda J; dấu thanh rơi trên u (`tủi`, `củi`, `chùi`).
 - `uya` (khuya) dùng medial W + nucleus IÊ; `uyê` (nguyễn) dùng W + IÊ + coda.
 - `oo` trong từ vay đã Việt hoá (xoong, boong, moóc) dùng **nucleus `OO` riêng** (o dài ɔː), phân biệt với `o` thường; dấu đặt trên chữ o thứ hai.
+- `ay`, `au` (và `oay`) dùng **nucleus `Ă`** (a ngắn [a]) còn `ai`, `ao` (và `oai`) dùng **`A`** (a dài [aː]): `tay` ≠ `tai`, `rau` ≠ `rao`, `quay` ≠ `quai` — nguồn: Help:IPA/Vietnamese ("ai" [aːj] vs "ay" [aj]).
 - `iê/yê/ia/ya`, `uô/ua`, `ươ/ưa` dùng nucleus trừu tượng chung.
 
 ## Lưu ý

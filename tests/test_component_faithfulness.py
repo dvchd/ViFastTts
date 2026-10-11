@@ -39,6 +39,12 @@ DISTINCT_GROUPS = [
     # oo là nucleus riêng (xoong ≠ xong; moóc ≠ móc)
     ("xoong", "xong"),
     ("moóc", "móc"),
+    # ai/ay và ao/au khác độ dài nguyên âm (a dài vs ă ngắn):
+    # Help:IPA/Vietnamese — "ai" [aːj] vs "ay" [aj]; "mai/cao" [aː], "may/cau" [a].
+    ("tai", "tay"),
+    ("mai", "may"),
+    ("rau", "rao"),
+    ("quai", "quay"),
 ]
 
 
@@ -48,11 +54,11 @@ def test_minimal_pairs_have_distinct_component_tuples(group):
     assert len(tuples) == len(group)
 
 
-# Biến thể chính tả cùng âm vị: i/y cuối, vị trí dấu thanh cũ/mới.
+# Biến thể chính tả cùng âm vị: i/y tự do, vị trí dấu thanh cũ/mới.
 SAME_PHONEME_GROUPS = [
-    ("tai", "tay"),
-    ("mai", "may"),
-    ("hai", "hay"),
+    ("qui", "quy"),
+    ("mĩ", "mỹ"),
+    ("í", "ý"),
     ("thủy", "thuỷ"),
     ("hòa", "hoà"),
 ]

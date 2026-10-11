@@ -80,8 +80,9 @@ def main() -> None:
           f" / {to_phoneme_string(syllable_to_phonemes(parse_syllable('gìn')))}   (i thuộc vần)")
     print(f"  {'quốc':<16} Bắc: {to_phoneme_string(syllable_to_phonemes(parse_syllable('quốc'), style='narrow'))}"
           f"   (qu = /k/ + /w/)")
-    print(f"  {'tai = tay':<16} {to_phoneme_string(syllable_to_phonemes(parse_syllable('tai')))}"
-          f"   (i/y cuối đều là /j/)")
+    print(f"  {'tai vs tay':<16} {to_phoneme_string(syllable_to_phonemes(parse_syllable('tai')))}"
+          f" vs {to_phoneme_string(syllable_to_phonemes(parse_syllable('tay')))}"
+          f"   (ai = a dài [aː]; ay = ă ngắn [a])")
     print(f"  {'da':<16} Bắc: {to_phoneme_string(syllable_to_phonemes(parse_syllable('da'), 'north'))}"
           f" | Nam: {to_phoneme_string(syllable_to_phonemes(parse_syllable('da'), 'south'))}   (d khác nhau theo vùng)")
     print(f"  {'mả (dấu hỏi)':<16} Bắc: {to_phoneme_string(syllable_to_phonemes(parse_syllable('mả'), 'north'))}"

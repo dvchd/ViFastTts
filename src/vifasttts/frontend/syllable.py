@@ -105,6 +105,12 @@ def parse_syllable(raw: str) -> ParsedSyllable:
         except ValueError:
             coda_spelling, vowel_part = _try_semivowel_coda(vowel_part)
     medial_s, nucleus_s, medial_a, nucleus_a = _parse_vowel(vowel_part, qu_medial)
+    if coda_spelling in ("y", "u") and nucleus_s == "a":
+        # "ay", "au" (và "oay") viết bằng a nhưng đọc a NGẮN [ă], trong khi
+        # "ai", "ao" đọc a DÀI [a] — xem Help:IPA/Vietnamese: "ai" [aːj] vs
+        # "ay" [aj]; "may", "cau" dùng [a], "mai", "cao" dùng [aː].
+        # Vì vậy abstract phải là Ă, còn chính tả vẫn giữ "a" để round-trip.
+        nucleus_a = NUCLEUS_ABSTRACT["ă"]
 
     abstract_onset = ONSET_ABSTRACT[onset_spelling]
     if onset_spelling == "g" and no_tone.startswith("gi"):

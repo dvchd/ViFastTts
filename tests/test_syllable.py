@@ -15,7 +15,7 @@ from vifasttts.frontend.syllable import parse_syllable
     ("hoàn", ("H", "W", "A", "N", "HUYEN")),
     ("ngoài", ("NG", "W", "A", "J", "HUYEN")),
     ("mai", ("M", "NONE", "A", "J", "NGANG")),
-    ("sau", ("S", "NONE", "A", "W", "NGANG")),
+    ("sau", ("S", "NONE", "Ă", "W", "NGANG")),
     ("tiến", ("T", "NONE", "IÊ", "N", "SAC")),
     ("muốn", ("M", "NONE", "UÔ", "N", "SAC")),
     ("tưởng", ("T", "NONE", "ƯƠ", "NG", "HOI")),

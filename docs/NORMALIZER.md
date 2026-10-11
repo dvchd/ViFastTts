@@ -77,3 +77,17 @@ Số La Mã chỉ nhận dạng chuỗi viết hoa chuẩn có ít nhất hai k�
 ## Giữ chữ số
 
 Tokenizer của pipeline giữ nguyên chữ số trong token thay vì nuốt mất: `RTX3080` → một token fallback `RTX3080`, `v2` → `v2`. Các token này giữ `raw` để debug và có thể xử lý bằng OOV resolver (`resolve_oov=True`) nếu phù hợp.
+
+## Biến thể chính tả tự do i/y (qui/quy, mĩ/mỹ, lí/lý)
+
+Cách viết `i`/`y` sau phụ âm đầu là điểm **chưa thống nhất** của chính tả tiếng Việt hiện đại:
+
+- **Quyết định 240/QĐ (1984)** của Bộ Giáo dục — *Quy định về chính tả tiếng Việt và thuật ngữ tiếng Việt* — là văn bản quy phạm đầu tiên về chính tả.
+- **Quyết định 1989/2018/QĐ-BGDĐT** (chính tả trong Chương trình, SGK phổ thông) yêu cầu viết `lí luận`, `mĩ thuật` (dùng **i**).
+- **Nghị định 30/2020/NĐ-CP** (công tác văn thư, đang áp dụng cho văn bản hành chính) — phụ lục có ví dụ `Triều Lý`, `kỷ niệm` (dùng **y**).
+- Hai nhóm quy định còn mâu thuẫn nhau; trường hợp điển hình là `Qui Nhơn` hay `Quy Nhơn` đều xuất hiện trong văn bản hành chính và tài liệu ngôn ngữ học.
+- Ngoài ra, chữ Quốc ngữ dùng `y` cho bán nguyên âm trong `ay/áy`, và `i` trong các tổ hợp như `iê` (`uyên`, `yên`, `yêu`...); nhưng thực tế vẫn song song `mỹ lệ`/`mị dân`...
+
+**Chính sách của ViFastTts:** parser/normalizer **giữ nguyên** lựa chọn i/y của người viết (chỉ chuẩn hoá vị trí dấu thanh), để round-trip bảo toàn chính tả; không tự ý đổi `qui`↔`quy` vì cả hai đang hợp lệ theo các văn bản khác nhau. Khi cần một quy ước duy nhất cho runtime, hãy xử lý ở tầng ứng dụng/override.
+
+Nguồn: Wikipedia tiếng Việt, *Chính tả tiếng Việt* (dẫn QĐ 240/QĐ 1984; QĐ 1989/2018/QĐ-BGDĐT; NĐ 30/2020/NĐ-CP) — <https://vi.wikipedia.org/wiki/Chính_tả_tiếng_Việt>.
