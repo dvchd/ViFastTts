@@ -271,6 +271,10 @@ runtime/postprocess.py: fade mặc định, --peak-normalize → -3 dBFS
 Metadata trong file ONNX (do `export.py` ghi) cung cấp `sample_rate/n_fft/hop_length`
 cho runtime; nếu thiếu thì truyền tường minh khi khởi tạo `OnnxVocoder`.
 
+Chọn **execution provider** khi tổng hợp ONNX: `auto|cpu|cuda|tensorrt|coreml`
+(`--provider`). Trên Mac đo được CPU nhanh nhất cho model này; `coreml` là lựa chọn
+thử nghiệm để dùng GPU/ANE. Chi tiết + số đo: `docs/APPLE_SILICON.md`.
+
 ### 6.5 Streaming, batch và server
 
 - **Streaming** (thư viện): `iter_synthesize(...)` và `iter_synthesize_onnx(...)` yield
@@ -412,7 +416,7 @@ vifasttts serve --config configs/base_24k.yaml --checkpoint runs/base/best.pt --
 | `tests/test_phonation.py` | HNR/tilt/glottalization đúng dải; kênh đi vào dataset |
 | `tests/test_losses*` (qua smoke) | công thức loss/trọng số không NaN, backward chạy |
 
-Chạy tất cả: `pytest` (933 test). Ma trận parser: `python tools/parser_audit.py`.
+Chạy tất cả: `pytest` (936 test). Ma trận parser: `python tools/parser_audit.py`.
 
 ## 13. Tài liệu liên quan
 

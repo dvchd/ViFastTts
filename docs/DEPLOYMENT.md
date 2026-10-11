@@ -27,12 +27,21 @@ vifasttts synthesize-onnx --acoustic artifacts/model.onnx --vocoder artifacts/vo
   --text "Xin chào" --output out.wav --peak-normalize
 ```
 
+Chọn execution provider theo máy (`--provider`):
+
+| Máy | Nên dùng | Ghi chú |
+| --- | --- | --- |
+| NVIDIA | `cuda` / `tensorrt` | `auto` tự chọn cuda nếu có |
+| Mac (M-series) | `cpu` (đo nhanh nhất) | `coreml` để thử GPU/ANE (cache ở `~/.cache/vifasttts/coreml`) |
+| Không GPU | `cpu` | Mặc định khi `auto` |
+
 - `runtime/onnx_engine.py` + `runtime/istft.py`: text → 7 ID → mel (onnxruntime) →
   vocoder phổ → iSTFT numpy → WAV; tự chia câu dài, fade đầu/cuối.
 - Metadata trong file ONNX (`sample_rate`, `n_fft`, `hop_length`) đủ để runtime chạy
   mà không cần đọc config.
 - `--speed` trên đường ONNX là **xấp xỉ** (co giãn mel nearest-frame); muốn chính xác
   thì dùng đường PyTorch (chạy lại duration predictor).
+- Chi tiết đo đạc + quyết định cho Mac/ANE: `docs/APPLE_SILICON.md`.
 
 ## HTTP server (nghiên cứu/nội bộ)
 

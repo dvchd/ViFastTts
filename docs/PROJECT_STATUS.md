@@ -8,7 +8,7 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **933 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **936 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối
@@ -26,6 +26,9 @@
 - **Thiết bị**: `training.device` `auto|cpu|cuda|mps`; trên Mac Apple Silicon tự dùng
   MPS cho acoustic, CPU cho vocoder (đo thật: 0,31 vs 0,53 s/bước acoustic;
   vocoder CPU nhanh hơn MPS 2,4×) — xem `docs/TRAINING_ESTIMATES.md` §3.1.
+- **Apple Silicon / ANE**: khảo sát + đo thật (MLX ~1,2× train; CoreML EP; ANE chưa
+  dùng được từ PyTorch) và quyết định "không fork luồng train, chỉ đổi provider ONNX":
+  `docs/APPLE_SILICON.md`.
 - Đã triển khai hết lớp frontend/data của roadmap: profile `open/strict/corpus` +
   lexicon, `AbstractSyllable.rime`, Segment Expander + `distribute_frames`, benchmark
   biểu diễn, cache feature, kênh phonation, G2P Nam cho `OO`/`ưu/ươu`.

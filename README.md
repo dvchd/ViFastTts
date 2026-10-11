@@ -30,7 +30,7 @@ vị trí, và không có "từ lạ" với tiếng Việt chuẩn.
 
 | Hạng mục | Kết quả |
 | --- | --- |
-| Bộ test | **933 test pass**; `ruff` + `mypy` sạch |
+| Bộ test | **936 test pass**; `ruff` + `mypy` sạch |
 | Parser âm tiết | Vét cạn **49.166 tổ hợp = 0 lỗi**; 39K từ thật: 6.617/6.633 parse OK |
 | Kho âm tiết | 24 âm đầu · 2 âm đệm · 15 âm chính · 11 âm cuối · 6 thanh → **264 vần**, **28.800 âm tiết trừu tượng** |
 | Model | Acoustic **16,4 triệu** tham số; vocoder **3,5 triệu** tham số |
@@ -109,7 +109,7 @@ pytest
 | Sinh giọng | `vifasttts synthesize --text "..." --output out.wav [--dialect south] [--speed 0.9] [--overrides file.json] [--peak-normalize]` |
 | Batch / dịch vụ | `synthesize-batch --input list.txt --output-dir out/` · `serve --host 127.0.0.1 --port 8000` |
 | Xuất | `vifasttts export-onnx ... [--precision fp16\|int8]` · `export-vocoder-onnx ...` |
-| Runtime ONNX | `vifasttts synthesize-onnx --acoustic model.onnx --vocoder vocoder.onnx --text "..." --output out.wav` |
+| Runtime ONNX | `vifasttts synthesize-onnx --acoustic model.onnx --vocoder vocoder.onnx --text "..." --output out.wav [--provider cpu\|cuda\|coreml\|tensorrt]` |
 | Khác | `vifasttts --version` |
 | Kiểm tra | `pytest` · `ruff check .` · `mypy src/vifasttts` · `tools/parser_audit.py` · `tools/frontend_benchmark.py` |
 
@@ -182,7 +182,7 @@ src/vifasttts/
   export.py   ONNX (acoustic + vocoder) + quantization
 configs/      base_24k.yaml + small_24k.yaml + large_24k.yaml (theo lượng dữ liệu)
 tools/        parser_audit.py, frontend_benchmark.py
-tests/        933 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server
+tests/        936 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server
 docs/         toàn bộ tài liệu (xem mục 10)
 ```
 
@@ -212,6 +212,7 @@ Roadmap chi tiết có đánh dấu ✅/⬜: `docs/PROJECT_STATUS.md`.
 | | `docs/DATA_PIPELINE.md` | 15 bước chuẩn bị dữ liệu |
 | | `docs/TRAINING.md` | Hướng dẫn train + cảnh báo alignment |
 | | `docs/TRAINING_ESTIMATES.md` | **Ước lượng** dữ liệu/tham số/thời gian/máy/chi phí trước khi train |
+| | `docs/APPLE_SILICON.md` | **Mac/M-series**: MPS, MLX, ANE, provider ONNX (đo thật + quyết định) |
 | | `docs/DEPLOYMENT.md` | ONNX Runtime, quantize, nền tảng |
 | **Nghiên cứu** | `docs/SYLLABLE_SYSTEMS_RESEARCH.md` | So sánh mô hình tách/gộp âm tiết (quốc tế + Việt Nam) và audit biên |
 | | `docs/TTS_ARCHITECTURE_RESEARCH.md` | Khảo sát họ kiến trúc TTS + đề xuất tương lai |
