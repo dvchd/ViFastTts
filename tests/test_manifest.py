@@ -33,7 +33,8 @@ def test_build_manifest_english_no_crash(tmp_path: Path):
     build_manifest(str(meta), str(wav_dir), str(out))
     lines = [json.loads(x) for x in Path(out).read_text(encoding="utf-8").splitlines() if x.strip()]
     assert len(lines) == 1
-    assert len(lines[0]["syllables"]) == 2
+    # "Hello world" nay đọc được thành "hê lô quớt" (bảng fallback tiếng Anh).
+    assert len(lines[0]["syllables"]) == 3
 
 
 def test_validate_manifest_reports_missing_wav(tmp_path: Path):
@@ -93,7 +94,7 @@ def test_coverage_report_counts_fallback(tmp_path: Path):
     out = tmp_path / "out.jsonl"
     with open(meta, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f, delimiter="|")
-        w.writerow(["s1", "Hello"])
+        w.writerow(["s1", "Zibble"])
     build_manifest(str(meta), str(wav_dir), str(out))
 
     coverage = coverage_report(str(out))

@@ -10,7 +10,14 @@ from typer.testing import CliRunner
 
 from vifasttts.cli import app
 from vifasttts.data.subtitles import load_subtitles
-from vifasttts.data.youtube import FetchOptions, fetch_dataset, read_wav_mono
+from vifasttts.data.youtube import (
+    FetchOptions,
+    _prepare_dataset_text,
+    fetch_dataset,
+    read_wav_mono,
+)
+from vifasttts.frontend.dialect import Dialect
+from vifasttts.frontend.normalizer import NormalizerOptions
 from vifasttts.frontend.syllable import safe_parse_syllable
 
 runner = CliRunner()
@@ -214,6 +221,35 @@ def test_fetch_dataset_survives_single_video_error(tmp_path: Path, fake_ytdlp: P
     assert stats["videos_error"] == 1
     assert stats["clips"] == 0
     assert (options.out / "manifest.jsonl").exists()
+
+
+def test_prepare_dataset_text_respells_codes():
+    options = NormalizerOptions(dialect=Dialect.NORTH)
+    assert _prepare_dataset_text("in 3D", options, True) == "in ba dê"
+    assert _prepare_dataset_text("xem Chương2 nhé", options, True) == "xem Chương hai nhé"
+    assert _prepare_dataset_text("file MP3", options, True) == "phai em pê ba"
+    assert _prepare_dataset_text("bản v2", options, True) == "bản vê hai"
+    assert _prepare_dataset_text("nhận 500k", options, True) == "nhận năm trăm ca"
+    assert _prepare_dataset_text("dùng n8n", options, True) == "dùng en tám en"
+    assert _prepare_dataset_text("bản 1.13.1 nhé", options, True) == "bản một mười ba một nhé"
+    assert _prepare_dataset_text("đọc 3.14 nhé", options, True) == "đọc ba phẩy một bốn nhé"
+    # Tắt respell: giữ hành vi thận trọng của frontend với mã phiên bản.
+    assert _prepare_dataset_text("file MP3", options, False) == "phai MP3"
+    assert _prepare_dataset_text("bản v2", options, False) == "bản v2"
+
+
+def test_fetch_dataset_respells_codes_end_to_end(tmp_path: Path, fake_ytdlp: Path, monkeypatch):
+    entry = [{"id": "vidCode", "title": "Mã", "duration": 6.0,
+              "url": "https://www.youtube.com/watch?v=vidCode"}]
+    _set_fake_env(monkeypatch, entries=entry,
+                  subs={"vidCode": _json3([(0.5, 2.0, "nhận file v2 và MP3 nhé")])})
+    options = _options(tmp_path, fake_ytdlp)
+    fetch_dataset(options, log=lambda _: None)
+    records = [json.loads(line) for line in (options.out / "clips.jsonl").read_text(
+        encoding="utf-8").splitlines()]
+    assert "phai" in records[0]["text"]
+    assert "vê hai" in records[0]["text"]
+    assert "em pê ba" in records[0]["text"]
 
 
 def test_fetch_dataset_retries_transient_error(tmp_path: Path, fake_ytdlp: Path, monkeypatch):

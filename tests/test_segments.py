@@ -57,7 +57,7 @@ def test_expand_narrow_hanoi_fronting():
 
 
 def test_expand_fallback_is_empty():
-    items = parse_text("Hello")
+    items = parse_text("Zibble")
     assert expand_syllable(items[0]) == []
     assert expand_text(items) == [[]]
 

@@ -50,6 +50,14 @@ def test_currency_3d_not_mangled():
 
 
 # --- Phone numbers digit-by-digit ---
+def test_number_before_end_punctuation():
+    # Số đứng trước dấu kết câu vẫn phải đọc (trước đây bị giữ nguyên).
+    assert normalize_text("Chương 2.") == "Chương hai."
+    assert normalize_text("mục 1:") == "mục một:"
+    # Chuỗi phiên bản nhiều tầng vẫn giữ nguyên.
+    assert normalize_text("v3.5.1") == "v3.5.1"
+
+
 def test_phone_continuous():
     assert normalize_text("0977123456") == "không chín bảy bảy một hai ba bốn năm sáu"
 

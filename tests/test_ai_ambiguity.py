@@ -10,9 +10,9 @@ from vifasttts.frontend.normalizer import normalize_text
     ("AI có thể biết ai đang nói.", "ây ai có thể biết ai đang nói."),
     ("Ai dùng AI?", "Ai dùng ây ai?"),
     ("API dùng AI.", "ây pi ai dùng ây ai."),
-    ("api", "api"),
+    ("api", "ây pi ai"),
     ("CPU GPU USB", "xi pi diu giê pi diu diu ét bi"),
-    ("Cpu Gpu Usb", "Cpu Gpu Usb"),
+    ("Cpu Gpu Usb", "xi pi diu giê pi diu diu ét bi"),
 ])
 def test_acronym_case_sensitivity(source, expected):
     assert normalize_text(source) == expected

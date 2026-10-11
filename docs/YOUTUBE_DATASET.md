@@ -45,6 +45,11 @@ vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/co
 Kết quả cuối in dạng "Tổng kết": số video xử lý, số clip, tổng giờ, số bị lọc, số âm tiết
 theo coverage. Dataset card ở `data/codelung/dataset_card.md`.
 
+> **Lần chạy thật tham chiếu** (kênh `@codelung`, 12/10/2026): 31 video → **13.204 clip ·
+> 51,04 giờ · fallback 1,69% âm tiết (7,1% trước khi làm sạch) · 63% clip 0 fallback ·
+> 0 vấn đề manifest**; `train.jsonl`/`val.jsonl` chia theo video (44,36h / 6,68h) bằng
+> `tools/split_manifest.py`.
+
 ## 4. Luồng hoạt động
 
 ```text
@@ -71,12 +76,13 @@ Chi tiết làm sạch:
   phụ đề nói thật thường 11–16 ký tự/s).
 - **Text** trong `metadata.csv` đã chuẩn hoá số/ngày/giờ theo vùng (`--dialect`), đúng dạng
   "đọc lên" để train; SRT giữ dạng chữ người đọc.
-- **Từ lạ (OOV)**: cuối mỗi lần chạy in top từ lạ + ghi `oov_report.json`; điền cách đọc
-  vào file JSON rồi chạy lại với `--overrides` (mẫu có sẵn: `configs/overrides_tech_vi.json`
-  — `code→cốt`, `copy→cô pi`, `ninja→nin da`...). Một số từ công nghệ phổ biến
-  (`code`, `build`, `copy`, `paste`, `folder`, `github`, `system`, `SDK`, `UI`...) đã nằm
-  trong bảng chuẩn của frontend nên dùng được cho cả lúc suy luận; clip quá nhiều từ lạ
-  vẫn bị lọc bằng `--max-fallback-ratio`.
+- **Từ lạ (OOV)**: bảng chuẩn frontend phủ sẵn ~450 từ công nghệ + tên chữ cái
+  (`code→cốt`, `user→iu dơ`, `b→bê`...); phần còn lại in top từ lạ + ghi `oov_report.json`
+  để điền vào `--overrides` (mẫu: `configs/overrides_tech_vi.json` — `clot→cờ lốt`,
+  `clon→cờ lon`, `grock→gờ rốc`...). Clip quá nhiều từ lạ bị lọc bằng `--max-fallback-ratio`.
+- **Mã chữ-số** (`--respell-codes`, mặc định bật): tách chữ-số dính liền và đọc lại —
+  `Chương2→Chương hai`, `MP3→em pê ba`, `3D→ba dê`, `v2→vê hai`, `500k→năm trăm ca`,
+  `n8n→en tám en`. Tắt bằng `--no-respell-codes` nếu muốn giữ nguyên mã.
 - **Lỗi tạm thời** (HTTP 429/5xx, timeout) được thử lại 3 lần với backoff 6 s/12 s rồi mới
   bỏ qua video; chạy lại lệnh sẽ tiếp tục từ chỗ dừng (`.done.json`).
 
@@ -100,6 +106,7 @@ Chi tiết làm sạch:
 | `--max-fallback-ratio` | 0,34 | Bỏ clip quá nhiều token lạ |
 | `--min-caption-density` | 2 ký tự/s | Bỏ video phụ đề quá thưa (nhiều nhạc/ít lời) |
 | `--overrides` | — | File JSON `{"mặt chữ": "cách đọc"}` cho từ lạ (OOV) |
+| `--respell-codes/--no-respell-codes` | bật | Làm sạch mã chữ-số (`v2→vê hai`, `MP3→em pê ba`) |
 | `--license` | `CC BY 4.0` | Giấy phép ghi vào dataset card (ví dụ `CC0 1.0`) |
 | `--sleep` | 1,0 s | Nghỉ giữa các request |
 | `--dry-run` / `--refresh` | tắt | Xem trước không tải / bỏ cache danh sách video |

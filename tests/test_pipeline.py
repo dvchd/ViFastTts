@@ -18,14 +18,14 @@ def test_punctuation_boundaries():
 
 
 def test_english_fallback_no_crash():
-    items = parse_text("Hello world")
+    items = parse_text("Zibble Qwux")
     assert len(items) == 2
     assert all(x.status == ParseStatus.FALLBACK_REQUIRED for x in items)
     assert all(x.confidence == 0.0 for x in items)
 
 
 def test_mixed_valid_and_fallback():
-    items = parse_text("Chào Hello")
+    items = parse_text("Chào Zibble")
     assert len(items) == 2
     assert items[0].status == ParseStatus.VALID
     assert items[1].status == ParseStatus.FALLBACK_REQUIRED
@@ -60,7 +60,7 @@ def test_fallback_encodable():
     from vifasttts.frontend.vocab import ComponentVocabs
 
     vocabs = ComponentVocabs.default()
-    items = parse_text("Hello")
+    items = parse_text("Zibble")
     assert len(items) == 1
     encoded = vocabs.encode(items[0])
     assert len(encoded) == 7

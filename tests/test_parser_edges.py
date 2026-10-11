@@ -35,7 +35,7 @@ def test_qu_with_invalid_nucleus_is_fallback(word):
     ("中文", ["中文"]),
     ("Привет", ["Привет"]),
     ("ไทย", ["ไทย"]),
-    ("Abc 中文 xyz", ["Abc", "中文", "xyz"]),
+    ("Qwzx 中文 xyz", ["Qwzx", "中文", "xyz"]),
 ])
 def test_foreign_scripts_preserved(text, expected):
     items = parse_text(text)

@@ -17,7 +17,7 @@ def test_stats_basic():
 
 
 def test_fallback_counted():
-    stats = representation_stats(["Hello", "ba"])
+    stats = representation_stats(["Zibble", "ba"])
     assert stats["tokens"] == 2
     assert stats["fallback"] == 1
 

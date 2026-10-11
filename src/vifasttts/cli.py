@@ -118,6 +118,8 @@ def youtube_fetch_cmd(
     min_rms_db: float = typer.Option(-45.0, help="Bỏ clip im lặng dưới mức RMS này (dBFS)"),
     max_fallback_ratio: float = typer.Option(0.34, help="Bỏ clip có tỉ lệ fallback cao hơn"),
     min_caption_density: float = typer.Option(2.0, help="Bỏ video có phụ đề thưa hơn (ký tự/giây)"),
+    respell_codes: bool = typer.Option(True, "--respell-codes/--no-respell-codes",
+                                       help="Làm sạch mã chữ-số cho dataset (v2 → vê hai, MP3 → em pê ba)"),
     overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc' cho từ lạ (OOV)"),
     license: str = typer.Option("CC BY 4.0", help="Giấy phép mở ghi vào dataset card"),
     sleep: float = typer.Option(1.0, help="Nghỉ giữa các request (giây)"),
@@ -154,7 +156,7 @@ def youtube_fetch_cmd(
         title_filter=title_filter, keep_wav=keep_wav, dedupe=dedupe,
         min_rms_db=min_rms_db, max_fallback_ratio=max_fallback_ratio,
         min_caption_density=min_caption_density, overrides=overrides_map,
-        overrides_source=overrides,
+        overrides_source=overrides, respell_codes=respell_codes,
         license=license, sleep=sleep, dry_run=dry_run, refresh=refresh,
         ytdlp=shlex.split(ytdlp_bin) if ytdlp_bin else None, ffmpeg=ffmpeg_bin,
     ))

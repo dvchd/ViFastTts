@@ -41,7 +41,9 @@ from vifasttts.data.manifest import build_manifest, coverage_report, validate_ma
 from vifasttts.data.subtitles import Cue, format_srt, load_subtitles, merge_cues
 from vifasttts.frontend.dialect import Dialect
 from vifasttts.frontend.normalizer import NormalizerOptions, normalize_text
+from vifasttts.frontend.oov import LETTER_READINGS, resolve_oov_token, spell_token
 from vifasttts.frontend.pipeline import parse_text
+from vifasttts.frontend.syllable import safe_parse_syllable
 from vifasttts.runtime.postprocess import fade
 from vifasttts.types import ParseStatus
 
@@ -80,6 +82,7 @@ class FetchOptions:
     min_rms_db: float = -45.0
     max_fallback_ratio: float = 0.34
     min_caption_density: float = 2.0  # ký tự/giây tối thiểu (video nhiều nhạc → bỏ)
+    respell_codes: bool = True  # tách chữ-số dính ("v2") và đánh vần mã ngắn ("MP" → "em pê")
     overrides: dict[str, str] = field(default_factory=dict)  # "mặt chữ" → cách đọc
     overrides_source: str | None = None  # đường dẫn file overrides (ghi vào dataset card)
     sample_rate: int = 24000
@@ -315,6 +318,49 @@ def _fallback_items(text: str, options: NormalizerOptions) -> tuple[float, list[
     return len(fallback) / len(items), fallback
 
 
+_GLUE_RE = re.compile(r"(?<=[A-Za-zÀ-ỹĐđ])(?=\d)|(?<=\d)(?=[A-Za-zÀ-ỹĐđ])")
+_LETTERS_RE = re.compile(r"[A-Za-zÀ-ỹĐđ]+")
+_VERSION_DOT_RE = re.compile(r"(?<=\d)\.(?=\d)")  # 1.13.1 / 24.19.0 (số phiên bản)
+
+
+def _respell_codes(text: str, options: NormalizerOptions) -> str:
+    """Làm sạch mã chữ-số cho dataset: "Chương2" → "Chương hai", "MP3" → "em pê ba".
+
+    Chỉ dùng khi làm dataset (frontend giữ nguyên hành vi thận trọng với mã phiên
+    bản). Token ≥3 chữ cái viết thường vẫn giữ nguyên để không đánh vần nhầm các
+    từ vay/viết sai chính tả.
+    """
+    text = _GLUE_RE.sub(" ", text)
+    # Số phiên bản nhiều tầng (1.13.1) đọc thành dãy số; số thập phân thật đã được
+    # normalizer xử lý ("3.14" → "ba phẩy mười bốn") trước khi tới đây.
+    text = _VERSION_DOT_RE.sub(" ", text)
+    text = normalize_text(text, options=options)
+
+    def _spell(match: re.Match[str]) -> str:
+        token = match.group(0)
+        if safe_parse_syllable(token) is not None:
+            return token
+        reading = resolve_oov_token(token)
+        if reading is not None and all(safe_parse_syllable(word) for word in reading.split()):
+            return reading
+        spellable = all(char in LETTER_READINGS for char in token.lower())
+        if spellable and len(token) <= 4 and (token.isupper() or len(token) <= 2):
+            spelled = spell_token(token)
+            if spelled:
+                return spelled
+        return token
+
+    return _LETTERS_RE.sub(_spell, text)
+
+
+def _prepare_dataset_text(raw: str, options: NormalizerOptions, respell_codes: bool) -> str:
+    """Chuẩn hoá text phụ đề thành câu đọc được cho dataset (số, OOV, mã chữ-số)."""
+    text = normalize_text(raw, options=options)
+    if respell_codes:
+        text = _respell_codes(text, options)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def cut_clips(
     video: dict[str, Any],
     cues: list[Cue],
@@ -353,7 +399,7 @@ def cut_clips(
         if rms_db < options.min_rms_db:
             stats["skipped_silence"] += 1
             continue
-        text = re.sub(r"\s+", " ", normalize_text(cue.text, options=normalizer_options)).strip()
+        text = _prepare_dataset_text(cue.text, normalizer_options, options.respell_codes)
         if not text:
             stats["skipped_short"] += 1
             continue

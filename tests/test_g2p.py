@@ -100,7 +100,7 @@ def test_ai_ay_ao_au_have_length_contrast():
 
 
 def test_fallback_returns_empty():
-    items = text_to_phonemes("Hello world")
+    items = text_to_phonemes("Zibble Qwux")
     assert all(phonemes == () for phonemes in items)
     items = text_to_phonemes("Chào bạn")
     assert all(phonemes for phonemes in items)

@@ -19,7 +19,7 @@ def test_encode_fallback_valid_ids():
     from vifasttts.frontend.pipeline import parse_text
 
     vocabs = ComponentVocabs.default()
-    items = parse_text("Hello")
+    items = parse_text("Zibble")
     assert len(items) == 1
     encoded = vocabs.encode(items[0])
     assert len(encoded) == 7
