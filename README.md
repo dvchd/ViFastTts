@@ -183,6 +183,7 @@ PyO3 hoặc C ABI có thể được dùng để gọi Rust từ Python. Việc 
 ## Tài liệu
 
 - `docs/ARCHITECTURE.md` — kiến trúc as-built và lộ trình.
+- `docs/MODEL_FLOW.md` — **luồng model chi tiết**: data → train acoustic → train vocoder → inference → export (kèm tensor shape, loss, số tham số, khác biệt train/infer).
 - `docs/PROJECT_STATUS.md` — trạng thái tổng hợp, nhật ký quyết định, kết quả audit, việc còn lại.
 - `docs/GLOSSARY.md` — thuật ngữ: cấu trúc âm tiết (nguồn gốc, âm đầu–đệm–chính–cuối), dạng âm vị học, ngữ âm; quy ước đặt tên.
 - `docs/SYLLABLE_GUIDE.md` — hướng dẫn tách âm tiết cho người không chuyên (5 bước, ví dụ, bài tập, tài liệu tham khảo).

@@ -1,5 +1,7 @@
 # Quy trình huấn luyện
 
+> Luồng chi tiết as-built (tensor shape, loss, train vs inference): `docs/MODEL_FLOW.md`.
+
 ## Trạng thái as-built
 
 `vifasttts train` hiện chạy được end-to-end:

@@ -1,6 +1,6 @@
 # Kiến trúc ViFastTts
 
-ViFastTts dùng frontend tiếng Việt chung và checkpoint single-speaker, single-dialect. Tài liệu này mô tả **trạng thái as-built** trong `src/vifasttts`; trạng thái tổng hợp và nhật ký quyết định nằm ở `docs/PROJECT_STATUS.md`; đề xuất nâng cấp dài hạn ở `docs/TTS_ARCHITECTURE_RESEARCH.md` (mục 9).
+ViFastTts dùng frontend tiếng Việt chung và checkpoint single-speaker, single-dialect. Tài liệu này mô tả **trạng thái as-built** trong `src/vifasttts`; **luồng chi tiết train → inference → export** nằm ở `docs/MODEL_FLOW.md`; trạng thái tổng hợp và nhật ký quyết định ở `docs/PROJECT_STATUS.md`; đề xuất nâng cấp dài hạn ở `docs/TTS_ARCHITECTURE_RESEARCH.md` (mục 9).
 
 ## Sơ đồ as-built
 
@@ -29,15 +29,20 @@ raw text
 - **Mask**: encoder nhận `input_lengths` (train); decoder nhận frame mask sinh ra từ LengthRegulator nên không attend vào vùng pad.
 - **LengthRegulator**: biểu diễn bằng `cumsum` + so sánh + `gather`, export ONNX với **độ dài frame động** — đã kiểm chứng bằng onnxruntime cho các tổ hợp (B=1..3, N=3..12, tổng frame khác nhau).
 - **Frame position**: mỗi frame biết vị trí 0..1 trong âm tiết chứa nó (hỗ trợ ranh giới đầu/giữa/cuối nguyên âm, mục 9.8 của khảo sát).
-- **Vocoder**: `ISTFTNetLite` upsample mel ×4 trước khi dự đoán STFT; đây vẫn là bản tham chiếu (chưa có discriminator/spectral loss trong huấn luyện).
-- **Export ONNX**: exporter TorchScript, 8 output có tên (`mel`, `log_duration`, `durations`, `f0`, `vuv_logits`, `energy`, `tone_logits`, `lengths`), dynamic axes cho batch/số âm tiết. Dùng `exp-1` thay `expm1` để export được. Vocoder chưa export trong graph (iSTFT không có op chuẩn); chiến lược đề xuất ở mục 9.12 của khảo sát (tự cài iSTFT bằng ConvTranspose hoặc xuất phổ cho runtime).
+- **Vocoder**: `ISTFTNetLite` upsample mel ×4 trước khi dự đoán STFT. Đã có vòng train tham chiếu
+  (`vifasttts train-vocoder`, MPD-lite + mel L1 + feature matching + adversarial — `docs/MODEL_FLOW.md` §5);
+  bản production cần discriminator lớn hơn + spectral loss + dữ liệu nhiều.
+- **Export ONNX**: exporter TorchScript, 8 output có tên (`mel`, `log_duration`, `durations`, `f0`,
+  `vuv_logits`, `energy`, `tone_logits`, `lengths`) — 9 nếu bật `model.use_phonation`; dynamic axes cho
+  batch/số âm tiết. Dùng `exp-1` thay `expm1` để export được. Hỗ trợ `--precision fp16|int8`.
+  Vocoder chưa export trong graph (iSTFT không có op chuẩn); chiến lược đề xuất ở mục 9.12 của khảo sát.
 
 ## Vì sao đầu vào neural là 5 thành phần âm tiết, không phải IPA
 
 Trong tài liệu, tầng biểu diễn này gọi là **dạng âm vị học** (bộ âm vị 5 thành phần; xem `docs/GLOSSARY.md`). Quyết định thiết kế này được khóa bằng test trong `tests/test_component_faithfulness.py` và được khuyến nghị cho một-giọng/đơn ngữ (xem `docs/TTS_ARCHITECTURE_RESEARCH.md` mục 10).
 
 **Đầu vào là 5 thành phần + boundary/punctuation**, không phải chuỗi ký tự thô hay IPA:
-`ONSET + MEDIAL + NUCLEUS + CODA + TONE`, mỗi trường là một ID rời rạc trong vocab nhỏ (24/2/14/11/6).
+`ONSET + MEDIAL + NUCLEUS + CODA + TONE`, mỗi trường là một ID rời rạc trong vocab nhỏ (24/2/15/11/6).
 
 - **Không cần G2P ở runtime.** Chính tả tiếng Việt gần như ngữ âm, nên parser đã cho biểu diễn phonemic-native trực tiếp từ văn bản; thêm bước G2P chỉ thêm một bề mặt lỗi (OOV, quy ước thanh điệu của từng hệ G2P) mà không thêm thông tin.
 - **Tone là biến rời rạc 6 giá trị**, không phải ký hiệu phụ trên chuỗi IPA. Duration/F0/nhịp điệu điều kiện hoá trực tiếp trên tone; IPA phải mã hoá thanh bằng quy ước riêng (ví dụ sea-g2p mã hoá huyền/hỏi/ngã/nặng bằng 2/4/5/6 còn ngang/sắc dựa vào chất lượng nguyên âm) — dễ sai lệch khi so khớp.
@@ -57,13 +62,15 @@ Lớp IPA trong `frontend/g2p.py` và các hệ ngoài (sea-g2p, viG2P, WikiPron
 
 ## Lộ trình (v2.1, xem khảo sát)
 
-Các hạng mục dưới đây **chưa** có trong code và được đánh dấu thứ tự ưu tiên trong `docs/TTS_ARCHITECTURE_RESEARCH.md`:
+Các hạng mục thiết kế trong `docs/TTS_ARCHITECTURE_RESEARCH.md` và trạng thái as-built:
 
-1. **Segment Expander**: duration cấp role (onset/medial/nucleus/coda) thay cho duration cấp âm tiết, cần alignment thật (MFA) — mục 9.4.
-2. **Alignment**: MFA giai đoạn đầu; forward-sum + Viterbi + static prior về sau — mục 9.4.
-3. **Phonation**: các kênh đo được (spectral tilt H1–H2, HNR, glottalization) — mục 9.7.
-4. **Vocoder production**: discriminator + spectral loss, HiFi-GAN baseline A/B — mục 9.9 và `docs/TRAINING.md` giai đoạn 1.
-5. **ONNX vocoder + quantization từng phần** — mục 9.12.
+1. ✅ **Segment Expander** — `frontend/segments.py` (duration cấp role, tách `IÊ/UÔ/ƯƠ`).
+2. ⬜ **Alignment thật** (MFA; forward-sum + Viterbi + static prior về sau) — hiện chia đều/trọng số.
+3. ✅ **Phonation** — trích `data/phonation.py` + điều kiện hoá `model.use_phonation` (reference).
+4. ✅ **Vocoder tham chiếu** — `train-vocoder` (MPD-lite); ⬜ bản production + A/B HiFi-GAN.
+5. ✅ **ONNX + quantization** FP16/INT8 động; ⬜ ONNX vocoder + calibration đầy đủ.
+
+Chi tiết luồng: `docs/MODEL_FLOW.md`; trạng thái đầy đủ: `docs/PROJECT_STATUS.md`.
 
 ## Mở rộng phương ngữ
 

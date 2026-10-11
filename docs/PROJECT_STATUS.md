@@ -125,7 +125,10 @@ python tools/parser_audit.py --wordlist words.txt   # audit từ điển (+ --pr
 8. ✅ **Benchmark biểu diễn** (`frontend/benchmark.py`, `tools/frontend_benchmark.py`):
    char 3.3 / slot 5.0 / phoneme 4.0 / rime 2.0 đơn vị mỗi âm tiết (đo mẫu).
    ⬜ Thí nghiệm A/B huấn luyện thật (char/BPE vs phoneme vs vần vs 5 slot) — research gap.
-9. ⬜ **Feature/duration cache tầng phonation**: hiện cache chỉ lưu mel/energy/f0/vuv.
+9. ✅ **Cache feature tầng phonation**: cache đã lưu đủ mel/energy/f0/vuv/phonation
+   (khoá hash tính cả cấu hình phonation).
+10. 📄 **Tài liệu luồng model as-built**: `docs/MODEL_FLOW.md` (data → train → infer → export,
+   tensor shape, loss, số tham số, khác biệt train/infer).
 
 ## 7. Commit tiêu biểu trong phiên
 
