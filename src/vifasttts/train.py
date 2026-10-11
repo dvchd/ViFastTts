@@ -97,6 +97,9 @@ def train_reference(
     chưa có alignment, duration chia đều theo frame và được ghi rõ trong
     docs/TRAINING.md — đó là placeholder, không phải chất lượng production.
     """
+    from vifasttts.config import validate_config
+
+    validate_config(config, "acoustic")
     try:
         import torch
     except ImportError as exc:  # pragma: no cover
@@ -196,6 +199,9 @@ def train_vocoder_reference(
     HiFi-GAN). Checkpoint lưu khóa `vocoder` để `synthesize` dùng trực tiếp.
     Chất lượng production cần cấu hình lớn hơn — xem docs/TRAINING.md.
     """
+    from vifasttts.config import validate_config
+
+    validate_config(config, "vocoder")
     try:
         import torch
     except ImportError as exc:  # pragma: no cover

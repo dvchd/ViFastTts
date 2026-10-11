@@ -39,10 +39,18 @@ class ISTFTNetLite(nn.Module):
         bins = n_fft // 2 + 1
         self.out = nn.Conv1d(hidden, bins * 2, 7, padding=3)
 
-    def spectrogram(self, mel: torch.Tensor) -> torch.Tensor:
-        """Mel [B, T, M] -> phổ complex [B, bins, T*ratio] (layout cho istft)."""
+    def spectrogram_parts(self, mel: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Mel [B, T, M] -> (real, imag) [B, bins, T*ratio] — dùng cho export ONNX.
+
+        Tách khỏi `spectrogram` để graph không chứa `aten::complex` (ONNX không hỗ trợ).
+        """
         z = self.out(self.post(self.up(self.net(self.pre(mel.transpose(1, 2))))))
         real, imag = z.chunk(2, dim=1)
+        return real, imag
+
+    def spectrogram(self, mel: torch.Tensor) -> torch.Tensor:
+        """Mel [B, T, M] -> phổ complex [B, bins, T*ratio] (layout cho istft)."""
+        real, imag = self.spectrogram_parts(mel)
         return torch.complex(real, imag)
 
     def forward(self, mel: torch.Tensor) -> torch.Tensor:

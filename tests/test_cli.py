@@ -16,6 +16,22 @@ def test_parse_cli():
     assert "Chào" in result.stdout and "bạn" in result.stdout
 
 
+def test_version_cli():
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert "ViFastTts" in result.stdout
+
+
+def test_g2p_cli():
+    result = runner.invoke(app, ["g2p", "quốc"])
+    assert result.exit_code == 0
+    assert "k" in result.stdout and "w" in result.stdout and "˧˥" in result.stdout
+
+    south = runner.invoke(app, ["g2p", "xoong", "--dialect", "south"])
+    assert south.exit_code == 0
+    assert "ɔ" in south.stdout
+
+
 def test_parse_syllable_cli():
     result = runner.invoke(app, ["parse-syllable", "ngoài"])
     assert result.exit_code == 0

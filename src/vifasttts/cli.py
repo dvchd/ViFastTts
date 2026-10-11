@@ -4,6 +4,7 @@ import json
 
 import typer
 
+from vifasttts import __version__
 from vifasttts.config import load_config
 from vifasttts.data.manifest import build_manifest
 from vifasttts.frontend.pipeline import parse_text
@@ -11,6 +12,22 @@ from vifasttts.frontend.syllable import parse_syllable
 from vifasttts.train import train_reference
 
 app = typer.Typer(help="ViFastTts CLI")
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"ViFastTts {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main_callback(
+    version: bool = typer.Option(
+        False, "--version", callback=_version_callback, is_eager=True,
+        help="In phiên bản rồi thoát",
+    ),
+) -> None:
+    """ViFastTts — TTS tiếng Việt một giọng (frontend + model + ONNX)."""
 
 
 @app.command("parse-syllable")
@@ -21,6 +38,22 @@ def parse_one(value: str) -> None:
 @app.command("parse")
 def parse(value: str, dialect: str = "north") -> None:
     typer.echo(json.dumps([x.to_dict() for x in parse_text(value, dialect=dialect)], ensure_ascii=False, indent=2, default=str))
+
+
+@app.command("g2p")
+def g2p_cmd(
+    text: str = typer.Argument(..., help="Câu cần phiên âm"),
+    dialect: str = typer.Option("north", help="north, central hoặc south"),
+    style: str = typer.Option("broad", help="broad hoặc narrow"),
+    tone_format: str = typer.Option("contour", help="contour | number | none"),
+) -> None:
+    """Phiên âm IPA từng âm tiết (chỉ để phân tích, không nằm trong runtime)."""
+    from vifasttts.frontend.g2p import syllable_to_phonemes, to_phoneme_string
+
+    for item in parse_text(text, dialect=dialect):
+        phonemes = syllable_to_phonemes(item, dialect, style=style, tone_format=tone_format)
+        rendered = to_phoneme_string(phonemes) if phonemes else "(fallback)"
+        typer.echo(f"{item.raw}\t{rendered}")
 
 
 @app.command("build-manifest")
@@ -75,6 +108,19 @@ def export_onnx_cmd(
     from vifasttts.export import export_onnx
     export_onnx(load_config(config), checkpoint, output, opset_version=opset, precision=precision)
     typer.echo(f"Đã xuất {output} ({precision})")
+
+
+@app.command("export-vocoder-onnx")
+def export_vocoder_onnx_cmd(
+    config: str = typer.Option(..., help="File YAML cấu hình"),
+    checkpoint: str = typer.Option(..., help="Checkpoint vocoder .pt"),
+    output: str = typer.Option(..., help="File .onnx đầu ra (mel → phổ)"),
+    opset: int = typer.Option(18, help="Opset ONNX (mặc định 18)"),
+) -> None:
+    """Xuất vocoder ONNX (mel → spec_real/spec_imag) để chạy `synthesize-onnx`."""
+    from vifasttts.export import export_vocoder_onnx
+    export_vocoder_onnx(load_config(config), checkpoint, output, opset_version=opset)
+    typer.echo(f"Đã xuất {output} (vocoder)")
 
 
 @app.command("check-profile")
@@ -167,11 +213,41 @@ def synthesize_cmd(
     dialect: str = typer.Option("north", help="north, central hoặc south"),
     speed: float = typer.Option(1.0, help="Tốc độ đọc (1.0 là gốc)"),
     vocoder_checkpoint: str | None = typer.Option(None, help="Checkpoint vocoder (tùy chọn)"),
+    overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc'"),
+    peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
+    max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
 ) -> None:
-    from vifasttts.infer import synthesize
+    from vifasttts.infer import load_overrides, synthesize
     samples, sample_rate = synthesize(
         load_config(config), checkpoint, text, output,
         dialect=dialect, speed=speed, vocoder_checkpoint=vocoder_checkpoint,
+        overrides=load_overrides(overrides) if overrides else None,
+        peak_normalize=peak_normalize, max_chars=max_chars,
+    )
+    typer.echo(f"Đã ghi {output} ({samples} mẫu @ {sample_rate} Hz)")
+
+
+@app.command("synthesize-onnx")
+def synthesize_onnx_cmd(
+    acoustic: str = typer.Option(..., help="File model.onnx (acoustic)"),
+    vocoder: str = typer.Option(..., help="File vocoder.onnx (mel → phổ)"),
+    text: str = typer.Option(..., help="Câu cần đọc"),
+    output: str = typer.Option(..., help="File WAV đầu ra"),
+    dialect: str = typer.Option("north", help="north, central hoặc south"),
+    speed: float = typer.Option(1.0, help="Tốc độ đọc (xấp xỉ bằng co giãn mel)"),
+    overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc'"),
+    peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
+    max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
+) -> None:
+    """Tổng hợp bằng ONNX Runtime + numpy (không cần PyTorch)."""
+    from vifasttts.infer import load_overrides
+    from vifasttts.runtime.onnx_engine import synthesize_onnx
+
+    samples, sample_rate = synthesize_onnx(
+        text, acoustic, output, vocoder_path=vocoder,
+        dialect=dialect, speed=speed,
+        overrides=load_overrides(overrides) if overrides else None,
+        peak_normalize=peak_normalize, max_chars=max_chars,
     )
     typer.echo(f"Đã ghi {output} ({samples} mẫu @ {sample_rate} Hz)")
 
