@@ -333,8 +333,11 @@ def _respell_codes(text: str, options: NormalizerOptions) -> str:
     """
     text = _GLUE_RE.sub(" ", text)
     # Số phiên bản nhiều tầng (1.13.1) đọc thành dãy số; số thập phân thật đã được
-    # normalizer xử lý ("3.14" → "ba phẩy mười bốn") trước khi tới đây.
+    # normalizer xử lý ("3.14" → "ba phẩy một bốn") trước khi tới đây.
     text = _VERSION_DOT_RE.sub(" ", text)
+    # Dấu chấm dính số ở rìa ("0.1.0." hoặc ".5") cũng tách để đọc được nốt.
+    text = re.sub(r"(?<=\d)\.(?=\D|$)", " ", text)
+    text = re.sub(r"(?<!\w)\.(?=\d)", " ", text)
     text = normalize_text(text, options=options)
 
     def _spell(match: re.Match[str]) -> str:

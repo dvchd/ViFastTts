@@ -311,8 +311,9 @@ def normalize_text(text: str, dialect: str | Dialect = Dialect.NORTH, *, options
     text = re.sub(r"(?<!\w)(\d+)\s*%", lambda m: integer_to_words(int(m.group(1)), options.dialect) + " phần trăm", text)
     text = re.sub(r"(?<![\w.])(\d+[,.]\d+)(?![\w.])", lambda m: decimal_to_words(m.group(1), options.dialect), text)
     text = re.sub(r"(?<![\w.])(-?\d+)(?![\w/.:])", lambda m: _integer_token_to_words(m, options.dialect), text)
-    # Số đứng trước dấu kết câu vẫn phải đọc: "Chương 2." / "mục 1:".
-    text = re.sub(r"(?<!\w)(-?\d+)(?=[.:](?:\s|$))", lambda m: _integer_token_to_words(m, options.dialect), text)
+    # Số đứng trước dấu kết câu vẫn phải đọc: "Chương 2." / "mục 1:" (không áp dụng
+    # cho đuôi chuỗi phiên bản như "0.1.0." — chữ số đứng ngay sau dấu chấm).
+    text = re.sub(r"(?<![\w.])(-?\d+)(?=[.:](?:\s|$))", lambda m: _integer_token_to_words(m, options.dialect), text)
     # Thế hệ mạng di động "5G", "4G" đọc chữ cái G.
     text = re.sub(r"(?<!\w)([2-6])\s*G(?!\w)", lambda m: f"{SMALL[int(m.group(1))]} giê", text)
     text = normalize_words(text, options)

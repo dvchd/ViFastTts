@@ -237,6 +237,7 @@ def test_prepare_dataset_text_respells_codes():
     assert _prepare_dataset_text("nhận 500k", options, True) == "nhận năm trăm ca"
     assert _prepare_dataset_text("dùng n8n", options, True) == "dùng en tám en"
     assert _prepare_dataset_text("bản 1.13.1 nhé", options, True) == "bản một mười ba một nhé"
+    assert _prepare_dataset_text("bản 0.1.0. nhé", options, True) == "bản không một không nhé"
     assert _prepare_dataset_text("đọc 3.14 nhé", options, True) == "đọc ba phẩy một bốn nhé"
     # Tắt respell: giữ hành vi thận trọng của frontend với mã phiên bản.
     assert _prepare_dataset_text("file MP3", options, False) == "phai MP3"

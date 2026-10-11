@@ -45,10 +45,10 @@ vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/co
 Kết quả cuối in dạng "Tổng kết": số video xử lý, số clip, tổng giờ, số bị lọc, số âm tiết
 theo coverage. Dataset card ở `data/codelung/dataset_card.md`.
 
-> **Lần chạy thật tham chiếu** (kênh `@codelung`, 12/10/2026): 31 video → **13.217 clip ·
-> 51,05 giờ · fallback 1,40% âm tiết (7,1% trước khi làm sạch) · 68% clip 0 fallback ·
+> **Lần chạy thật tham chiếu** (kênh `@codelung`, 12/10/2026): 31 video → **13.225 clip ·
+> 51,07 giờ · fallback 1,22% âm tiết (7,1% trước khi làm sạch) · 71% clip 0 fallback ·
 > đủ 6 thanh/11 coda · 0 vấn đề manifest**; `train.jsonl`/`val.jsonl` chia theo video
-> (44,37h / 6,68h) bằng `tools/split_manifest.py`.
+> (44,38h / 6,68h) bằng `tools/split_manifest.py`.
 
 ## 4. Luồng hoạt động
 
@@ -76,7 +76,7 @@ Chi tiết làm sạch:
   phụ đề nói thật thường 11–16 ký tự/s).
 - **Text** trong `metadata.csv` đã chuẩn hoá số/ngày/giờ theo vùng (`--dialect`), đúng dạng
   "đọc lên" để train; SRT giữ dạng chữ người đọc.
-- **Từ lạ (OOV)**: bảng chuẩn frontend phủ sẵn ~580 từ công nghệ + 31 acronym + tên chữ cái
+- **Từ lạ (OOV)**: bảng chuẩn frontend phủ sẵn ~670 từ công nghệ + 31 acronym + tên chữ cái
   (`code→cốt`, `user→iu dơ`, `b→bê`...); phần còn lại in top từ lạ + ghi `oov_report.json`
   để điền vào `--overrides` (mẫu: `configs/overrides_tech_vi.json` — `clot→cờ lốt`,
   `clon→cờ lon`, `grock→gờ rốc`...). Clip quá nhiều từ lạ bị lọc bằng `--max-fallback-ratio`.
