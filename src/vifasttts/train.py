@@ -225,8 +225,8 @@ def train_vocoder_reference(
 
     mel_config = dict(config["mel"])
     mel_config.setdefault("sample_rate", int(config.get("sample_rate", 24000)))
-    default_hidden = int(config.get("model", {}).get("hidden_size", 256))
-    hidden = int(vt.get("hidden", default_hidden))
+    # Vocoder độc lập với acoustic model; mặc định 256 khớp `infer.synthesize`.
+    hidden = int(vt.get("hidden", 256))
     upsample_ratio = int(vt.get("upsample_ratio", 4))
     generator = ISTFTNetLite(
         n_mels=int(mel_config["n_mels"]), hidden=hidden,

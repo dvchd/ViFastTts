@@ -14,6 +14,7 @@ from typer.testing import CliRunner
 from vifasttts.cli import app
 from vifasttts.data.dataset import VocoderDataset, collate_vocoder_batch
 from vifasttts.data.manifest import build_manifest
+from vifasttts.infer import synthesize
 from vifasttts.models.discriminators import (
     MultiPeriodDiscriminatorLite,
     discriminator_loss,
@@ -21,7 +22,7 @@ from vifasttts.models.discriminators import (
     generator_adversarial_loss,
 )
 from vifasttts.models.istftnet import ISTFTNetLite
-from vifasttts.train import train_vocoder_reference
+from vifasttts.train import train_reference, train_vocoder_reference
 
 runner = CliRunner()
 
@@ -136,3 +137,35 @@ def test_train_vocoder_cli(tmp_path: Path):
     ])
     assert result.exit_code == 0, result.stdout
     assert (output / "last.pt").exists()
+
+
+ACOUSTIC_TINY = {
+    **VOC_CONFIG,
+    "model": {
+        "component_dim": 8, "hidden_size": 16, "encoder_layers": 1, "decoder_layers": 1,
+        "attention_heads": 2, "ffn_size": 32, "conv_kernel_size": 3, "dropout": 0.0,
+        "duration_layers": 1, "variance_layers": 1,
+    },
+    "training": {
+        "batch_size": 1, "learning_rate": 1e-3, "weight_decay": 0.0, "max_steps": 2,
+        "warmup_steps": 1, "grad_clip": 1.0, "log_every": 1, "validate_every": 2,
+        "save_every": 2, "num_workers": 0, "mixed_precision": False,
+    },
+    "loss_weights": {"mel": 1.0, "duration": 1.0, "f0": 1.0, "vuv": 0.5, "energy": 0.5, "tone": 0.25},
+}
+
+
+def test_synthesize_uses_trained_vocoder(tmp_path: Path):
+    """Inference dùng đúng hidden/upsample_ratio từ config như lúc train vocoder."""
+    manifest = _manifest(tmp_path)
+    acoustic_out = tmp_path / "acoustic"
+    train_reference(ACOUSTIC_TINY, str(manifest), str(manifest), str(acoustic_out), max_steps=2)
+    vocoder_out = tmp_path / "vocoder"
+    train_vocoder_reference(ACOUSTIC_TINY, str(manifest), str(vocoder_out), max_steps=2)
+
+    wav_out = tmp_path / "out.wav"
+    samples, sample_rate = synthesize(
+        ACOUSTIC_TINY, str(acoustic_out / "last.pt"), "Chào bạn", str(wav_out),
+        vocoder_checkpoint=str(vocoder_out / "last.pt"),
+    )
+    assert wav_out.exists() and samples > 0 and sample_rate == 24000
