@@ -122,6 +122,18 @@ vifasttts train \
 
 Manifest có thể chứa trường `durations` (số frame mỗi âm tiết từ forced alignment). Nếu thiếu, duration được chia đều theo số frame — chỉ là placeholder, xem cảnh báo trong `docs/TRAINING.md`.
 
+Vocoder tham chiếu (iSTFTNetLite + MPD-lite) tách riêng:
+
+```bash
+vifasttts train-vocoder \
+  --config configs/base_24k.yaml \
+  --manifest data/train.jsonl \
+  --output runs/vocoder \
+  --max-steps 100000
+```
+
+`synthesize` tự dùng trọng số `vocoder` trong checkpoint nếu có.
+
 Để train nhanh hơn ở epoch sau, tính trước feature vào cache:
 
 ```bash

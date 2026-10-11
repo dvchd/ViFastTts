@@ -8,7 +8,7 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **893 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **900 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối
@@ -89,6 +89,7 @@ vifasttts cache-features --manifest data/train.jsonl --config configs/base_24k.y
 
 # huấn luyện / suy luận / export
 vifasttts train --config configs/base_24k.yaml --train-manifest ... --val-manifest ... --output runs/base
+vifasttts train-vocoder --config configs/base_24k.yaml --manifest data/train.jsonl --output runs/vocoder
 vifasttts synthesize --config configs/base_24k.yaml --checkpoint runs/base/best.pt --text "Xin chào" --output out.wav
 vifasttts export-onnx --config configs/base_24k.yaml --checkpoint runs/base/best.pt --output model.onnx --precision fp16
 
@@ -106,9 +107,12 @@ python tools/parser_audit.py --wordlist words.txt   # audit từ điển (+ --pr
    trọng số duration theo role, `distribute_frames`. ⬜ Aligner thật (MFA/forward-sum)
    và học duration từ alignment — hiện vẫn placeholder chia theo trọng số/frame.
 2. ✅ **Phonation** extraction (`data/phonation.py`: HNR, spectral tilt, glottalization,
-   bật bằng `phonation.enabled`). ⬜ Điều kiện hoá các kênh này vào model/vocoder.
-3. ⬜ **Vocoder production**: discriminator + spectral loss, A/B HiFi-GAN; iSTFT-based
-   ONNX (ConvTranspose) cho phần vocoder — §9.9/§9.12.
+   bật bằng `phonation.enabled`) + **conditioning**: `model.use_phonation: true` cho
+   model dự đoán và điều kiện hoá 3 kênh (loss `phonation`). ⬜ Vocoder-conditioned
+   phonation và đánh giá chất giọng nghe được.
+3. ✅ **Vocoder tham chiếu**: `train-vocoder` (iSTFTNetLite + MPD-lite: mel L1 + feature
+   matching + adversarial), checkpoint khóa `vocoder` cho `synthesize`; test smoke +
+   CLI. ⬜ Discriminator lớn hơn, spectral loss, A/B HiFi-GAN — chất lượng production.
 4. ✅ **Quantization** khởi điểm: `--precision fp16|int8` + test onnxruntime.
    ⬜ Calibration INT8 đầy đủ (6 thanh × coda tắc) và lượng tử từng phần vocoder.
 5. ✅ **Strict/lexicon**: 3 mức `open/strict/corpus`, `Lexicon` (from_words/from_manifest,

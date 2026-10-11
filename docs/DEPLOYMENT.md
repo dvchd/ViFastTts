@@ -35,3 +35,5 @@ vifasttts export-onnx --config configs/base_24k.yaml \
   độ chính xác cao hơn cho tới khi kiểm thử âm thanh hoàn tất.
 - Sau khi lượng tử, luôn chạy lại `onnxruntime.InferenceSession` và so hình dạng/giá trị
   với bản fp32 (mẫu trong `tests/test_neural_smoke.py`).
+- Nếu bật `model.use_phonation`, graph có thêm đầu ra `phonation` (3 kênh); giữ nguyên
+  thứ tự đầu ra khi tích hợp runtime.
