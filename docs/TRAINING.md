@@ -8,7 +8,10 @@
 `vifasttts train` hiện chạy được end-to-end:
 
 1. Đọc manifest JSONL (`audio_path` + `syllables` + tùy chọn `durations`).
-2. `data/features.py` trích **mel log**, **log-energy**, **F0 và VUV** (autocorrelation) từ WAV tại chỗ; đọc WAV bằng `soundfile` nếu có, fallback stdlib `wave`.
+2. `data/features.py` trích **mel**, **log-energy**, **F0 và VUV** từ WAV tại chỗ; mel mặc định là
+   log-power như cũ, cấu hình mới (`mel.log_magnitude` + `mel.normalize_path` + `f0.method: pyworld`)
+   dùng log-magnitude chuẩn hoá toàn cục + pyworld harvest/stonemask (xem `docs/REVISION_PLAN_V2.md` §2).
+   Đọc WAV bằng `soundfile` nếu có, fallback stdlib `wave`.
 3. `data/dataset.py` mã hoá âm tiết thành 7 ID, gom target cấp âm tiết (f0/vuv/energy) theo duration, collate có padding + mask.
 4. Train với teacher forcing: decoder mở rộng theo **duration thật** để sinh mel đúng độ dài; duration/f0/vuv/energy/tone dự đoán từ syllable state (chuẩn FastSpeech 2).
 5. Mask được áp cho encoder, decoder và mọi loss (không tính vào vùng pad).
@@ -46,8 +49,9 @@ trích lại. Bật phonation thì nhớ tính lại cache.
 
 ## Vocoder (tham chiếu)
 
-`vifasttts train-vocoder` huấn luyện vocoder iSTFTNetLite với discriminator MPD-lite
-(mel L1 + feature matching + adversarial, tinh thần HiFi-GAN):
+`vifasttts train-vocoder` huấn luyện vocoder iSTFTNetLite (mel L1 + feature matching + adversarial,
+tinh thần HiFi-GAN) với discriminator MPD-lite mặc định, hoặc **MPD đầy đủ 2/3/5/7/11 + MRD +
+MR-STFT** khi `vocoder_training.discriminator: mpd_mrd`:
 
 ```bash
 vifasttts train-vocoder --config configs/base_24k.yaml \
@@ -100,9 +104,11 @@ wait   # đợi cả hai xong
 
 Checkpoint lưu khóa `vocoder` nên `vifasttts synthesize` tự dùng ngay (không còn cảnh báo
 "chưa có trọng số vocoder"). Cấu hình ở nhóm `vocoder_training` trong config; `crop_frames`
-(mặc định 0) bật **random crop ngắn** mỗi bước (ví dụ 128 frame ≈ 1,36 giây @ hop 256) —
-chuẩn GAN vocoder, giữ bước train nhanh và ổn định dù clip dài 3–20 giây. Đây là bản
-**tham chiếu**: cần discriminator lớn hơn, spectral loss và dữ liệu nhiều hơn cho production.
+(mặc định 0) bật **random crop ngắn** mỗi bước — chuẩn GAN vocoder, giữ bước train nhanh và ổn
+định dù clip dài 3–20 giây. Đo trên Mac M6 (batch 8): crop 64 · MPD+MRD ch=16 → **0,67 s/bước trên
+MPS** (1,35 s/bước CPU); ch=32 (D 31M) → 1,49 s/bước MPS — **MPS nhanh hơn CPU 3,8–4,7× khi
+discriminator lớn**, kết luận "CPU nhanh hơn" trước đây đã đảo chiều (`docs/REVISION_PLAN_V2.md` §10).
+GAN cần **100k+ bước**; chạy theo khối bằng `python tools/train_vocoder_chunked.py` (chống OOM MPS).
 
 ## Phonation (tùy chọn)
 
@@ -113,7 +119,9 @@ Cache feature tự khoá theo cấu hình phonation nên không lẫn bản có/
 
 ## Sáu giai đoạn đề xuất (giữ từ thiết kế gốc)
 
-1. Train iSTFTNet bằng mel thật; train thêm HiFi-GAN baseline để A/B. `train-vocoder` tham chiếu đã có (MPD-lite + mel L1 + FM + adversarial); cần cấu hình lớn + spectral loss trước khi tuyên bố chất lượng.
+1. Train iSTFTNet bằng mel thật; train thêm HiFi-GAN baseline để A/B. `train-vocoder` đã có cả
+   MPD-lite lẫn **MPD đầy đủ + MRD + MR-STFT** (`discriminator: mpd_mrd`) — bản nâng cấp đang chạy
+   cho run @codelung (`docs/REVISION_PLAN_V2.md` §3 bước 2).
 2. Train acoustic model với duration, F0, energy thật.
 3. Train predictors (đóng băng decoder hoặc giảm LR).
 4. Suy luận hoàn toàn bằng predicted features.

@@ -344,15 +344,19 @@ def train_vocoder_reference(
     from vifasttts.data.dataset import VocoderDataset, collate_vocoder_batch
     from vifasttts.data.features import extract_mel_energy_batched
     from vifasttts.models.discriminators import (
+        DEFAULT_MRD_RESOLUTIONS,
         MultiPeriodDiscriminatorLite,
+        MultiPeriodMultiResolutionDiscriminator,
         discriminator_loss,
         feature_matching_loss,
         generator_adversarial_loss,
+        multi_resolution_stft_loss,
     )
     from vifasttts.models.istftnet import ISTFTNetLite
 
     vt: dict[str, Any] = dict(config.get("vocoder_training", {}))
     training: dict[str, Any] = dict(config.get("training", {}))
+    discriminator_kind = str(vt.get("discriminator", "lite"))
     set_seed(int(config.get("seed", 42)))
     out = Path(output)
     out.mkdir(parents=True, exist_ok=True)
@@ -373,18 +377,38 @@ def train_vocoder_reference(
     if vocoder_checkpoint and Path(vocoder_checkpoint).exists():
         state = torch.load(vocoder_checkpoint, map_location="cpu")
         generator.load_state_dict(state.get("vocoder", state))
-    discriminator = MultiPeriodDiscriminatorLite(channels=int(vt.get("discriminator_channels", 16)))
+    resolutions_raw = vt.get("mrd_resolutions") or DEFAULT_MRD_RESOLUTIONS
+    resolutions: tuple[tuple[int, int, int], ...] = tuple(
+        (int(item[0]), int(item[1]), int(item[2])) for item in resolutions_raw
+    )
+    discriminator: torch.nn.Module
+    if discriminator_kind in ("mpd_mrd", "full"):
+        # Nâng cấp theo REVISION_PLAN_V2 §10: MPD đầy đủ 2/3/5/7/11 + MRD.
+        discriminator = MultiPeriodMultiResolutionDiscriminator(
+            periods=tuple(int(period) for period in vt.get("mpd_periods", (2, 3, 5, 7, 11))),
+            channels=int(vt.get("discriminator_channels", 32)),
+            resolutions=resolutions,
+        )
+    else:
+        discriminator = MultiPeriodDiscriminatorLite(channels=int(vt.get("discriminator_channels", 16)))
 
     from vifasttts.device import resolve_device
 
     requested = vt.get("device") or training.get("device") or "auto"
-    resolved = resolve_device(requested)
-    if resolved == "mps" and str(requested) == "auto":
-        # Đo thực tế trên Mac Apple Silicon: vocoder batch nhỏ chậm hơn CPU
-        # (0,93 vs 0,39 s/bước) do overhead kernel; chỉ dùng MPS khi được ép.
-        print("Ghi chú: MPS chậm hơn CPU cho vocoder batch nhỏ → dùng CPU "
-              "(ép bằng vocoder_training.device=mps nếu muốn).")
-        resolved = "cpu"
+    if (str(requested) == "auto" and discriminator_kind in ("mpd_mrd", "full")
+            and torch.backends.mps.is_available()):
+        # Đo lại sau khi nâng discriminator (MPD đầy đủ 2/3/5/7/11 + MRD): MPS nhanh
+        # hơn CPU 3,8–4,7× (REVISION_PLAN_V2 §10) — kết luận "CPU nhanh hơn" đã đảo.
+        print("Vocoder MPD+MRD: dùng MPS (nhanh hơn CPU khi discriminator lớn).")
+        resolved = "mps"
+    else:
+        resolved = resolve_device(requested)
+        if (resolved == "mps" and str(requested) == "auto"
+                and discriminator_kind not in ("mpd_mrd", "full")):
+            # Đo thực tế trên Mac Apple Silicon: vocoder discriminator nhỏ chậm hơn CPU.
+            print("Ghi chú: MPS chậm hơn CPU cho vocoder discriminator nhỏ → dùng CPU "
+                  "(ép bằng vocoder_training.device=mps nếu muốn).")
+            resolved = "cpu"
     device = torch.device(resolved)
     generator.to(device)
     discriminator.to(device)
@@ -420,6 +444,7 @@ def train_vocoder_reference(
     mel_weight = float(vt.get("mel_weight", 45.0))
     fm_weight = float(vt.get("feature_matching_weight", 2.0))
     adv_weight = float(vt.get("adversarial_weight", 1.0))
+    stft_weight = float(vt.get("stft_weight", 0.0))
     steps = max_steps if max_steps is not None else int(vt.get("max_steps", 100_000))
     log_every = int(vt.get("log_every", 50))
     save_every = int(vt.get("save_every", 5000))
@@ -432,7 +457,7 @@ def train_vocoder_reference(
     with history_path.open("a" if append_history else "w", encoding="utf-8", newline="") as history:
         writer = csv.writer(history)
         if not append_history:
-            writer.writerow(["step", "g_total", "g_adv", "g_mel", "d_loss"])
+            writer.writerow(["step", "g_total", "g_adv", "g_mel", "g_stft", "d_loss"])
         while step < steps:
             for batch in loader:
                 step += 1
@@ -471,14 +496,18 @@ def train_vocoder_reference(
                     mel_target = mel_real
                 frames = min(mel_fake.size(1), mel_target.size(1))
                 g_mel = (mel_fake[:, :frames] - mel_target[:, :frames]).abs().mean()
-                g_loss = adv_weight * g_adv + fm_weight * g_fm + mel_weight * g_mel
+                g_stft = torch.zeros((), device=fake_crop.device)
+                if stft_weight > 0:
+                    g_stft = multi_resolution_stft_loss(fake_crop, real_crop, resolutions)
+                g_loss = adv_weight * g_adv + fm_weight * g_fm + mel_weight * g_mel + stft_weight * g_stft
                 g_loss.backward()
                 opt_g.step()
 
                 if step % log_every == 0:
                     speed = (time.perf_counter() - started) / max(1, step - start_step)
                     print(f"step {step}: g={g_loss.detach().item():.4f} adv={g_adv.detach().item():.4f} "
-                          f"mel={g_mel.detach().item():.4f} d={d_loss.detach().item():.4f} ({speed:.3f}s/bước)")
+                          f"mel={g_mel.detach().item():.4f} stft={g_stft.detach().item():.4f} "
+                          f"d={d_loss.detach().item():.4f} ({speed:.3f}s/bước)")
                 if step % save_every == 0 or g_loss.detach().item() < best:
                     best = min(best, float(g_loss.detach().item()))
                     state = {"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
@@ -486,7 +515,8 @@ def train_vocoder_reference(
                              "config": config, "step": step}
                     torch.save(state, out / "last.pt")
                     writer.writerow([step, float(g_loss.detach().item()), float(g_adv.detach().item()),
-                                     float(g_mel.detach().item()), float(d_loss.detach().item())])
+                                     float(g_mel.detach().item()), float(g_stft.detach().item()),
+                                     float(d_loss.detach().item())])
                     history.flush()
                 if step >= steps:
                     break

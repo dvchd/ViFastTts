@@ -3,6 +3,12 @@
 > Số liệu **as-built** + cách chạy lại + hướng dẫn triển khai. Cập nhật: 12/10/2026.
 > Dữ liệu: `docs/YOUTUBE_DATASET.md` · Ước lượng lý thuyết: `docs/TRAINING_ESTIMATES.md`
 > · Luồng model: `docs/MODEL_FLOW.md`.
+>
+> ⚠️ **Trạng thái (12/10/2026)**: run acoustic **dừng ở 20.850 bước** — val tăng ngược từ 8k
+> (274,0 → 305,5) vì overfit **nhãn duration chia đều**; giữ `best.pt` (8k) để test pipeline.
+> Vocoder cũ (MPD-lite, log-power) cũng dừng. Kế hoạch sửa: `docs/REVISION_PLAN_V2.md` (rev.3) —
+> mel log-magnitude + chuẩn hoá toàn cục, F0 pyworld, MFA (lexicon riêng), SIL, log-F0 DCT,
+> vocoder MPD đầy đủ + MRD. Các bảng số dưới đây giữ nguyên làm **bản ghi lịch sử**.
 
 ## 1. Dữ liệu
 
@@ -27,7 +33,7 @@
 
 | Hạng mục | Đo được | Ghi chú |
 |---|---|---|
-| Dataloader **không** cache | **6,34 s/batch** (16 clip ≈ 29.000 frame) | Nghẽn STFT + F0 autocorrelation trên clip 14s → **cache là bắt buộc** |
+| Dataloader **không** cache | **6,34 s/batch** (16 clip ≈ 29.000 frame) | Nghẽn STFT + F0 autocorrelation trên clip 14s → **cache là bắt buộc** (bước 2 thay F0 bằng pyworld harvest+stonemask) |
 | Cache feature (8 workers) | **33 giây / 13.225 clip (51 giờ audio)** | 6,7 GB, khoá theo hash(audio, config) |
 | Model MPS fp32 | **0,478 s/bước** | Đo riêng model, batch đã nằm trên thiết bị |
 | Model MPS fp16 (autocast) | 0,520 s/bước | **Không lợi** → AMP chỉ bật cho CUDA |
@@ -114,7 +120,8 @@ vifasttts serve --config configs/small_codelung.yaml \
 1. **Alignment**: manifest chưa có `durations` thật → frame chia theo trọng số (placeholder).
    Chất lượng sẽ tăng rõ khi chạy **MFA** trên `data/codelung/raw/` rồi retrain (resume
    hoặc train lại với durations thật).
-2. Vocoder là bản **tham chiếu** (MPD-lite); production cần discriminator lớn + spectral loss.
+2. Vocoder cũ (MPD-lite, log-power) đã dừng cùng run — bản **nâng cấp MPD đầy đủ + MRD + MR-STFT**
+   đang chạy trên MPS (`docs/REVISION_PLAN_V2.md` §3 bước 2, §10).
 3. Sau alignment: có thể nâng lên `base` (16,4M) hoặc `large` (32M) — 51 giờ dữ liệu đủ chỗ.
    **Dự đoán chi tiết batch/bộ nhớ/thời gian cho base/large: `docs/TRAINING_ESTIMATES.md` §3.2**
    (base ~30–42h với batch 6–8; large ~52–72h với batch 4).

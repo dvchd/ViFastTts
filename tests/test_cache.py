@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import wave
 from pathlib import Path
 
@@ -56,6 +57,18 @@ def test_cache_key_stable_and_config_sensitive(tmp_path: Path):
     assert feature_cache_key(row, CONFIG) != feature_cache_key(row, changed)
     with_phonation = {**CONFIG, "phonation": {"enabled": True}}
     assert feature_cache_key(row, CONFIG) != feature_cache_key(row, with_phonation)
+
+
+def test_cache_key_sensitive_to_norm_stats(tmp_path: Path):
+    """Sửa nội dung file mean/std → khoá cache đổi (không dùng lại mel cũ)."""
+    _manifest(tmp_path, [("s1", "ba")])
+    row = {"audio_path": str(tmp_path / "wavs" / "s1.wav")}
+    stats = tmp_path / "mel_stats.json"
+    stats.write_text(json.dumps({"mean": [0.0] * 20, "std": [1.0] * 20}), encoding="utf-8")
+    config = {**CONFIG, "mel": {**CONFIG["mel"], "normalize_path": str(stats)}}
+    key_before = feature_cache_key(row, config)
+    stats.write_text(json.dumps({"mean": [0.1] * 20, "std": [1.0] * 20}), encoding="utf-8")
+    assert feature_cache_key(row, config) != key_before
 
 
 def test_dataset_uses_cache_without_recompute(tmp_path: Path, monkeypatch):

@@ -8,7 +8,11 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **2227 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **2235 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **Run `small` @codelung dừng ở 20.850 bước** (val tăng ngược từ 8k do nhãn chia đều) — chuyển
+  sang `docs/REVISION_PLAN_V2.md` (rev.3). Đang triển khai **bước 2**: mel **log-magnitude clamp
+  1e-5 + chuẩn hoá toàn cục per-bin** (`tools/compute_mel_stats.py`), **F0 pyworld harvest+stonemask**,
+  và **vocoder nâng cấp** (MPD đầy đủ 2/3/5/7/11 + MRD + MR-STFT, 100k bước, MPS).
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối
@@ -163,6 +167,8 @@ python tools/parser_audit.py --wordlist words.txt   # audit từ điển (+ --pr
    save/load), CLI `check-profile`/`build-lexicon`, tool audit `--profile`. ⬜ Mở rộng
    OOV resolver cho từ vay viết liền (`palăng`, `a-xít`...).
 6. ✅ **G2P phương ngữ**: Nam gộp `OO→ɔ`; Bắc narrow `ưu/ươu → [iw]/[iəw]`.
+   ⬜ Bảng thanh Huế (WikiPron hue ~30.242 mục / MFA Huế).
+7. ✅ **Cc narrow `ưu/ươu → [iw]/[iəw]`.
    ⬜ Bảng thanh Huế (WikiPron hue ~30.242 mục / MFA Huế).
 7. ✅ **Cache feature/duration** (`data/cache.py`, CLI `cache-features`,
    `training.cache_features`) khoá theo hash(audio, config).

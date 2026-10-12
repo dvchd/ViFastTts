@@ -44,7 +44,7 @@ inference dùng duration *tự dự đoán*. Không sampling, chạy tất đị
         ▼ (train-vocoder: GAN)                                   ▼
 ┌─ VOCODER ──────────────────────────────────┐  ┌─ VOCODER (load weights) ─────┐
 │ mel thật + wav thật                        │  │ ISTFTNetLite(mel)            │
-│ generator iSTFTNetLite vs MPD-lite         │  │  → waveform                  │
+│ generator iSTFTNetLite vs MPD đầy đủ + MRD │  │  → waveform                  │
 │ losses: mel L1 + FM + adversarial          │  └──────────────┬───────────────┘
 └────────────────────────────────────────────┘                 ▼
                                                       write_wav PCM16 24 kHz
@@ -116,7 +116,7 @@ Một mẫu manifest chứa **audio_path** + **danh sách âm tiết** đã pars
 | --- | --- | --- |
 | `features` | `[N, 7]` | `vocab.encode` từng âm tiết |
 | `durations` | `[N]` | manifest `durations` (nếu khớp tổng frame), ngược lại `allocate_durations` |
-| `mel` | `[T, 100]` | `extract_features`: log-mel (n_fft 1024, hop 256, 24 kHz) |
+| `mel` | `[T, 100]` | `extract_features`: log-mel (n_fft 1024, hop 256, 24 kHz); `mel.log_magnitude` → log-magnitude clamp 1e-5, `mel.normalize_path` → chuẩn hoá toàn cục per-bin (`tools/compute_mel_stats.py`) |
 | `f0`, `vuv`, `energy` | `[N]` | trung bình các frame được gán cho âm tiết theo `durations` |
 | `phonation` (tùy chọn) | `[N, 3]` | HNR/tilt/glottalization, chỉ khi `phonation.enabled` |
 
@@ -202,7 +202,8 @@ chỉ giúp encoder học biểu diễn phân biệt thanh; ở inference `tone_
 ```text
 VocoderDataset: mel [T,100] + wav [T*hop]  (cùng cache feature)
 generator  = ISTFTNetLite(n_mels, hidden, n_fft, hop, upsample_ratio=4)
-discriminator = MultiPeriodDiscriminatorLite(periods=(2,3,5))
+discriminator = MPD đầy đủ (2/3/5/7/11) + MRD  (config `discriminator: mpd_mrd`;
+               mặc định cũ: MultiPeriodDiscriminatorLite)
 mỗi bước:
   fake = G(mel); crop real/fake về min length
   ── bước D ──
@@ -210,14 +211,15 @@ mỗi bước:
   d_loss = BCE(real→1) + BCE(fake→0)          → opt_d.step()
   ── bước G ──
   fake_out = D(fake)
-  g = 1.0·adversarial(BCE fake→1)
-    + 2.0·feature_matching(L1 real.detach() vs fake)
-    + 45.0·mel L1 (log-mel của fake vs mel thật)
+  g = adv_weight·adversarial(BCE fake→1)
+    + fm_weight·feature_matching(L1 real.detach() vs fake)
+    + mel_weight·mel L1 (mel của fake vs mel thật — đã chuẩn hoá cùng config)
+    + stft_weight·MR-STFT (spectral convergence + log-mag L1)
                                               → opt_g.step()
 ```
 
 Checkpoint `last.pt` chứa `{"vocoder": ..., "discriminator": ..., "config", "step"}`.
-`history_vocoder.csv` ghi `g_total/g_adv/g_mel/d_loss`. Trọng số + hidden + ratio nằm ở
+`history_vocoder.csv` ghi `g_total/g_adv/g_mel/g_stft/d_loss`. Trọng số + hidden + ratio nằm ở
 nhóm `vocoder_training` của config; **`synthesize` đọc cùng nhóm này** nên phải khớp.
 
 ## 6. Luồng INFERENCE (`infer.py: synthesize`)
@@ -330,8 +332,8 @@ tone_logits [B,N,6], lengths [B]
 
 1. **Alignment**: không có `durations` thật thì chia đều theo trọng số/frame — placeholder.
    Muốn chất lượng cần MFA/aligner thật ghi `durations` vào manifest (§4 khảo sát).
-2. **Vocoder tham chiếu**: MPD-lite + mel L1 + FM + adversarial đủ để chạy end-to-end,
-   chưa phải cấu hình production (cần discriminator lớn, spectral loss, dữ liệu nhiều).
+2. **Vocoder tham chiếu + nâng cấp**: MPD-lite (mặc định cũ) và **MPD đầy đủ + MRD + MR-STFT**
+   (config `discriminator: mpd_mrd`, `stft_weight > 0`) — xem `docs/REVISION_PLAN_V2.md` §10.
 3. **Phonation conditioning** mới ở mức reference (`model.use_phonation`): model dự đoán
    3 kênh; chưa có đánh giá nghe/thính học.
 4. **ONNX**: đã có runtime đầy đủ (acoustic + vocoder spectrum + iSTFT numpy ở
@@ -404,7 +406,7 @@ vifasttts serve --config configs/base_24k.yaml --checkpoint runs/base/best.pt --
 | `tests/test_neural_smoke.py::test_end_to_end_train_synth_export` | train 2 bước → synthesize → export ONNX (fp32/int8/fp16) → onnxruntime chạy, kể cả batch/độ dài động |
 | `tests/test_neural_smoke.py::test_model_forward_backward_and_masks` | forward + loss + backward + mask |
 | `tests/test_neural_smoke.py::test_model_phonation_branch` | nhánh phonation (output + loss) |
-| `tests/test_vocoder.py` | MPD-lite, dataset/collate, train smoke, CLI, synthesize dùng vocoder vừa train |
+| `tests/test_vocoder.py` | MPD-lite/MPD đầy đủ + MRD + MR-STFT, dataset/collate, train smoke, CLI, synthesize dùng vocoder vừa train |
 | `tests/test_cache.py` | cache không trích lại; khoá nhạy config |
 | `tests/test_onnx_runtime.py` | export acoustic+vocoder → mel ONNX khớp PyTorch → `synthesize-onnx` + streaming + CLI |
 | `tests/test_server.py` | engine (validate payload), WAV bytes, HTTP `/health`, `/info`, `POST /synthesize`, lỗi 400/404 |
@@ -416,7 +418,7 @@ vifasttts serve --config configs/base_24k.yaml --checkpoint runs/base/best.pt --
 | `tests/test_phonation.py` | HNR/tilt/glottalization đúng dải; kênh đi vào dataset |
 | `tests/test_losses*` (qua smoke) | công thức loss/trọng số không NaN, backward chạy |
 
-Chạy tất cả: `pytest` (2227 test). Ma trận parser: `python tools/parser_audit.py`.
+Chạy tất cả: `pytest` (2235 test). Ma trận parser: `python tools/parser_audit.py`.
 
 ## 13. Tài liệu liên quan
 

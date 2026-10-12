@@ -13,7 +13,7 @@ CFG=configs/small_codelung.yaml
 DATA=data/codelung
 CACHE=cache/codelung
 RUN_AC=runs/small_codelung
-RUN_VC=runs/vocoder_codelung
+RUN_VC=runs/vocoder_codelung_v2   # hidden 256 + MPD đầy đủ/MRD + mel mới; vocoder cũ (192) giữ ở runs/vocoder_codelung
 ART=artifacts/small_codelung
 PY=.venv/bin/vifasttts
 
@@ -25,18 +25,16 @@ echo "[1/5] Cache feature (workers 8, bỏ qua file đã có)"
 
 echo "[2/5] Train acoustic (MPS) — từng khối 5k bước, tự resume (chống OOM Metal)"
 TOTAL=$(.venv/bin/python -c "import yaml; print(yaml.safe_load(open('$CFG'))['training']['max_steps'])")
-
-RES_VC=""
-[ -f "$RUN_VC/last.pt" ] && RES_VC="--resume $RUN_VC/last.pt"
+TOTAL_VC=$(.venv/bin/python -c "import yaml; print(yaml.safe_load(open('$CFG'))['vocoder_training']['max_steps'])")
 
 if [ "${PARALLEL:-0}" = "1" ]; then
-  echo "[2-3/5] SONG SONG: acoustic (MPS) + vocoder (CPU) — xem docs/TRAINING.md"
+  echo "[2-3/5] SONG SONG: acoustic (MPS) + vocoder (MPD+MRD, MPS) — xem docs/TRAINING.md"
   .venv/bin/python tools/train_chunked.py --config "$CFG" \
     --train-manifest "$DATA/train.jsonl" --val-manifest "$DATA/val.jsonl" \
     --output "$RUN_AC" --total-steps "$TOTAL" --chunk 5000 &
   AC_PID=$!
-  OMP_NUM_THREADS=6 "$PY" train-vocoder --config "$CFG" --manifest "$DATA/train.jsonl" \
-    --output "$RUN_VC" $RES_VC &
+  .venv/bin/python tools/train_vocoder_chunked.py --config "$CFG" \
+    --manifest "$DATA/train.jsonl" --output "$RUN_VC" --total-steps "$TOTAL_VC" --chunk 5000 &
   VC_PID=$!
   wait $AC_PID
   wait $VC_PID
@@ -45,8 +43,9 @@ else
     --train-manifest "$DATA/train.jsonl" --val-manifest "$DATA/val.jsonl" \
     --output "$RUN_AC" --total-steps "$TOTAL" --chunk 5000
 
-  echo "[3/5] Train vocoder (CPU, random crop) — resume nếu đã có last.pt"
-  "$PY" train-vocoder --config "$CFG" --manifest "$DATA/train.jsonl" --output "$RUN_VC" $RES_VC
+  echo "[3/5] Train vocoder (MPD+MRD, MPS, random crop) — từng khối, tự resume"
+  .venv/bin/python tools/train_vocoder_chunked.py --config "$CFG" \
+    --manifest "$DATA/train.jsonl" --output "$RUN_VC" --total-steps "$TOTAL_VC" --chunk 5000
 fi
 
 echo "[4/5] Export ONNX (fp32 + fp16 + vocoder)"

@@ -26,12 +26,22 @@ def feature_cache_key(row: dict[str, Any], config: dict[str, Any]) -> str:
     except OSError:
         stamp = "missing"
     mel = config.get("mel", {})
+    normalize_path = str(mel.get("normalize_path", "")) if isinstance(mel, dict) else ""
+    if normalize_path:
+        try:
+            norm_hash = hashlib.sha1(Path(normalize_path).read_bytes()).hexdigest()
+        except OSError:
+            norm_hash = "missing"
+    else:
+        norm_hash = ""
     payload = json.dumps(
         {
             "audio": str(audio),
             "stamp": stamp,
             "sample_rate": int(config.get("sample_rate", 24000)),
             "mel": {str(key): mel[key] for key in sorted(mel)},
+            "mel_norm_hash": norm_hash,
+            "f0": config.get("f0", {}),
             "phonation": config.get("phonation", {}),
         },
         sort_keys=True,

@@ -17,9 +17,11 @@ from vifasttts.data.manifest import build_manifest
 from vifasttts.infer import synthesize
 from vifasttts.models.discriminators import (
     MultiPeriodDiscriminatorLite,
+    MultiPeriodMultiResolutionDiscriminator,
     discriminator_loss,
     feature_matching_loss,
     generator_adversarial_loss,
+    multi_resolution_stft_loss,
 )
 from vifasttts.models.istftnet import ISTFTNetLite
 from vifasttts.train import train_reference, train_vocoder_reference
@@ -87,6 +89,59 @@ def test_mpd_lite_shapes_and_losses():
     assert torch.isfinite(g_loss)
     g_loss.backward()
     assert fake.grad is not None and torch.isfinite(fake.grad).all()
+
+
+def test_mpd_full_mrd_shapes_and_losses():
+    """MPD đầy đủ + MRD: logits/feature hợp lệ và loss backprop được."""
+    discriminator = MultiPeriodMultiResolutionDiscriminator(
+        periods=(2, 3), channels=8, resolutions=((64, 16, 64), (128, 32, 128)),
+    )
+    real = torch.randn(2, 512)
+    fake = torch.randn(2, 512, requires_grad=True)
+    real_outputs = discriminator(real)
+    fake_outputs = discriminator(fake)
+    assert len(real_outputs) == 4  # 2 period + 2 spectral
+    for logits, features in real_outputs:
+        assert logits.shape == (2,)
+        assert len(features) in (4, 5)
+
+    d_loss = discriminator_loss(real_outputs, fake_outputs)
+    assert torch.isfinite(d_loss)
+    d_loss.backward(retain_graph=True)
+
+    g_loss = generator_adversarial_loss(fake_outputs) + feature_matching_loss(real_outputs, fake_outputs)
+    assert torch.isfinite(g_loss)
+    g_loss.backward()
+    assert fake.grad is not None and torch.isfinite(fake.grad).all()
+
+
+def test_multi_resolution_stft_loss():
+    pred = torch.randn(2, 1024, requires_grad=True)
+    target = torch.randn(2, 1024)
+    loss = multi_resolution_stft_loss(pred, target, resolutions=((64, 16, 64), (128, 32, 128)))
+    assert torch.isfinite(loss) and float(loss) > 0.0
+    loss.backward()
+    assert pred.grad is not None and torch.isfinite(pred.grad).all()
+
+
+def test_vocoder_training_mpd_mrd_smoke(tmp_path: Path):
+    """Train vocoder 1 bước với MPD đầy đủ + MRD + MR-STFT loss (config-driven)."""
+    manifest = _manifest(tmp_path)
+    config = {
+        **VOC_CONFIG,
+        "vocoder_training": {
+            **VOC_CONFIG["vocoder_training"],
+            "discriminator": "mpd_mrd",
+            "discriminator_channels": 8,
+            "mrd_resolutions": [[64, 16, 64], [128, 32, 128]],
+            "stft_weight": 1.0,
+        },
+    }
+    out = tmp_path / "vocoder_mrd"
+    train_vocoder_reference(config, str(manifest), str(out), max_steps=1)
+    assert (out / "last.pt").exists()
+    state = torch.load(out / "last.pt", map_location="cpu", weights_only=False)
+    assert "discriminator" in state and state["step"] == 1
 
 
 def test_vocoder_dataset_and_collate(tmp_path: Path):

@@ -30,8 +30,9 @@ raw text
 - **LengthRegulator**: biểu diễn bằng `cumsum` + so sánh + `gather`, export ONNX với **độ dài frame động** — đã kiểm chứng bằng onnxruntime cho các tổ hợp (B=1..3, N=3..12, tổng frame khác nhau).
 - **Frame position**: mỗi frame biết vị trí 0..1 trong âm tiết chứa nó (hỗ trợ ranh giới đầu/giữa/cuối nguyên âm, mục 9.8 của khảo sát).
 - **Vocoder**: `ISTFTNetLite` upsample mel ×4 trước khi dự đoán STFT. Đã có vòng train tham chiếu
-  (`vifasttts train-vocoder`, MPD-lite + mel L1 + feature matching + adversarial — `docs/MODEL_FLOW.md` §5);
-  bản production cần discriminator lớn hơn + spectral loss + dữ liệu nhiều.
+  (`vifasttts train-vocoder`, MPD-lite + mel L1 + feature matching + adversarial — `docs/MODEL_FLOW.md` §5)
+  và **bản nâng cấp** `discriminator: mpd_mrd` (MPD đầy đủ 2/3/5/7/11 + MRD + MR-STFT, chạy theo khối
+  MPS — `docs/REVISION_PLAN_V2.md` §10).
 - **Export ONNX**: exporter TorchScript, 8 output có tên (`mel`, `log_duration`, `durations`, `f0`,
   `vuv_logits`, `energy`, `tone_logits`, `lengths`) — 9 nếu bật `model.use_phonation`; dynamic axes cho
   batch/số âm tiết. Dùng `exp-1` thay `expm1` để export được. Hỗ trợ `--precision fp16|int8`.
@@ -73,7 +74,8 @@ Các hạng mục thiết kế trong `docs/TTS_ARCHITECTURE_RESEARCH.md` và tr�
 1. ✅ **Segment Expander** — `frontend/segments.py` (duration cấp role, tách `IÊ/UÔ/ƯƠ`).
 2. ⬜ **Alignment thật** (MFA; forward-sum + Viterbi + static prior về sau) — hiện chia đều/trọng số.
 3. ✅ **Phonation** — trích `data/phonation.py` + điều kiện hoá `model.use_phonation` (reference).
-4. ✅ **Vocoder tham chiếu** — `train-vocoder` (MPD-lite); ⬜ bản production + A/B HiFi-GAN.
+4. ✅ **Vocoder tham chiếu + nâng cấp** — `train-vocoder` (MPD-lite mặc định; `mpd_mrd` = MPD đầy đủ + MRD
+   + MR-STFT, chạy khối MPS); ⬜ GTA fine-tune trên mel acoustic.
 5. ✅ **ONNX + quantization** FP16/INT8 động; ⬜ ONNX vocoder + calibration đầy đủ.
 
 Chi tiết luồng: `docs/MODEL_FLOW.md`; trạng thái đầy đủ: `docs/PROJECT_STATUS.md`.

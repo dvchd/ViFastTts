@@ -21,6 +21,19 @@ mel:
   n_mels: 100
   f_min: 0
   f_max: 12000
+  # Biểu diễn mới (REVISION_PLAN_V2 §2): log-MAGNITUDE clamp 1e-5 (thay log-power 1e-6)
+  # + chuẩn hoá toàn cục per-bin. Tạo stats bằng:
+  #   python tools/compute_mel_stats.py --manifest data/codelung/train.jsonl \
+  #       --config configs/small_codelung.yaml --out data/codelung/mel_stats.json
+  log_magnitude: true
+  normalize_path: data/codelung/mel_stats.json
+
+# F0: pyworld harvest + stonemask (thay autocorrelation — tránh lỗi quãng tám), cần extra 'f0'.
+f0:
+  method: pyworld
+  f_min: 70
+  f_max: 400
+  interpolate: true
 
 model:
   component_dim: 64
@@ -64,17 +77,20 @@ phonation:
 vocoder_training:
   batch_size: 8
   learning_rate: 0.0002
-  max_steps: 60000   # tăng từ 30k: bước chỉ 0,166s → 60k ≈ 2,8h, chất âm tốt hơn
+  max_steps: 100000  # GAN cần lâu: 60k là quá ít (REVISION_PLAN_V2 §10); 100k là mức tối thiểu
   num_workers: 6
   log_every: 100
   save_every: 2000
-  crop_frames: 128   # ~1,36 giây @ hop 256 — random crop chuẩn GAN, bước nhanh
-  hidden: 192
+  crop_frames: 64    # 0,68 giây @ hop 256 — đo MPS: crop 64 nhanh gần gấp đôi crop 128 (0,67 vs 1,35 s/bước, ch=16)
+  hidden: 256        # nâng từ 192 — điểm ngọt tham chiếu (generator 3,53M)
   upsample_ratio: 4
-  discriminator_channels: 16
-  mel_weight: 45.0
+  discriminator: mpd_mrd        # MPD đầy đủ 2/3/5/7/11 + MRD (thay MPD-lite 39k)
+  discriminator_channels: 16    # đo MPS: ch=16 (D 7,7M) 0,67 s/bước; ch=32 (D 31M) 1,49 s/bước
+  device: auto       # auto → MPS cho MPD+MRD (đã đo nhanh hơn CPU 3,8–4,7×)
+  mel_weight: 5.0     # mel mới đã chuẩn hoá toàn cục → đơn vị đổi, hạ từ 45
   feature_matching_weight: 2.0
   adversarial_weight: 1.0
+  stft_weight: 2.0    # multi-resolution STFT loss (spectral convergence + log-mag L1)
 
 loss_weights:
   mel: 1.0
