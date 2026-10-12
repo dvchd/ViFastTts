@@ -7,6 +7,7 @@ frame = `1 + len(wav)//hop_length`. Xem `docs/MODEL_FLOW.md` §4.1.
 from __future__ import annotations
 
 import functools
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -64,6 +65,51 @@ def load_wav(path: str | Path, sample_rate: int) -> torch.Tensor:
         target = max(1, round(wav.numel() * sample_rate / source_rate))
         wav = torch.nn.functional.interpolate(wav.view(1, 1, -1), size=target, mode="linear", align_corners=False).view(-1)
     return wav
+
+
+def canonical_mel_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Mục `mel` đã chuẩn hoá (thêm `sample_rate`) — dùng thống nhất cho hash/trích xuất."""
+    mel_config = dict(config.get("mel", {}))
+    mel_config.setdefault("sample_rate", int(config.get("sample_rate", 24000)))
+    return mel_config
+
+
+def mel_config_hash(mel_config: dict[str, Any]) -> str:
+    """SHA1 của cấu hình mel + nội dung file stats — 'đóng băng' biểu diễn mel.
+
+    Ghi vào checkpoint (acoustic + vocoder) và kiểm tra khi load: mọi thay đổi
+    n_fft/hop/f_max/clamp/stats sau khi train vocoder đều bị phát hiện
+    (REVISION_PLAN_V2 rev.5 §1a).
+    """
+    payload = {str(key): mel_config[key] for key in sorted(mel_config)}
+    stats_path = payload.get("normalize_path")
+    stats_digest = ""
+    if stats_path:
+        try:
+            stats_digest = hashlib.sha1(Path(str(stats_path)).read_bytes()).hexdigest()
+        except OSError:
+            stats_digest = "missing"
+    blob = json.dumps({"mel": payload, "stats": stats_digest}, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha1(blob.encode("utf-8")).hexdigest()
+
+
+def verify_mel_hash(state: Any, mel_config: dict[str, Any], source: str) -> None:
+    """Báo lỗi nếu checkpoint ghi `mel_hash` khác cấu hình/stats hiện tại.
+
+    Checkpoint cũ không có `mel_hash` thì bỏ qua (tương thích ngược).
+    """
+    if not isinstance(state, dict):
+        return
+    recorded = state.get("mel_hash")
+    if not recorded:
+        return
+    current = mel_config_hash(mel_config)
+    if str(recorded) != current:
+        raise ValueError(
+            f"Biểu diễn mel không khớp checkpoint ({source}): checkpoint ghi {recorded}, "
+            f"cấu hình hiện tại {current}. Mel đã 'đóng băng' từ lúc train vocoder — "
+            "đổi mel buộc phải train lại vocoder (xem docs/REVISION_PLAN_V2.md §1a)."
+        )
 
 
 def extract_mel_energy(wav: torch.Tensor, mel_config: dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:
@@ -190,8 +236,7 @@ def extract_features(wav_path: str | Path, config: dict[str, Any]) -> dict[str, 
     (xem `data/phonation.py`).
     """
     sample_rate = int(config.get("sample_rate", 24000))
-    mel_config = dict(config["mel"])
-    mel_config.setdefault("sample_rate", sample_rate)
+    mel_config = canonical_mel_config(config)
     wav = load_wav(wav_path, sample_rate)
     mel, energy = extract_mel_energy(wav, mel_config)
     f0_config = dict(config.get("f0", {}) or {})

@@ -29,6 +29,13 @@ def set_seed(seed: int) -> None:
         pass
 
 
+def _mel_hash(config: dict) -> str:
+    """Hash biểu diễn mel (canonical) để ghi vào checkpoint — rev.5 §1a."""
+    from vifasttts.data.features import canonical_mel_config, mel_config_hash
+
+    return mel_config_hash(canonical_mel_config(config))
+
+
 def _build_loaders(config: dict[str, Any], train_manifest: str, val_manifest: str, training: dict[str, Any], cache_dir: str | None = None):
     """Dựng DataLoader train/val; tính trước cache (nếu bật) để tránh tranh chấp worker."""
     from torch.utils.data import DataLoader
@@ -287,7 +294,8 @@ def train_reference(
                     writer.writerow([step, float(loss), float(parts["mel"]), val_loss])
                     history.flush()
                     state = {"model": model.state_dict(), "optimizer": optimizer.state_dict(),
-                             "config": config, "step": step, "best_val": best_val}
+                             "config": config, "step": step, "best_val": best_val,
+                             "mel_hash": _mel_hash(config)}
                     torch.save(state, out / "last.pt")
                     if val_loss < best_val:
                         best_val = val_loss
@@ -306,13 +314,15 @@ def train_reference(
                         break
                 elif step % save_every == 0:
                     torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
-                                "config": config, "step": step, "best_val": best_val}, out / "last.pt")
+                                "config": config, "step": step, "best_val": best_val,
+                                "mel_hash": _mel_hash(config)}, out / "last.pt")
                 if early_stopped or step >= steps:
                     break
             if early_stopped:
                 break
     torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
-                "config": config, "step": step, "best_val": best_val}, out / "last.pt")
+                "config": config, "step": step, "best_val": best_val,
+                "mel_hash": _mel_hash(config)}, out / "last.pt")
     print(f"Đã huấn luyện {step} bước, checkpoint tại {out}/last.pt")
 
 
@@ -324,6 +334,8 @@ def train_vocoder_reference(
     max_steps: int | None = None,
     vocoder_checkpoint: str | None = None,
     resume: str | None = None,
+    seed: int | None = None,
+    lr_scale: float = 1.0,
 ) -> None:
     """Huấn luyện vocoder tham chiếu: iSTFTNetLite + MPD-lite.
 
@@ -358,7 +370,7 @@ def train_vocoder_reference(
     vt: dict[str, Any] = dict(config.get("vocoder_training", {}))
     training: dict[str, Any] = dict(config.get("training", {}))
     discriminator_kind = str(vt.get("discriminator", "lite"))
-    set_seed(int(config.get("seed", 42)))
+    set_seed(int(seed if seed is not None else config.get("seed", 42)))
     out = Path(output)
     out.mkdir(parents=True, exist_ok=True)
     if not Path(manifest).exists():
@@ -444,6 +456,11 @@ def train_vocoder_reference(
     adv_weight = float(vt.get("adversarial_weight", 1.0))
     stft_weight = float(vt.get("stft_weight", 0.0))
     grad_clip = float(vt.get("grad_clip", 5.0))
+    if lr_scale != 1.0:
+        for group in (*opt_g.param_groups, *opt_d.param_groups):
+            group["lr"] = float(group["lr"]) * lr_scale
+        print(f"lr_scale={lr_scale}: LR hiện tại {opt_g.param_groups[0]['lr']:.2e} "
+              "(hạ tiếp nếu NaN lặp lại — E4)")
     steps = max_steps if max_steps is not None else int(vt.get("max_steps", 100_000))
     log_every = int(vt.get("log_every", 50))
     save_every = int(vt.get("save_every", 5000))
@@ -453,6 +470,7 @@ def train_vocoder_reference(
     best = float("inf")
     step = start_step
     started = time.perf_counter()
+    finite_ok = torch.ones((), dtype=torch.bool, device=device)
     with history_path.open("a" if append_history else "w", encoding="utf-8", newline="") as history:
         writer = csv.writer(history)
         if not append_history:
@@ -478,8 +496,7 @@ def train_vocoder_reference(
                 real_outputs = discriminator(real_crop)
                 fake_outputs = discriminator(fake_crop.detach())
                 d_loss = discriminator_loss(real_outputs, fake_outputs)
-                if not torch.isfinite(d_loss):
-                    raise RuntimeError(f"NaN/Inf ở D loss tại bước {step} — runner sẽ resume từ last.pt")
+                finite_ok = finite_ok & torch.isfinite(d_loss)  # E4: không sync mỗi bước
                 d_loss.backward()
                 torch.nn.utils.clip_grad_norm_(discriminator.parameters(), grad_clip)
                 opt_d.step()
@@ -502,8 +519,12 @@ def train_vocoder_reference(
                 if stft_weight > 0:
                     g_stft = multi_resolution_stft_loss(fake_crop, real_crop, resolutions)
                 g_loss = adv_weight * g_adv + fm_weight * g_fm + mel_weight * g_mel + stft_weight * g_stft
-                if not torch.isfinite(g_loss):
-                    raise RuntimeError(f"NaN/Inf ở G loss tại bước {step} — runner sẽ resume từ last.pt")
+                finite_ok = finite_ok & torch.isfinite(g_loss)
+                if step % 10 == 0 and not bool(finite_ok.item()):
+                    # E4: kiểm gộp mỗi 10 bước (một sync) — runner sẽ resume, đổi seed & hạ LR nếu lặp.
+                    raise RuntimeError(
+                        f"NaN/Inf trong 10 bước gần nhất (bước {step}) — runner sẽ resume + đổi seed/hạ LR"
+                    )
                 g_loss.backward()
                 torch.nn.utils.clip_grad_norm_(generator.parameters(), grad_clip)
                 opt_g.step()
@@ -519,7 +540,7 @@ def train_vocoder_reference(
                     best = min(best, float(g_loss.detach().item()))
                     state = {"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
                              "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict(),
-                             "config": config, "step": step}
+                             "config": config, "step": step, "mel_hash": _mel_hash(config)}
                     torch.save(state, out / "last.pt")
                     writer.writerow([step, float(g_loss.detach().item()), float(g_adv.detach().item()),
                                      float(g_mel.detach().item()), float(g_stft.detach().item()),
@@ -531,5 +552,5 @@ def train_vocoder_reference(
         torch.mps.empty_cache()
     torch.save({"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
                 "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict(),
-                "config": config, "step": step}, out / "last.pt")
+                "config": config, "step": step, "mel_hash": _mel_hash(config)}, out / "last.pt")
     print(f"Đã huấn luyện vocoder {step} bước, checkpoint tại {out}/last.pt")

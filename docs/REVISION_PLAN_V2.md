@@ -1,9 +1,8 @@
-# REVISION_PLAN_V2 (rev.4) — Sửa nền tảng trước khi lên `base`
+# REVISION_PLAN_V2 (rev.5) — Sửa nền tảng trước khi lên `base`
 
-> Nguồn: phản hồi chuyên gia (4 vòng) + xác minh trong code. Cập nhật: 12/10/2026.
-> **rev.4** chốt toàn bộ câu hỏi A–F (xem §5), thêm 3 điểm quan trọng: **vocoder không cần text**
-> (train trên đủ 51h, chạy song song MFA), **cắt clip theo SIL** (giảm nghẽn attention decoder),
-> **giữ hop 256**.
+> Nguồn: phản hồi chuyên gia (5 vòng) + xác minh trong code. Cập nhật: 12/10/2026.
+> **rev.5** chốt 3 điểm trước khi khởi động vocoder + chỉnh nhỏ (xem §9). Các mục dưới giữ nguyên
+> từ rev.4 và đã được cập nhật dần trong §1/§2.
 
 ## 1. Trạng thái code (đã có)
 - **A1** mel loss mean/bin ✅ · **A2.4** conditioning GT f0/vuv/energy ✅ (sẽ bật khi retrain)
@@ -83,3 +82,40 @@
 - **Nghe 400 clip mẫu** trong `data/codelung/review/` và điền `data/codelung/review/filled.txt`
   (mỗi dòng `từ|cách đọc`; 7 từ đã có gợi ý sẵn từ quy tắc `-ing`).
   Sau đó: `python tools/fallback_review.py --merge data/codelung/review/filled.txt`.
+- Mẹo (rev.5): lỗi caption (chffix/endp/maxide) → sửa về **từ đúng** trong transcript, đừng respell
+  lỗi chính tả; thuật ngữ Anh → ghi **cách bạn thực đọc trong video** (ví dụ `window|uyn đâu`);
+  làm theo **thứ tự tần suất** — 150–200 từ đầu cứu phần lớn số giờ, phần còn lại có thể bỏ.
+
+## 9. rev.5 — chốt trước khi khởi động vocoder + chỉnh nhỏ
+### 9.1. Ba điểm chốt
+1. **Đóng băng cấu hình mel** ✅ code: `canonical_mel_config` + `mel_config_hash` (gồm hash nội dung
+   file stats) ghi vào **cả checkpoint acoustic và vocoder**; `synthesize` kiểm tra khi load, lệch →
+   báo lỗi rõ (checkpoint cũ không có hash thì bỏ qua). **Stats tính lại trên 2.000 clip sau recut**
+   rồi mới chốt; từ đó mọi thay đổi mel (n_fft/hop/f_max/clamp/stats) buộc train lại vocoder.
+2. **Tách val khỏi vocoder** ✅: vocoder train trên **`train.jsonl` (44,96h — 11.424 clip, gồm cả clip
+   fallback)** chứ không dùng val; CER copy-synthesis trên val mới phản ánh đúng.
+3. **Audit Vocos** ✅: expansion kênh trung gian **3×** (đúng Vocos gốc, trước là 4×) → generator
+   **12.069.762** tham số: net 8 block **7.123.968** · head (384→1.026, k7) **2.758.914** (23%) ·
+   up 1.180.032 · post 737.664 · pre 269.184. Giữ head k7 (pha chính xác); lite cũ 3,53M vẫn còn.
+
+### 9.2. Chỉnh nhỏ
+- **E4 grad clip**: GAN **5.0** (`vocoder_training.grad_clip`) · acoustic giữ **1.0**
+  (`training.grad_clip`) — đã ghi rõ trong config.
+- **NaN**: kiểm **gộp mỗi 10 bước** (1 sync, không `.item()` từng bước) → raise để runner
+  **resume + đổi seed** (`--seed`), **NaN lặp ≥2 lần thì hạ LR 0.5×** (`--lr-scale`) ✅ code.
+- **Recut B3 xong** (13.215 clip · 51,73h; **4.745 biên được nới** qua âm tiết bị cắt) → **dựng lại
+  corpus MFA sau recut** (việc bắt buộc trong bước 2).
+- **Cắt segment theo SIL**: tính **mel + F0 trên clip đầy đủ rồi cắt theo frame** (tránh hiệu ứng biên
+  STFT); mỗi segment bắt đầu/kết thúc bằng SIL, giữ đúng duration SIL.
+- **A3 epoch (cập nhật)**: sau khi loại clip fallback + lọc MFA, acoustic còn ~**33–35h**; batch theo
+  **tổng frame ~29k** (không theo số clip) → 1 epoch ≈ **530–560 bước**; 100k bước ≈ **180 epoch**;
+  **early stop vẫn là chốt chặn**.
+
+### 9.3. Lịch chạy (máy không chờ người) ✅ đang chạy
+1. **Recut B3** ✅ → **mel stats 2.000 clip** → **cache** → **khởi động vocoder ngay**
+   (MPS, `train.jsonl` 44,96h, Vocos + MPD/MRD, 100k bước).
+2. Trong lúc vocoder chạy: người điền overrides → parse lại text (không cần recut) → lọc rẻ (B4) →
+   **dựng lại corpus MFA** → MFA (CPU) ∥ vocoder (MPS).
+3. QC MFA → SIL + log-F0 DCT + **cắt segment** (CPU, song song được với vocoder).
+4. Đo s/bước **4/4, 4/5, 4/6**: **tạm dừng vocoder** (chunk resume) hoặc chờ xong — **không tranh MPS**.
+5. Smoke small 20k → base 100k (early stop audio-level) → GTA fine-tune.

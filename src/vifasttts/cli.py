@@ -278,13 +278,16 @@ def train_vocoder_cmd(
     max_steps: int | None = typer.Option(None, help="Ghi đè số bước tối đa"),
     vocoder_checkpoint: str | None = typer.Option(None, help="Checkpoint vocoder để huấn luyện tiếp"),
     resume: str | None = typer.Option(None, help="Checkpoint .pt để tiếp tục (resume)"),
+    seed: int | None = typer.Option(None, help="Ghi đè seed (đổi thứ tự batch sau khi rollback NaN)"),
+    lr_scale: float = typer.Option(1.0, help="Nhân learning rate sau resume (ví dụ 0.5 khi NaN lặp lại)"),
 ) -> None:
-    """Huấn luyện vocoder tham chiếu (iSTFTNetLite + MPD-lite)."""
+    """Huấn luyện vocoder (generator lite/vocos + MPD/MRD)."""
     from vifasttts.train import train_vocoder_reference
 
     train_vocoder_reference(
         load_config(config), manifest, output,
         max_steps=max_steps, vocoder_checkpoint=vocoder_checkpoint, resume=resume,
+        seed=seed, lr_scale=lr_scale,
     )
     typer.echo(f"Đã lưu vocoder vào {output}")
 

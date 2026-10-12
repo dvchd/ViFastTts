@@ -187,6 +187,9 @@ def test_vocoder_training_smoke(tmp_path: Path):
     assert (out / "resolved_config.json").exists()
     state = torch.load(out / "last.pt", map_location="cpu", weights_only=False)
     assert "vocoder" in state and "discriminator" in state and state["step"] == 2
+    from vifasttts.data.features import canonical_mel_config, mel_config_hash
+
+    assert state["mel_hash"] == mel_config_hash(canonical_mel_config(VOC_CONFIG))
 
     # Checkpoint khớp kiến trúc ISTFTNetLite mà `synthesize` dựng lên.
     vocoder = ISTFTNetLite(n_mels=20, hidden=16, n_fft=256, hop_length=64)

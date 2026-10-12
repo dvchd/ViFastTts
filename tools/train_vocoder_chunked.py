@@ -28,6 +28,17 @@ def _mps_env() -> dict[str, str]:
     return env
 
 
+def _base_seed(config_path: str) -> int:
+    """Seed gốc từ config (mặc định 42) — dùng để đổi batch khi rollback NaN."""
+    try:
+        import yaml
+
+        payload = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
+        return int(payload.get("seed", 42))
+    except Exception:  # noqa: BLE001 - thiếu/không đọc được config thì dùng mặc định
+        return 42
+
+
 def read_step(checkpoint: Path) -> int:
     """Đọc số bước hiện tại từ checkpoint (0 nếu chưa có)."""
     if not checkpoint.exists():
@@ -51,6 +62,7 @@ def main() -> None:
     args = parser.parse_args()
 
     out = Path(args.output)
+    base_seed = _base_seed(args.config)
     failures = 0
     while True:
         step = read_step(out / "last.pt")
@@ -67,7 +79,14 @@ def main() -> None:
         ]
         if step > 0:
             command += ["--resume", str(out / "last.pt")]
-        print(f"[chunked-vc] {step} → {target} bước (khối {args.chunk})", flush=True)
+        if failures:
+            # E4: rollback → đổi seed (tránh gặp lại đúng NaN cũ)...
+            command += ["--seed", str(base_seed + failures * 1000)]
+        if failures >= 2:
+            # ...và hạ LR 0.5× nếu NaN lặp lại từ 2 lần trở lên.
+            command += ["--lr-scale", str(0.5 ** (failures - 1))]
+        print(f"[chunked-vc] {step} → {target} bước (khối {args.chunk}"
+              f"{f', lần lỗi {failures}' if failures else ''})", flush=True)
         code = subprocess.run(command, check=False, env=_mps_env()).returncode
         new_step = read_step(out / "last.pt")
         if code == 0:

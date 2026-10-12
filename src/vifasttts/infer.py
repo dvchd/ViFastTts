@@ -55,6 +55,7 @@ class Synthesizer:
         """
         import torch
 
+        from vifasttts.data.features import canonical_mel_config, verify_mel_hash
         from vifasttts.device import resolve_device
         from vifasttts.frontend.vocab import ComponentVocabs
         from vifasttts.models.istftnet import build_generator
@@ -70,6 +71,7 @@ class Synthesizer:
                  len(self.vocabs.punctuation)]
         self.model = ViFastTtsModel(config, sizes)
         state = torch.load(checkpoint, map_location="cpu")
+        verify_mel_hash(state, canonical_mel_config(config), str(checkpoint))
         self.model.load_state_dict(state.get("model", state))
         self.model.to(self.device)
         self.model.eval()
@@ -80,6 +82,7 @@ class Synthesizer:
         self.vocoder = build_generator(vocoder_training, mel_config)
         if vocoder_checkpoint and Path(vocoder_checkpoint).exists():
             vocoder_state = torch.load(vocoder_checkpoint, map_location="cpu")
+            verify_mel_hash(vocoder_state, canonical_mel_config(config), str(vocoder_checkpoint))
             self.vocoder.load_state_dict(vocoder_state.get("vocoder", vocoder_state))
         elif isinstance(state, dict) and "vocoder" in state:
             self.vocoder.load_state_dict(state["vocoder"])

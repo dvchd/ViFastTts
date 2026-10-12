@@ -116,8 +116,9 @@ class ISTFTNetVocos(_ISTFTNetBase):
     """Generator kiểu Vocos: `blocks` ConvNeXt + head iSTFT (giữ export ONNX 2 graph)."""
 
     def __init__(self, n_mels: int = 100, hidden: int = 384, n_fft: int = 1024,
-                 hop_length: int = 256, upsample_ratio: int = 4, blocks: int = 8) -> None:
-        """`blocks` = số block ConvNeXt; hidden 384 như khuyến nghị (ARCH_DISCUSSION_M6 D3)."""
+                 hop_length: int = 256, upsample_ratio: int = 4, blocks: int = 8,
+                 expansion: int = 3) -> None:
+        """`blocks` = số block ConvNeXt; `expansion` = bội kênh trung gian (Vocos dùng 3×)."""
         super().__init__()
         if hop_length % upsample_ratio != 0:
             raise ValueError("hop_length phải chia hết cho upsample_ratio")
@@ -125,7 +126,7 @@ class ISTFTNetVocos(_ISTFTNetBase):
         self.hop_length = hop_length // upsample_ratio
         self.upsample_ratio = upsample_ratio
         self.pre = nn.Conv1d(n_mels, hidden, 7, padding=3)
-        self.net = nn.Sequential(*[ConvNeXtBlock(hidden) for _ in range(blocks)])
+        self.net = nn.Sequential(*[ConvNeXtBlock(hidden, expansion=expansion) for _ in range(blocks)])
         self.up = nn.ConvTranspose1d(
             hidden, hidden,
             kernel_size=2 * upsample_ratio,
@@ -152,6 +153,7 @@ def build_generator(vocoder_training: dict[str, Any], mel_config: dict[str, Any]
         return ISTFTNetVocos(
             hidden=int(vocoder_training.get("hidden", 384)),
             blocks=int(vocoder_training.get("generator_blocks", 8)),
+            expansion=int(vocoder_training.get("generator_expansion", 3)),
             **common,
         )
     return ISTFTNetLite(hidden=int(vocoder_training.get("hidden", 256)), **common)
