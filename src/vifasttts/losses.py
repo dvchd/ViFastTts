@@ -10,13 +10,23 @@ import torch
 import torch.nn.functional as F
 
 
-def masked_l1(pred: torch.Tensor, target: torch.Tensor, lengths: torch.Tensor | None = None) -> torch.Tensor:
-    """L1 có mask theo `lengths` (bỏ qua vùng padding)."""
+def masked_l1(pred: torch.Tensor, target: torch.Tensor, lengths: torch.Tensor | None = None,
+              *, mean_over_bins: bool = False) -> torch.Tensor:
+    """L1 có mask theo `lengths` (bỏ qua vùng padding).
+
+    `mean_over_bins=True`: chia thêm cho số bin (chiều cuối) — mặc định False giữ
+    hành vi cũ (tổng theo bin), dùng cho mel: tránh loss mel lấn át các loss khác
+    (mel 100 bin ≈ 100× các loss còn lại).
+    """
     if lengths is None:
-        return F.l1_loss(pred, target)
-    steps = torch.arange(pred.size(1), device=pred.device)[None, :]
-    mask = (steps < lengths[:, None]).unsqueeze(-1)
-    return (pred.sub(target).abs() * mask).sum() / mask.sum().clamp_min(1)
+        loss = F.l1_loss(pred, target)
+    else:
+        steps = torch.arange(pred.size(1), device=pred.device)[None, :]
+        mask = (steps < lengths[:, None]).unsqueeze(-1)
+        loss = (pred.sub(target).abs() * mask).sum() / mask.sum().clamp_min(1)
+    if mean_over_bins and pred.size(-1) > 0:
+        loss = loss / pred.size(-1)
+    return loss
 
 
 def _syllable_mask(lengths: torch.Tensor | None, size: int, device: torch.device) -> torch.Tensor:
@@ -45,7 +55,7 @@ def acoustic_losses(outputs: dict[str, torch.Tensor], batch: dict[str, torch.Ten
 
     duration_target = torch.log1p(batch["durations"].float())
     losses = {
-        "mel": masked_l1(outputs["mel"], batch["mel"], batch.get("mel_lengths")),
+        "mel": masked_l1(outputs["mel"], batch["mel"], batch.get("mel_lengths"), mean_over_bins=True),
         "duration": _masked_mean((outputs["log_duration"] - duration_target) ** 2, syllable_mask),
         "f0": _masked_mean((outputs["f0"] - batch["f0"]).abs(), syllable_mask),
         "vuv": _masked_mean(F.binary_cross_entropy_with_logits(

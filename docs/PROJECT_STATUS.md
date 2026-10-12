@@ -8,7 +8,7 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **2226 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **2227 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối
@@ -184,6 +184,12 @@ python tools/parser_audit.py --wordlist words.txt   # audit từ điển (+ --pr
 - Batch size (dự đoán, ghi ở `docs/TRAINING_ESTIMATES.md` §3.2): giữ **16** cho `small` (đã kiểm
   chứng, đỉnh MPS 25GB); 20/24 chỉ lợi ~5–9% thời gian và 24 sát ngưỡng bộ nhớ — cần A/B thật.
   `base` dự đoán cần batch 6–8 và ~30–42h acoustic; `large` batch 4 và ~52–72h.
+- **Dừng run `small` ở 20.850 bước** theo phản hồi chuyên gia: val tăng ngược từ 8k (274,0 → 305,5)
+  trong khi train giảm ⇒ overfit vào **nhãn duration chia đều**, không phải thiếu dung lượng.
+  Giữ `best.pt` (8k) để test pipeline. Chuyển sang **`docs/REVISION_PLAN_V2.md`**: (A1) sửa mel loss
+  mean/bin ✅; (A2) f0 — đính chính *variance adaptor đã có*, phần thiếu là **contour DCT + log-F0 +
+  extractor pyworld**; (A3) thêm **token SIL**; đổi **mel log-magnitude + chuẩn hoá toàn cục**;
+  **MFA train bằng lexicon sinh từ parser** + QC/lọc score; chỉ lên `base` (enc4/dec6) sau alignment thật.
 
 ## 7. Commit tiêu biểu trong phiên
 

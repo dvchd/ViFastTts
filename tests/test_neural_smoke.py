@@ -185,6 +185,20 @@ def test_learning_rate_schedules():
     assert chunk_lr > base * 0.85
 
 
+def test_masked_l1_mean_over_bins():
+    import pytest
+
+    from vifasttts.losses import masked_l1
+
+    pred = torch.zeros(1, 3, 4)
+    target = torch.ones(1, 3, 4)
+    lengths = torch.tensor([2])  # chỉ 2 frame hợp lệ
+    # sum |1| trên 2 frame × 4 bin / 2 frame = 4 (hành vi cũ)
+    assert float(masked_l1(pred, target, lengths)) == pytest.approx(4.0)
+    # mean_over_bins: chia thêm 4 bin = 1.0
+    assert float(masked_l1(pred, target, lengths, mean_over_bins=True)) == pytest.approx(1.0)
+
+
 def test_resume_history_state(tmp_path: Path):
     from vifasttts.train import _resume_history_state
 
