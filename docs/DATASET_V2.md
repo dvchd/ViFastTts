@@ -130,22 +130,35 @@ loại vì `phone > 0.5s` và `ngừng thở … giữa câu`. Truy vết từng
 (log `artifacts/dataset_v2/mfa_train_v2c_sub.log`). Khi xong: align `mfa_v2c_test` (10 clip) +
 QC lại; nếu đạt (từ sát sàn ~≤5%, coverage ≥0,6) → train full `mfa_v2c` → align → finalize.
 
-**Thước đo nghiệm thu:** `tools/align_quality_report.py` — `floor_rate` (tỉ lệ từ ≤55 ms sát
-sàn min-duration), `coverage` (thời lượng word/span), `word_dur_median_s`, `long_phone_rate`.
-Baseline trên 10 clip test (beam 100/400):
+**Nghiệm thu & quyết định (13/10 ~08:30):**
 
-| nguồn | floor_rate p50 (mean) | coverage p50 | word dur p50 |
-|---|---|---|---|
-| v2b (model cũ, tên `_`) | 0,205 (0,234) | 0,458 | 0,16 s |
-| `vietnamese_mfa` (pretrained) | **0,021** (0,017) | 0,552 | 0,19 s |
-| v2c subset (đang train) | — | — | — |
+- **`v2c` không cứu được chất lượng model custom**: subset 800 clip cho floor_rate p50 **0,86**
+  (tệ hơn cả v2b 0,292) ⇒ lỗi nằm ở *chất lượng training custom* (nhãn TextGrid đã đúng
+  `NaHuyen`…; chưa truy nguyên gốc — cần giữ fix tên phone cho mọi lần train sau).
+- **Chuyển chính thức sang Plan B:** acoustic model **`vietnamese_mfa` pretrained** + dictionary
+  của nó + **G2P tự train trên chính dict đó** (`mfa train_g2p` → `vn_models/vietnamese_mfa_g2p.zip`)
+  để phủ 53% từ OOV của mình.
+- Kết quả 30 clip test held-out: floor_rate p50 **0,0** (mean 0,5%) · coverage **0,594** ·
+  duration ratio **0,893** · 87,9% từ lệch <0,3 s · khớp từ 1:1 **30/30**.
 
-Ngưỡng đạt cho v2c: **floor_rate p50 ≤ 0,05 · coverage ≥ 0,5**.
+| nguồn (cùng bộ đo, 30 clip) | floor_rate p50 | coverage p50 |
+|---|---|---|
+| v2b (model custom cũ, tên `_`) | 0,292 | 0,493 |
+| v2c subset (tên mới) | 0,860 | 0,196 |
+| **`vietnamese_mfa` + G2P (chốt)** | **0,0** | **0,594** |
 
-**Plan B (dự phòng):** model `vietnamese_mfa` align tốt trên dữ liệu của mình nhưng dictionary
-của nó chỉ phủ **47% từ vựng** (thiếu cả từ phổ biến — dict là từ vựng của corpus huấn luyện
-riêng, không đầy đủ) và **không có G2P tiếng Việt** để bù OOV ⇒ muốn dùng phải thêm bước map
-120 phone → IPA tự viết. Chỉ triển khai nếu Plan A không đạt.
+Thước đo: `tools/align_quality_report.py` — `floor_rate` = tỉ lệ từ ≤55 ms (sát sàn min-duration),
+`coverage` = tổng thời lượng word / span, `long_phone_rate` = tỉ lệ phone hữu thanh >0,5 s.
+
+**Pipeline alignment chốt (13/10):**
+
+1. Corpus `mfa_v2c` (labs/wavs) — giữ nguyên; không còn dùng lexicon/phone custom để align.
+2. `mfa align data/codelung/mfa_v2c data/codelung/vn_models/vietnamese_mfa.dict vietnamese_mfa
+   data/codelung/mfa_v2c_vn_aligned --g2p_model_path data/codelung/vn_models/vietnamese_mfa_g2p.zip`
+   → `data/codelung/mfa_v2c_vn_aligned/` (DB `~/Documents/MFA/mfa_v2c/mfa_v2c.db`).
+3. Finalize: `TEXTGRID_DIR=…v2c_vn_aligned MFA_DB=…/mfa_v2c.db bash tools/finalize_dataset_v2.sh`
+   → `*_dur.jsonl` · `*_seg.jsonl` · `f0_stats.json` (rồi QC toàn cục: `align_quality_report` +
+   `qc_whisper_align --sample 200`).
 
 ## 4. MFA — vì sao phải train lại (trả lời câu hỏi)
 
@@ -208,3 +221,16 @@ TEXTGRID_DIR=data/codelung/mfa_v2c_aligned MFA_DB=$HOME/Documents/MFA/mfa_v2c/mf
 # QC chéo Whisper (C3):
 .venv/bin/python tools/qc_whisper_align.py --textgrid-dir data/codelung/mfa_v2c_aligned \
     --corpus data/codelung/mfa_v2c --sample 10 --out artifacts/dataset_v2/qc_whisper_v2c.json
+```
+
+**Chốt 13/10 — align bằng `vietnamese_mfa` pretrained + G2P (Plan B, xem §3b):**
+
+```bash
+micromamba run -p .mamba-mfa mfa train_g2p data/codelung/vn_models/vietnamese_mfa.dict \
+    data/codelung/vn_models/vietnamese_mfa_g2p.zip --num_jobs 8 --clean -v
+micromamba run -p .mamba-mfa mfa align data/codelung/mfa_v2c \
+    data/codelung/vn_models/vietnamese_mfa.dict vietnamese_mfa data/codelung/mfa_v2c_vn_aligned \
+    --g2p_model_path data/codelung/vn_models/vietnamese_mfa_g2p.zip --num_jobs 8 --clean -v
+TEXTGRID_DIR=data/codelung/mfa_v2c_vn_aligned MFA_DB=$HOME/Documents/MFA/mfa_v2c/mfa_v2c.db \
+    bash tools/finalize_dataset_v2.sh
+```
