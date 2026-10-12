@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import random
 import re
 from pathlib import Path
 from typing import Any
@@ -104,6 +105,8 @@ def compare_clip(
     span = words_mfa[-1][1] - words_mfa[0][0]
     coverage = sum(b - a for a, b, _ in words_mfa) / span if span > 0 else 0.0
     matched = len(deltas)
+    word_durations = [b - a for a, b, _ in words_mfa]
+    floor_rate = sum(1 for d in word_durations if d <= 0.055) / len(word_durations)
     return {
         "clip": grid_path.stem,
         "words_mfa": len(words_mfa),
@@ -111,6 +114,8 @@ def compare_clip(
         "matched": matched,
         "match_rate": round(matched / len(words_mfa), 3),
         "coverage": round(coverage, 3),
+        "word_dur_median_s": round(float(np.median(word_durations)), 3),
+        "floor_rate": round(floor_rate, 3),
         "median_abs_delta_s": round(float(np.median(np.abs(deltas))), 3) if deltas else None,
         "p90_abs_delta_s": round(float(np.percentile(np.abs(deltas), 90)), 3) if deltas else None,
         "frac_within_0p3s": round(float(np.mean(np.abs(deltas) < 0.3)), 3) if deltas else None,
@@ -123,7 +128,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--textgrid-dir", required=True, help="Thư mục TextGrid (mfa align)")
     parser.add_argument("--corpus", required=True, help="Thư mục corpus chứa `<id>.wav`")
-    parser.add_argument("--sample", type=int, default=0, help="Chỉ lấy N clip đầu (0 = hết)")
+    parser.add_argument("--sample", type=int, default=0, help="Chỉ lấy N clip (0 = hết)")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Seed lấy mẫu ngẫu nhiên (mặc định: N clip đầu theo tên)")
     parser.add_argument("--model", default="small", help="Model faster-whisper (tiny/base/small...)")
     parser.add_argument("--out", default=None, help="File JSON report")
     args = parser.parse_args()
@@ -134,6 +141,8 @@ def main() -> None:
     corpus = Path(args.corpus)
     grids = sorted(grid_dir.glob("*.TextGrid"))
     if args.sample:
+        if args.seed is not None:
+            random.Random(args.seed).shuffle(grids)
         grids = grids[: args.sample]
     print(f"QC {len(grids)} clip · Whisper {args.model}")
 
@@ -153,6 +162,8 @@ def main() -> None:
         report = {
             "clips": len(clips),
             "coverage_median": round(float(np.median([c["coverage"] for c in clips])), 3),
+            "floor_rate_median": round(float(np.median([c["floor_rate"] for c in clips])), 3),
+            "word_dur_median_s": round(float(np.median([c["word_dur_median_s"] for c in clips])), 3),
             "median_abs_delta_s": round(
                 float(np.median([c["median_abs_delta_s"] for c in clips if c["median_abs_delta_s"] is not None])), 3
             ),
@@ -172,6 +183,7 @@ def main() -> None:
         }
         print(
             f"Tổng: {report['clips']} clip · coverage median {report['coverage_median']} · "
+            f"word dur median {report['word_dur_median_s']}s · sát sàn {report['floor_rate_median']} · "
             f"median|Δ| {report['median_abs_delta_s']}s · <0,3s {report['frac_within_0p3s_median']} · "
             f"dur ratio {report['duration_ratio_median']} · match {report['match_rate_median']}"
         )
