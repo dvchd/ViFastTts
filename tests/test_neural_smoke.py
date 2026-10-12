@@ -179,6 +179,10 @@ def test_learning_rate_schedules():
     final = _learning_rate(1000, 100, 1000, base, "cosine")
     assert base > early > mid > final
     assert abs(final - base * 0.05) < 1e-12
+    # Chạy theo khối: mốc cuối khối (20k) không được kéo LR xuống — phải dùng
+    # decay_steps toàn cục (60k), nếu không LR sẽ sụt sai khi mỗi khối bắt đầu.
+    chunk_lr = _learning_rate(15001, 6000, 20000, base, "cosine", 0.05, decay_steps=60000)
+    assert chunk_lr > base * 0.85
 
 
 def test_run_validation_max_batches(tmp_path: Path):

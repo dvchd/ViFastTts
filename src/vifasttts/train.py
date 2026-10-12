@@ -104,18 +104,21 @@ def _resolve_cache_dir(training: dict[str, Any], out: Path) -> str | None:
 
 
 def _learning_rate(step: int, warmup: int, steps: int, base_lr: float,
-                   schedule: str = "constant", min_ratio: float = 0.05) -> float:
+                   schedule: str = "constant", min_ratio: float = 0.05,
+                   decay_steps: int | None = None) -> float:
     """LR theo bước: warmup tuyến tính → hằng số hoặc cosine giảm dần.
 
     - `constant`: warmup rồi giữ `base_lr` (mặc định, hành vi cũ).
     - `cosine`: sau warmup giảm cos từ `base_lr` xuống `base_lr × min_ratio`
-      tại bước cuối — giúp thoát vùng chững khi val plateau (kinh nghiệm chung).
+      tại bước `decay_steps` (mặc định = `steps`) — quan trọng khi chạy theo khối:
+      `steps` là mốc cuối CỦA KHỐI, còn `decay_steps` là mốc cuối TOÀN CỤC.
     """
+    total = int(decay_steps) if decay_steps else int(steps)
     if step <= warmup:
         return base_lr * max(1e-8, step / max(1, warmup))
     if schedule != "cosine":
         return base_lr
-    progress = min(1.0, (step - warmup) / max(1, steps - warmup))
+    progress = min(1.0, (step - warmup) / max(1, total - warmup))
     factor = min_ratio + (1.0 - min_ratio) * 0.5 * (1.0 + math.cos(math.pi * progress))
     return base_lr * factor
 
@@ -190,6 +193,8 @@ def train_reference(
     base_lr = float(training.get("learning_rate", 2e-4))
     lr_schedule = str(training.get("lr_schedule", "constant")).lower()
     lr_min_ratio = float(training.get("min_lr_ratio", 0.05))
+    # Mốc cuối TOÀN CỤC cho cosine (chạy theo khối thì `steps` chỉ là mốc cuối khối).
+    lr_decay_steps = int(training.get("lr_decay_steps", 0)) or None
     # Đo trên Mac mini M6: fp16 autocast trên MPS không nhanh hơn (0,52 vs 0,48 s/bước)
     # → chỉ bật AMP cho CUDA; MPS giữ fp32.
     use_amp = bool(training.get("mixed_precision", False)) and device.type == "cuda"
@@ -210,7 +215,8 @@ def train_reference(
         while step < steps:
             for batch in train_loader:
                 step += 1
-                lr = _learning_rate(step, warmup, steps, base_lr, lr_schedule, lr_min_ratio)
+                lr = _learning_rate(step, warmup, steps, base_lr, lr_schedule, lr_min_ratio,
+                                    decay_steps=lr_decay_steps)
                 for group in optimizer.param_groups:
                     group["lr"] = lr
                 batch = _to_device(batch, device)

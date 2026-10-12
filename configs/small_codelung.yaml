@@ -45,6 +45,7 @@ training:
   # Lưu ý: áp dụng từ lần restart chunk kế tiếp (không ảnh hưởng phần đã train).
   lr_schedule: cosine
   min_lr_ratio: 0.05
+  lr_decay_steps: 60000   # mốc cuối TOÀN CỤC cho cosine (không phải mốc cuối mỗi khối)
   grad_clip: 1.0
   log_every: 50
   validate_every: 1000
