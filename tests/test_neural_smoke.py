@@ -164,6 +164,23 @@ def test_train_resume_continues_from_step(tmp_path: Path):
     assert len(lines) >= 3
 
 
+def test_learning_rate_schedules():
+    from vifasttts.train import _learning_rate
+
+    base = 2e-4
+    # Warmup tuyến tính.
+    assert _learning_rate(0, 100, 1000, base) < base
+    assert _learning_rate(100, 100, 1000, base) == base
+    # Hằng số (mặc định, hành vi cũ).
+    assert _learning_rate(500, 100, 1000, base) == base
+    # Cosine: giảm đơn điệu sau warmup, chạm min_ratio ở bước cuối.
+    early = _learning_rate(200, 100, 1000, base, "cosine")
+    mid = _learning_rate(500, 100, 1000, base, "cosine")
+    final = _learning_rate(1000, 100, 1000, base, "cosine")
+    assert base > early > mid > final
+    assert abs(final - base * 0.05) < 1e-12
+
+
 def test_run_validation_max_batches(tmp_path: Path):
     wav_dir = tmp_path / "wavs"
     wav_dir.mkdir()
