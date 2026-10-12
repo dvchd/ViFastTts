@@ -137,7 +137,7 @@
    Chuỗi hiện tại chạy **stats → cache** nên key nhất quán. (Không đổi sang "cache mel chưa chuẩn hoá"
    vì sẽ phải sửa 3 điểm gọi và làm lại cache giữa chừng — nếu sau này cần đổi stats, key tự vô hiệu.)
 
-### 10.3. MFA — cài đặt & probe (đang chạy)
+### 10.2. MFA — cài đặt & probe (đang chạy)
 - **Cài đặt**: đường pip bất khả thi cho macOS arm64 (`kalpy-kaldi` chỉ có sdist, cần build Kaldi);
   đã cài theo đường chuẩn **conda-forge**: `brew install micromamba` → env `montreal-forced-aligner
   3.4.3` tại `.mamba-mfa/` (227 gói, osx-arm64 dựng sẵn, gồm kaldi 5.5 + openfst + sox).
@@ -150,6 +150,7 @@
   đều) → `mfa train` + `mfa align` với `--beam 100 --retry_beam 400`, đo giây; ngoại suy:
   `thời_gian_full ≈ thời_gian_probe × (44,96h / giờ_probe)`.
 
+### 10.3. Vận hành
 - **MFA ∥ vocoder**: dùng `--num_jobs 8` (không 10) + kiểm **s/bước vocoder không tụt quá ~15%**
   khi MFA chạy; tụt hơn thì giảm `--num_jobs` hoặc tạm dừng MFA.
 - **Nghe thử sớm**: `tools/vocoder_milestones.py` (chạy nền, dùng **CPU**) xuất copy-synthesis
