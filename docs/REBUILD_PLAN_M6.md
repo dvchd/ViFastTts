@@ -174,6 +174,11 @@ loại clip, mask loss…). Chạy MFA **sau khi lọc giọng** để không m�
 4. **Split:** chốt **N=12/cap150** (khuyến nghị — bỏ ngưỡng 40h) hay **N=8/cap200** (giữ 40h)?
 5. **Speaker-conditioning tương lai:** giữ mặc định *không* (một checkpoint = một giọng)?
 
+> **Cập nhật 12/10 (đã thực thi):** mục 2–4 đã chốt & chạy — loudness **từng clip → −26 dBFS**
+> (hết lệch 22 dB), split **N=12/cap150**, lọc 6 video khách + 48 clip diarization, dựng
+> `train_v2/val_v2/holdout_v2(+clean)`, `eval_clips_v1` (200 clip), corpus **MFA v2** (8.723 clip,
+> 0 fallback) và stats mel mới. Chi tiết + file: **`docs/DATASET_V2.md`**. MFA train+align đang chạy nền.
+
 ## 7. Tóm tắt một câu
 Kiến trúc FS2+Conformer giữ nguyên và đã đúng hướng; vấn đề ổn định nằm ở **dữ liệu đa giọng +
 loudness lệch + clip quá dài**. Làm lại dữ liệu (lọc giọng → chuẩn loudness → split khớp phân bố →

@@ -43,9 +43,9 @@ def test_build_corpus(tmp_path: Path):
     stats = build_corpus([str(manifest)], out)
     assert stats["clips"] == 1 and stats["words"] == 2
 
-    lab = (out / "labs" / "s1.lab").read_text(encoding="utf-8").strip()
+    lab = (out / "s1.lab").read_text(encoding="utf-8").strip()
     assert lab == "chào bạn"
-    assert (out / "wavs" / "s1.wav").exists()
+    assert (out / "s1.wav").exists()
 
     lexicon = dict(
         line.split("\t") for line in (out / "lexicon.txt").read_text(encoding="utf-8").splitlines() if line

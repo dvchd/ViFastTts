@@ -109,7 +109,12 @@ class TtsDataset(Dataset):
         return len(self.rows)
 
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
-        """Mẫu thứ index: features/durations/f0/vuv/energy/mel (+ phonation nếu bật)."""
+        """Mẫu thứ index: features/durations/f0/vuv/energy/mel (+ phonation nếu bật).
+
+        Hỗ trợ **segment**: khi row có `frame_range` [start, end), cắt mel/f0/vuv/energy/phonation
+        theo frame từ clip đầy đủ (features được tính trên clip đầy đủ rồi cắt — đúng spec
+        `REVISION_PLAN_V2` §9.2: tránh hiệu ứng biên STFT).
+        """
         row = self.rows[index]
         features = torch.tensor(encode_syllables(row["syllables"], self.vocabs), dtype=torch.long)
         syllable_count = features.size(0)
@@ -120,7 +125,16 @@ class TtsDataset(Dataset):
                 self.cache.put(row, extracted)
         else:
             extracted = extract_features(row["audio_path"], self.config)
-        mel = extracted["mel"]
+
+        frame_range = row.get("frame_range")
+        start_frame = int(frame_range[0]) if frame_range else 0
+        segment_frames = (int(frame_range[1]) - start_frame) if frame_range else extracted["mel"].size(0)
+
+        def _frames(name: str) -> torch.Tensor:
+            values = extracted[name]
+            return values[start_frame:start_frame + segment_frames] if frame_range else values
+
+        mel = extracted["mel"][start_frame:start_frame + segment_frames] if frame_range else extracted["mel"]
         frames = mel.size(0)
         durations_list = row.get("durations")
         if durations_list and sum(durations_list) == frames and len(durations_list) == syllable_count:
@@ -134,13 +148,13 @@ class TtsDataset(Dataset):
         frame_phonation = None
         if "hnr" in extracted:
             frame_phonation = torch.stack(
-                [extracted["hnr"], extracted["tilt"], extracted["glottalization"]], dim=-1
+                [_frames("hnr"), _frames("tilt"), _frames("glottalization")], dim=-1
             )
         phonation = torch.zeros(syllable_count, 3)
         start = 0
-        frame_f0 = extracted["f0"]
-        frame_vuv = extracted["vuv"]
-        frame_energy = extracted["energy"]
+        frame_f0 = _frames("f0")
+        frame_vuv = _frames("vuv")
+        frame_energy = _frames("energy")
         for i, duration in enumerate(durations.tolist()):
             end = min(frames, start + duration)
             if end > start:

@@ -45,12 +45,16 @@ def phones_for_syllable(abstract: dict[str, str]) -> list[str]:
 
 
 def build_corpus(manifests: list[str], out: str | Path) -> dict[str, Any]:
-    """Dựng corpus; trả về dict thống kê (clips, words, phones, fallback...)."""
+    """Dựng corpus; trả về dict thống kê (clips, words, phones, fallback...).
+
+    Layout **phẳng**: `<out>/<id>.wav` + `<out>/<id>.lab` nằm CẠNH nhau — MFA ghép
+    transcription với audio theo tên file **trong cùng thư mục** (tách `labs/`+`wavs/`
+    sẽ khiến MFA đọc text rỗng — lỗi đã gặp ở corpus v2b, 12/10/2026).
+    """
     out_path = Path(out)
-    wav_dir = out_path / "wavs"
-    lab_dir = out_path / "labs"
-    for directory in (wav_dir, lab_dir):
-        directory.mkdir(parents=True, exist_ok=True)
+    wav_dir = out_path
+    lab_dir = out_path
+    out_path.mkdir(parents=True, exist_ok=True)
 
     lexicon: dict[str, list[str]] = {}
     index: dict[str, dict[str, Any]] = {}
