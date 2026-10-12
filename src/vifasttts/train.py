@@ -464,6 +464,7 @@ def train_vocoder_reference(
     steps = max_steps if max_steps is not None else int(vt.get("max_steps", 100_000))
     log_every = int(vt.get("log_every", 50))
     save_every = int(vt.get("save_every", 5000))
+    save_every = max(10, (save_every // 10) * 10)  # rev.6 §1a: bội số của 10 (chỉ lưu sau kiểm NaN)
 
     history_path = out / "history_vocoder.csv"
     append_history = bool(resume) and history_path.exists() and history_path.stat().st_size > 0
@@ -471,6 +472,18 @@ def train_vocoder_reference(
     step = start_step
     started = time.perf_counter()
     finite_ok = torch.ones((), dtype=torch.bool, device=device)
+    window_min = torch.full((), float("inf"), device=device)
+    last_clean_loss = float("inf")
+
+    def save_clean(state: dict, marker_loss: float) -> None:
+        """Lưu checkpoint 'sạch' kiểu atomic + xoay bản cũ sang prev.pt (rev.6 §1a)."""
+        state = {**state, "clean": True, "last_loss": marker_loss}
+        tmp_path = out / "last.pt.tmp"
+        torch.save(state, tmp_path)
+        target_path = out / "last.pt"
+        if target_path.exists():
+            target_path.replace(out / "prev.pt")
+        tmp_path.replace(target_path)
     with history_path.open("a" if append_history else "w", encoding="utf-8", newline="") as history:
         writer = csv.writer(history)
         if not append_history:
@@ -520,11 +533,21 @@ def train_vocoder_reference(
                     g_stft = multi_resolution_stft_loss(fake_crop, real_crop, resolutions)
                 g_loss = adv_weight * g_adv + fm_weight * g_fm + mel_weight * g_mel + stft_weight * g_stft
                 finite_ok = finite_ok & torch.isfinite(g_loss)
-                if step % 10 == 0 and not bool(finite_ok.item()):
-                    # E4: kiểm gộp mỗi 10 bước (một sync) — runner sẽ resume, đổi seed & hạ LR nếu lặp.
-                    raise RuntimeError(
-                        f"NaN/Inf trong 10 bước gần nhất (bước {step}) — runner sẽ resume + đổi seed/hạ LR"
-                    )
+                window_min = torch.minimum(window_min, g_loss.detach())
+                check_passed, window_value = False, float("inf")
+                if step % 10 == 0:
+                    # E4 + rev.6 §1a: kiểm gộp mỗi 10 bước (một sync). NaN → raise NGAY, không ghi gì;
+                    # checkpoint chỉ được ghi tại bước vừa kiểm sạch.
+                    window_value = float(window_min.item())
+                    if not bool(finite_ok.item()):
+                        raise RuntimeError(
+                            f"NaN/Inf trong 10 bước gần nhất (bước {step}) — runner sẽ resume "
+                            "checkpoint sạch gần nhất + đổi seed/hạ LR nếu lặp"
+                        )
+                    check_passed = True
+                    last_clean_loss = window_value
+                    finite_ok = torch.ones((), dtype=torch.bool, device=device)
+                    window_min = torch.full((), float("inf"), device=device)
                 g_loss.backward()
                 torch.nn.utils.clip_grad_norm_(generator.parameters(), grad_clip)
                 opt_g.step()
@@ -536,13 +559,13 @@ def train_vocoder_reference(
                           f"d={d_loss.detach().item():.4f} ({speed:.3f}s/bước)")
                 if device.type == "mps" and step % 500 == 0:
                     torch.mps.empty_cache()  # E2: thưa hơn để tái dùng buffer
-                if step % save_every == 0 or g_loss.detach().item() < best:
-                    best = min(best, float(g_loss.detach().item()))
-                    state = {"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
-                             "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict(),
-                             "config": config, "step": step, "mel_hash": _mel_hash(config)}
-                    torch.save(state, out / "last.pt")
-                    writer.writerow([step, float(g_loss.detach().item()), float(g_adv.detach().item()),
+                if check_passed and (step % save_every == 0 or window_value < best):
+                    best = min(best, window_value)
+                    save_clean({"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
+                                "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict(),
+                                "config": config, "step": step, "mel_hash": _mel_hash(config)},
+                               marker_loss=window_value)
+                    writer.writerow([step, window_value, float(g_adv.detach().item()),
                                      float(g_mel.detach().item()), float(g_stft.detach().item()),
                                      float(d_loss.detach().item())])
                     history.flush()
@@ -550,7 +573,12 @@ def train_vocoder_reference(
                     break
     if device.type == "mps":
         torch.mps.empty_cache()
-    torch.save({"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
-                "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict(),
-                "config": config, "step": step, "mel_hash": _mel_hash(config)}, out / "last.pt")
-    print(f"Đã huấn luyện vocoder {step} bước, checkpoint tại {out}/last.pt")
+    if bool(finite_ok.item()):
+        finish_loss = last_clean_loss if last_clean_loss < float("inf") else (best if best < float("inf") else 0.0)
+        save_clean({"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
+                    "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict(),
+                    "config": config, "step": step, "mel_hash": _mel_hash(config)},
+                   marker_loss=finish_loss)
+        print(f"Đã huấn luyện vocoder {step} bước, checkpoint sạch tại {out}/last.pt")
+    else:
+        print(f"Cửa sổ hiện tại có NaN/Inf — KHÔNG lưu cuối, giữ checkpoint sạch gần nhất ({out}/last.pt)")

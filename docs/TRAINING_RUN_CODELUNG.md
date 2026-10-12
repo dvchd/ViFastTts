@@ -6,9 +6,9 @@
 >
 > ⚠️ **Trạng thái (12/10/2026)**: run acoustic **dừng ở 20.850 bước** — val tăng ngược từ 8k
 > (274,0 → 305,5) vì overfit **nhãn duration chia đều**; giữ `best.pt` (8k) để test pipeline.
-> Vocoder cũ (MPD-lite, log-power) cũng dừng. Kế hoạch sửa: `docs/REVISION_PLAN_V2.md` (rev.3) —
-> mel log-magnitude + chuẩn hoá toàn cục, F0 pyworld, MFA (lexicon riêng), SIL, log-F0 DCT,
-> vocoder MPD đầy đủ + MRD. Các bảng số dưới đây giữ nguyên làm **bản ghi lịch sử**.
+> Dataset **đã recut B3**: **13.215 clip · 51,73h** (4.745 biên nới qua âm tiết bị cắt); split
+> giữ **đúng 4 video val cũ**. Kế hoạch mới: `docs/REVISION_PLAN_V2.md` (rev.6) — vocoder Vocos
+> MPD/MRD chạy song song làn CPU (MFA, overrides, lọc rẻ). Các bảng số dưới đây là **bản ghi lịch sử**.
 
 ## 1. Dữ liệu
 

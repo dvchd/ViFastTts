@@ -8,8 +8,9 @@
 - **A1** mel loss mean/bin ✅ · **A2.4** conditioning GT f0/vuv/energy ✅ (sẽ bật khi retrain)
 - **Mel mới** log-magnitude clamp 1e-5 + chuẩn hoá toàn cục per-bin ✅ (`tools/compute_mel_stats.py`)
 - **F0 pyworld** harvest+stonemask ✅ (đo ~21× realtime/lõi)
-- **Vocoder nâng cấp**: MPD đầy đủ 2/3/5/7/11 + MRD + MR-STFT ✅; **generator Vocos** (ConvNeXt
-  hidden 384 × 8 block, 14,4M) ✅ — đo MPS: **0,659 s/bước** (lite 0,633; +4%, trong ngưỡng ≤20%)
+- **Vocoder nâng cấp**: MPD đầy đủ 2/3/5/7/11 + MRD + MR-STFT ✅; **generator Vocos**
+  (ConvNeXt hidden 384 × 8 block, **expansion 3× → 12.069.762 tham số**) ✅ — đo lại MPS (rev.6):
+  **0,703 s/bước** (G 12,07M + D 7,72M, crop 64) → 100k ≈ **19,5h**
 - **Postnet mel** (F2): 5 lớp conv 256 kênh residual + loss cả mel trước/sau ✅ (small 6,14M → **7,38M**;
   base → ~17,7M; large → ~33,4M)
 - **B3 VAD nới biên** trong `cut_clips` ✅ (mép khoảng lặng ≤200ms; cờ `tight`/`speech`)
@@ -21,7 +22,7 @@
 | Hạng mục | Số |
 | --- | --- |
 | Acoustic small 7,38M (postnet) batch 16 | 0,478→~0,50 s/bước (ước tính +4% cho postnet) |
-| Vocoder Vocos (G 14,4M + D 7,7M, crop 64) | **0,659 s/bước MPS** → 100k ≈ 19–20h |
+| Vocoder Vocos (G **12,07M** + D 7,72M, crop 64) | **0,703 s/bước MPS** (rev.6) → 100k ≈ **19,5h** |
 | MPS vs CPU (discriminator lớn) | MPS nhanh hơn **3,7–4,7×** |
 | Trần bộ nhớ | đặt watermark 0.8/0.7 + chunk 5k + bucket padding |
 
@@ -33,14 +34,14 @@
 | Biên clip | **B3**: nới tới mép khoảng lặng ≤200ms (đã code); đụng tiếng nói câu kề → giữ nguyên + cờ QC |
 | Lọc rẻ trước MFA | Chỉ loại lỗi rõ (~2–3%): nhạc nền, clipping, tỉ lệ tiếng nói <50%; còn lại để score MFA lọc |
 | Eval | Thêm **~100 câu thuần Việt tự viết** (đủ 6 thanh + coda tắc) làm bộ cố định đo CER/nghe thử |
-| Vocoder | Train trên **toàn bộ 51h** (kể cả clip fallback) — không cần text |
+| Vocoder | Train trên **`train.jsonl` 44,96h** (11.424 clip, **gồm cả clip fallback** — không cần text), **không gồm 4 video val** (rev.5 §1b) |
 
 ## 4. Huấn luyện (chốt)
 | Hạng mục | Chốt |
 | --- | --- |
 | A1 | **Smoke small ~20k** với alignment thật; đạt ngưỡng mới lên base |
 | A2 | Đo 200 bước cho **4/4, 4/5, 4/6** @ hidden 256; chọn cấu hình **s/bước ≤ ~1,0s** (đoán 4/5) |
-| A3 | Tính theo **epoch** (1 epoch ≈ 714 bước @ batch 16): small 60k ≈ 84 epoch; **base 100k ≈ 140 epoch + early stop**. Val audio-level (CER, F0 RMSE) **mỗi 10k**; val loss toàn tập **mỗi 5k** chỉ để phát hiện overfit |
+| A3 | Tính theo **epoch, batch theo tổng frame ~29k** (rev.5): sau lọc còn ~33–35h → 1 epoch ≈ **530–560 bước**; small 60k ≈ 110 epoch; **base 100k ≈ 180 epoch + early stop**. Val audio-level (CER, F0 RMSE) **mỗi 10k**; val loss toàn tập **mỗi 5k** chỉ để phát hiện overfit |
 | A4 | **Không chạy song song acoustic + vocoder** (tranh MPS/RAM). Lịch: **MFA (CPU) ∥ vocoder (MPS)** → xong mới train acoustic một mình. Mac chạy dài liên tục ổn; theo dõi s/bước tụt dần (powermetrics) thay vì nghỉ định kỳ |
 | A5 | **Giữ hop 256** (đổi hop phải làm lại stats + vocoder) |
 | F1 | Giữ **Conformer-lite** (depthwise conv rẻ, ONNX tốt); nghẽn O(T²) xử lý bằng cắt segment |
@@ -61,14 +62,16 @@
 - **D4**: **không** AMP/fp16.
 - **E3**: bỏ qua `torch.compile`.
 
-## 6. Lịch chạy (rev.4)
+## 6. Lịch chạy (rev.4) — ⚠️ **ĐÃ THAY BẰNG §9.3** (giữ làm bản ghi)
 1. **Cache feature cho xong** *(điều chỉnh: chạy sau recut B3+overrides để không phải làm 2 lần)*.
 2. **Mở rộng overrides** (top 400, nghe clip mẫu) → **recut** (B3) → **parse lại** → **lọc rẻ** (B4).
-3. **Song song: MFA (CPU) ∥ vocoder Vocos ch=16 100k (MPS trên 51h)**.
+3. **Song song: MFA (CPU) ∥ vocoder Vocos ch=16 100k (MPS, `train.jsonl` 44,96h)**.
 4. **QC MFA** (loại 10% thấp nhất theo luật C4) → **SIL + log-F0 DCT + cắt segment theo SIL** →
    đo **s/bước 4/4, 4/5, 4/6** (chọn ≤1,0s).
 5. **Smoke small ~20k** → đạt ngưỡng thì **base ~100k** (early stop theo val audio-level).
 6. **GTA fine-tune vocoder** trên mel acoustic teacher-forcing.
+> Lịch đang thực thi: **§9.3** (recut → stats 2.000 → cache → vocoder chạy trước; overrides/MFA/lọc
+> là làn CPU song song; demo nghe thử ở mốc 5k/20k/50k bằng `tools/vocoder_milestones.py`).
 
 ## 7. Ngưỡng nghiệm thu
 | Mốc | Điều kiện qua |
@@ -103,8 +106,8 @@
   (`training.grad_clip`) — đã ghi rõ trong config.
 - **NaN**: kiểm **gộp mỗi 10 bước** (1 sync, không `.item()` từng bước) → raise để runner
   **resume + đổi seed** (`--seed`), **NaN lặp ≥2 lần thì hạ LR 0.5×** (`--lr-scale`) ✅ code.
-- **Recut B3 xong** (13.215 clip · 51,73h; **4.745 biên được nới** qua âm tiết bị cắt) → **dựng lại
-  corpus MFA sau recut** (việc bắt buộc trong bước 2).
+- **Recut B3 xong** (13.215 clip · **51,73h**; **4.745 biên được nới** qua âm tiết bị cắt; split tái
+  tạo **đúng 4 video val cũ**, không giao nhau) → **dựng lại corpus MFA sau recut** (việc bắt buộc).
 - **Cắt segment theo SIL**: tính **mel + F0 trên clip đầy đủ rồi cắt theo frame** (tránh hiệu ứng biên
   STFT); mỗi segment bắt đầu/kết thúc bằng SIL, giữ đúng duration SIL.
 - **A3 epoch (cập nhật)**: sau khi loại clip fallback + lọc MFA, acoustic còn ~**33–35h**; batch theo
@@ -119,3 +122,27 @@
 3. QC MFA → SIL + log-F0 DCT + **cắt segment** (CPU, song song được với vocoder).
 4. Đo s/bước **4/4, 4/5, 4/6**: **tạm dừng vocoder** (chunk resume) hoặc chờ xong — **không tranh MPS**.
 5. Smoke small 20k → base 100k (early stop audio-level) → GTA fine-tune.
+
+## 10. rev.6 — kiểm tra trước khi để máy chạy 20h
+### 10.1. Hai lỗi kỹ thuật
+1. **Checkpoint chỉ được ghi sau lần kiểm NaN đạt** ✅ code:
+   - Vòng train gộp cờ `finite_ok`/`window_min` không sync; **tại mỗi bước bội số 10** mới `.item()`
+     một lần. NaN trong cửa sổ → **raise trước mọi thao tác ghi**.
+   - Ghi checkpoint **atomic** (`last.pt.tmp` → `last.pt`) và **xoay bản cũ sang `prev.pt`**;
+     `save_every` tự làm tròn về **bội số của 10**.
+   - State kèm `clean: true` + `last_loss` hữu hạn; runner `train_vocoder_chunked` chỉ resume từ
+     checkpoint sạch (`last.pt` → `prev.pt`), có test.
+2. **Cache key đã gồm hash file stats** ✅ xác minh: `feature_cache_key` chứa `mel_norm_hash`
+   (sha1 **nội dung** `mel_stats.json`) + toàn bộ mục mel; có test `test_cache_key_sensitive_to_norm_stats`.
+   Chuỗi hiện tại chạy **stats → cache** nên key nhất quán. (Không đổi sang "cache mel chưa chuẩn hoá"
+   vì sẽ phải sửa 3 điểm gọi và làm lại cache giữa chừng — nếu sau này cần đổi stats, key tự vô hiệu.)
+
+### 10.2. Vận hành
+- **MFA ∥ vocoder**: dùng `--num_jobs 8` (không 10) + kiểm **s/bước vocoder không tụt quá ~15%**
+  khi MFA chạy; tụt hơn thì giảm `--num_jobs` hoặc tạm dừng MFA.
+- **Nghe thử sớm**: `tools/vocoder_milestones.py` (chạy nền, dùng **CPU**) xuất copy-synthesis
+  ~10 câu val tại **5k/20k/50k** + metric mel L1/clipping; **20k còn rè kim loại/lỗi pha → dừng sửa**.
+- **s/bước cập nhật (generator 12,07M)**: **0,703 s/bước** (MPS, b8 crop64) → 100k ≈ **19,5h**.
+- **Clip được nới biên (4.745)**: theo dõi riêng tỷ lệ bị MFA loại (so với nhóm thường) khi có score;
+  chưa xử lý riêng — MFA sẽ bắt qua sp dài/score thấp.
+

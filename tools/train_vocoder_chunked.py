@@ -49,6 +49,33 @@ def read_step(checkpoint: Path) -> int:
     return int(state.get("step", 0))
 
 
+def _pick_checkpoint(out: Path) -> Path | None:
+    """Chọn checkpoint **sạch** để resume: last.pt → prev.pt (rev.6 §1a).
+
+    Bỏ qua checkpoint có `clean: false` hoặc `last_loss` không hữu hạn (nghi nhiễm NaN).
+    """
+    import math
+
+    import torch
+
+    for name in ("last.pt", "prev.pt"):
+        path = out / name
+        if not path.exists():
+            continue
+        try:
+            state = torch.load(path, map_location="cpu", weights_only=False)
+        except Exception as error:  # noqa: BLE001 - file hỏng thì thử bản kế tiếp
+            print(f"[chunked-vc] bỏ qua {path.name}: {type(error).__name__} — thử checkpoint kế tiếp", flush=True)
+            continue
+        if state.get("clean") is False:
+            continue
+        loss = state.get("last_loss")
+        if loss is not None and not math.isfinite(float(loss)):
+            continue
+        return path
+    return None
+
+
 def main() -> None:
     """Vòng lặp khối: train → lưu → thoát → resume cho tới đủ tổng số bước."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -65,7 +92,8 @@ def main() -> None:
     base_seed = _base_seed(args.config)
     failures = 0
     while True:
-        step = read_step(out / "last.pt")
+        resume_path = _pick_checkpoint(out)
+        step = read_step(resume_path) if resume_path is not None else 0
         if step >= args.total_steps:
             print(f"[chunked-vc] xong: {step}/{args.total_steps} bước", flush=True)
             break
@@ -77,8 +105,9 @@ def main() -> None:
             "--output", str(out),
             "--max-steps", str(target),
         ]
-        if step > 0:
-            command += ["--resume", str(out / "last.pt")]
+        if resume_path is not None:
+            # rev.6 §1a: chỉ resume từ checkpoint đã kiểm sạch (last.pt → prev.pt).
+            command += ["--resume", str(resume_path)]
         if failures:
             # E4: rollback → đổi seed (tránh gặp lại đúng NaN cũ)...
             command += ["--seed", str(base_seed + failures * 1000)]
@@ -86,9 +115,11 @@ def main() -> None:
             # ...và hạ LR 0.5× nếu NaN lặp lại từ 2 lần trở lên.
             command += ["--lr-scale", str(0.5 ** (failures - 1))]
         print(f"[chunked-vc] {step} → {target} bước (khối {args.chunk}"
+              f"{f', từ {resume_path.name}' if resume_path else ''}"
               f"{f', lần lỗi {failures}' if failures else ''})", flush=True)
         code = subprocess.run(command, check=False, env=_mps_env()).returncode
-        new_step = read_step(out / "last.pt")
+        new_resume = _pick_checkpoint(out)
+        new_step = read_step(new_resume) if new_resume is not None else 0
         if code == 0:
             failures = 0
             continue

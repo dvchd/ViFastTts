@@ -8,7 +8,7 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **2257 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **2264 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - **Kết luận chuyên gia (rev.4)** đã chốt toàn bộ A–F và lịch chạy — xem `docs/REVISION_PLAN_V2.md`.
   Đã code xong: mel log-magnitude + chuẩn hoá toàn cục, F0 pyworld, vocoder **MPD đầy đủ + MRD +
   MR-STFT + generator Vocos** (đo 0,659 s/bước MPS), **postnet** (small → 7,38M), VAD nới biên clip (B3),
@@ -38,9 +38,10 @@
 - Đã triển khai hết lớp frontend/data của roadmap: profile `open/strict/corpus` +
   lexicon, `AbstractSyllable.rime`, Segment Expander + `distribute_frames`, benchmark
   biểu diễn, cache feature, kênh phonation, G2P Nam cho `OO`/`ưu/ươu`.
-- **Dữ liệu YouTube**: `vifasttts youtube-fetch` lấy audio + phụ đề (json3) từ kênh
-  của bạn, làm sạch caption cuộn, cắt clip 1–20 s có QC (im lặng/trùng/fallback),
-  xuất manifest + SRT mở + dataset card (mặc định CC BY 4.0) — `docs/YOUTUBE_DATASET.md`.
+- **Dữ liệu YouTube (sau recut B3)**: `vifasttts youtube-fetch` lấy audio + phụ đề (json3) từ kênh
+  của bạn, làm sạch caption cuộn, cắt clip 1–20 s có QC (im lặng/trùng/fallback) **+ VAD nới biên tới
+  mép khoảng lặng ≤200 ms**, xuất manifest + SRT mở + dataset card (mặc định CC BY 4.0) —
+  `docs/YOUTUBE_DATASET.md`. Recut hiện tại: **13.215 clip · 51,73h** (4.745 biên được nới).
 
 ## 2. Kiến trúc chốt
 
