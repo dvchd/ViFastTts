@@ -14,3 +14,4 @@ data/youtube/
 *.onnx
 *.wav
 .DS_Store
+.venv-mfa/
