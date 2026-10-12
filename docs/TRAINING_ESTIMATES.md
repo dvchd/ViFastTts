@@ -151,6 +151,7 @@ Cùng batch đo như trên:
 | Model | Batch | Frame/bước | Đỉnh MPS (dự đoán) | s/bước (dự đoán) | Bước cần | Tổng acoustic | Rủi ro |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | small (đo thật) | 16 | 29.300 | 25 GB | **0,75s** | 60k | **~12,5h** | ✅ đang chạy ổn |
+| small (chạy **song song** vocoder) | 16 | 29.300 | 25 GB | ~0,80s | 60k | ~13h — nhưng **vocoder xong cùng lúc** (tổng ~13h thay vì 15,3h) | ✅ đo thật, xem `docs/TRAINING.md` |
 | small (tối ưu nhẹ) | 20 | 36.700 | ~31 GB | ~0,89s | 48k | ~11,9h | ✅ thấp |
 | small (tối đa an toàn) | 24 | 44.000 | ~37 GB | ~1,03s | 40k | ~11,4h | ⚠️ sát ngưỡng |
 | small (quá lớn) | 32 | 58.600 | ~48 GB | – | – | – | ❌ OOM |

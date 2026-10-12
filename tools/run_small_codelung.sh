@@ -25,14 +25,29 @@ echo "[1/5] Cache feature (workers 8, bỏ qua file đã có)"
 
 echo "[2/5] Train acoustic (MPS) — từng khối 5k bước, tự resume (chống OOM Metal)"
 TOTAL=$(.venv/bin/python -c "import yaml; print(yaml.safe_load(open('$CFG'))['training']['max_steps'])")
-.venv/bin/python tools/train_chunked.py --config "$CFG" \
-  --train-manifest "$DATA/train.jsonl" --val-manifest "$DATA/val.jsonl" \
-  --output "$RUN_AC" --total-steps "$TOTAL" --chunk 5000
 
-echo "[3/5] Train vocoder (CPU, random crop) — resume nếu đã có last.pt"
-RES=""
-[ -f "$RUN_VC/last.pt" ] && RES="--resume $RUN_VC/last.pt"
-"$PY" train-vocoder --config "$CFG" --manifest "$DATA/train.jsonl" --output "$RUN_VC" $RES
+RES_VC=""
+[ -f "$RUN_VC/last.pt" ] && RES_VC="--resume $RUN_VC/last.pt"
+
+if [ "${PARALLEL:-0}" = "1" ]; then
+  echo "[2-3/5] SONG SONG: acoustic (MPS) + vocoder (CPU) — xem docs/TRAINING.md"
+  .venv/bin/python tools/train_chunked.py --config "$CFG" \
+    --train-manifest "$DATA/train.jsonl" --val-manifest "$DATA/val.jsonl" \
+    --output "$RUN_AC" --total-steps "$TOTAL" --chunk 5000 &
+  AC_PID=$!
+  OMP_NUM_THREADS=6 "$PY" train-vocoder --config "$CFG" --manifest "$DATA/train.jsonl" \
+    --output "$RUN_VC" $RES_VC &
+  VC_PID=$!
+  wait $AC_PID
+  wait $VC_PID
+else
+  .venv/bin/python tools/train_chunked.py --config "$CFG" \
+    --train-manifest "$DATA/train.jsonl" --val-manifest "$DATA/val.jsonl" \
+    --output "$RUN_AC" --total-steps "$TOTAL" --chunk 5000
+
+  echo "[3/5] Train vocoder (CPU, random crop) — resume nếu đã có last.pt"
+  "$PY" train-vocoder --config "$CFG" --manifest "$DATA/train.jsonl" --output "$RUN_VC" $RES_VC
+fi
 
 echo "[4/5] Export ONNX (fp32 + fp16 + vocoder)"
 "$PY" export-onnx --config "$CFG" --checkpoint "$RUN_AC/best.pt" \

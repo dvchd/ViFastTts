@@ -61,6 +61,43 @@ vifasttts train-vocoder --config configs/base_24k.yaml \
 > **Pipeline đầy đủ cho run thật** (cache → acoustic → vocoder → ONNX → demo) đóng gói trong
 > `tools/run_small_codelung.sh`; kết quả đo + hướng dẫn triển khai: `docs/TRAINING_RUN_CODELUNG.md`.
 
+### Chạy song song acoustic + vocoder (tối ưu thời gian)
+
+**Vì sao được**: hai model **độc lập** — acoustic học `text → mel` (chạy GPU/MPS), vocoder học
+`mel thật → sóng` (chạy CPU trên Mac, không đụng bộ nhớ Metal). Thứ tự nào cũng được; chạy song
+song tiết kiệm đúng bằng thời gian train vocoder (ở run `small`: ~2,8 giờ).
+
+```bash
+# 1) Acoustic (MPS, từng khối 5k bước, tự resume)
+python tools/train_chunked.py --config configs/small_codelung.yaml \
+  --train-manifest data/codelung/train.jsonl --val-manifest data/codelung/val.jsonl \
+  --output runs/small_codelung --total-steps 60000 --chunk 5000 > logs/acoustic.log 2>&1 &
+
+# 2) Vocoder (CPU; giới hạn thread để nhường CPU cho acoustic)
+OMP_NUM_THREADS=6 vifasttts train-vocoder --config configs/small_codelung.yaml \
+  --manifest data/codelung/train.jsonl --output runs/vocoder_codelung > logs/vocoder.log 2>&1 &
+
+wait   # đợi cả hai xong
+```
+
+**Số đo thật trên Mac mini M6 32GB (chạy song song):**
+
+| | Chạy một mình | Chạy song song | Ghi chú |
+| --- | --- | --- | --- |
+| Acoustic (MPS) | 0,74 s/bước | ~0,80 s/bước | Chậm hơn ~8% do tranh CPU |
+| Vocoder (CPU) | 0,166 s/bước | ~0,24 s/bước | Chậm hơn ~40% (vẫn rất nhanh) |
+| RAM hệ thống | ~10–22 GB dùng | ~10–27 GB dùng | Còn 5–20 GB trống — an toàn |
+| CPU | ~4–8% | ~35–45% | Còn dư nhiều |
+| **Tổng thời gian** | 12,5h + 2,8h = **15,3h** | **~12,6h** | **Tiết kiệm ~2,8 giờ** |
+
+**An toàn & xử lý sự cố:**
+- Cả hai đều **resume được** (`--resume` / chunked tự thử lại) — không mất tiến độ nếu crash.
+- Nếu RAM căng (máy < 16GB) hoặc muốn acoustic nhanh nhất: giảm `vocoder_training.num_workers`
+  (6 → 2–4) hoặc `OMP_NUM_THREADS` (8 → 4), hoặc chạy **tuần tự** như mặc định của script.
+- Trên máy **CUDA**: cả hai cùng tranh GPU → chạy song song ít lợi hơn; nên tuần tự hoặc giới hạn
+  `vocoder_training.device: cpu`.
+- Bật song song trong script trọn gói: `PARALLEL=1 bash tools/run_small_codelung.sh`.
+
 Checkpoint lưu khóa `vocoder` nên `vifasttts synthesize` tự dùng ngay (không còn cảnh báo
 "chưa có trọng số vocoder"). Cấu hình ở nhóm `vocoder_training` trong config; `crop_frames`
 (mặc định 0) bật **random crop ngắn** mỗi bước (ví dụ 128 frame ≈ 1,36 giây @ hop 256) —
