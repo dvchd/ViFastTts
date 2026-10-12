@@ -160,6 +160,13 @@ Thước đo: `tools/align_quality_report.py` — `floor_rate` = tỉ lệ từ 
    → `*_dur.jsonl` · `*_seg.jsonl` · `f0_stats.json` (rồi QC toàn cục: `align_quality_report` +
    `qc_whisper_align --sample 200`).
 
+**Kết quả align full (13/10 08:47):** **9.611/9.619 TextGrid** (8 clip bị bỏ ở tầng thu thập —
+`6Ll5RtjE41I_0158/0159/0790`, `BD83pScFukQ_0018/0354`, `EM_ObHWvd94_0009`, `EUNlJU1BuzE_0051`,
+`fx303iiDb7M_0868`; converter sẽ loại với lý do "thiếu TextGrid"). QC toàn cục
+(`artifacts/dataset_v2/align_quality_full_vn.json`): floor_rate p50 **0,0** (mean 0,9%) ·
+coverage p50 **0,622** · long-phone p99 0,03 · word dur p50 0,16 s. DB C4:
+`~/Documents/MFA/mfa_v2c/mfa_v2c.db` (9.600 utterance có điểm; p10 −0,077, p50 −0,036).
+
 ## 4. MFA — vì sao phải train lại (trả lời câu hỏi)
 
 - Bộ **phone tùy chỉnh** (120 nhãn theo vị trí + thanh) — không pretrained model nào khớp;
