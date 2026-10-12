@@ -130,6 +130,23 @@ loại vì `phone > 0.5s` và `ngừng thở … giữa câu`. Truy vết từng
 (log `artifacts/dataset_v2/mfa_train_v2c_sub.log`). Khi xong: align `mfa_v2c_test` (10 clip) +
 QC lại; nếu đạt (từ sát sàn ~≤5%, coverage ≥0,6) → train full `mfa_v2c` → align → finalize.
 
+**Thước đo nghiệm thu:** `tools/align_quality_report.py` — `floor_rate` (tỉ lệ từ ≤55 ms sát
+sàn min-duration), `coverage` (thời lượng word/span), `word_dur_median_s`, `long_phone_rate`.
+Baseline trên 10 clip test (beam 100/400):
+
+| nguồn | floor_rate p50 (mean) | coverage p50 | word dur p50 |
+|---|---|---|---|
+| v2b (model cũ, tên `_`) | 0,205 (0,234) | 0,458 | 0,16 s |
+| `vietnamese_mfa` (pretrained) | **0,021** (0,017) | 0,552 | 0,19 s |
+| v2c subset (đang train) | — | — | — |
+
+Ngưỡng đạt cho v2c: **floor_rate p50 ≤ 0,05 · coverage ≥ 0,5**.
+
+**Plan B (dự phòng):** model `vietnamese_mfa` align tốt trên dữ liệu của mình nhưng dictionary
+của nó chỉ phủ **47% từ vựng** (thiếu cả từ phổ biến — dict là từ vựng của corpus huấn luyện
+riêng, không đầy đủ) và **không có G2P tiếng Việt** để bù OOV ⇒ muốn dùng phải thêm bước map
+120 phone → IPA tự viết. Chỉ triển khai nếu Plan A không đạt.
+
 ## 4. MFA — vì sao phải train lại (trả lời câu hỏi)
 
 - Bộ **phone tùy chỉnh** (120 nhãn theo vị trí + thanh) — không pretrained model nào khớp;
