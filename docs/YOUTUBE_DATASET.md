@@ -45,10 +45,11 @@ vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/co
 Kết quả cuối in dạng "Tổng kết": số video xử lý, số clip, tổng giờ, số bị lọc, số âm tiết
 theo coverage. Dataset card ở `data/codelung/dataset_card.md`.
 
-> **Lần chạy thật tham chiếu** (kênh `@codelung`, 12/10/2026): 31 video → **13.225 clip ·
-> 51,07 giờ · fallback 1,22% âm tiết (7,1% trước khi làm sạch) · 71% clip 0 fallback ·
-> đủ 6 thanh/11 coda · 0 vấn đề manifest**; `train.jsonl`/`val.jsonl` chia theo video
-> (44,38h / 6,68h) bằng `tools/split_manifest.py`.
+> **Lần chạy thật tham chiếu** (kênh `@codelung`, 12/10/2026): 31 video → recut B3: **13.215 clip ·
+> 51,73 giờ** · fallback 1,22% âm tiết (7,1% trước khi làm sạch) · 71% clip 0 fallback ·
+> đủ 6 thanh/11 coda · 0 vấn đề manifest. Sau **lọc giọng tự động** (mục 5): bỏ 6 video loạt khách
+> + 48 clip lẫn tiếng khác → **12.230 clip · 47,48h sạch giọng chủ kênh**.
+> `train.jsonl`/`val.jsonl` chia theo video bằng `tools/split_manifest.py` (chia lại sau khi lọc).
 
 ## 4. Luồng hoạt động
 
@@ -86,7 +87,36 @@ Chi tiết làm sạch:
 - **Lỗi tạm thời** (HTTP 429/5xx, timeout) được thử lại 3 lần với backoff 6 s/12 s rồi mới
   bỏ qua video; chạy lại lệnh sẽ tiếp tục từ chỗ dừng (`.done.json`).
 
-## 5. Tuỳ chọn chính
+## 5. Lọc âm thanh không phải giọng chủ kênh (tự động — NVIDIA Nemotron 3 Diarization)
+
+Kênh một-giọng vẫn có thể lẫn **TTS/AI/demo/nhạc** phát trong video. Bước này phát hiện và loại tự
+động, **không cần nghe thủ công**:
+
+```bash
+pip install -e ".[diar]"     # transformers>=5.19 + librosa + torch; chạy CPU, không cần NeMo
+python tools/diarize_filter.py \
+  --manifest data/<ds>/manifest.jsonl \
+  --anchor-video <video_sạch_của_bạn> \
+  --exclude-video <video_loạt_khách,nếu_có> \
+  --out-dir data/<ds>/review/diar
+```
+
+Nguyên lý: ghép **anchor ~6s giọng chủ kênh** lên trước mỗi clip → kênh `spk0` luôn là chủ kênh;
+`spk>0` trong vùng clip = âm thanh khác (kèm mốc thời gian chính xác để cắt nếu muốn). Tool chạy
+**2 lượt**: lượt A (anchor toàn cục) để chọn clip sạch làm **anchor riêng cho từng video**, lượt B
+cho kết quả cuối + `drop_other_ge_0p5.txt`.
+
+> ⚠️ **Bắt buộc anchor theo từng video.** Đo thực tế trên kênh tham chiếu: anchor lấy từ một video
+> khác điều kiện thu âm báo nhầm **134 clip giọng chủ kênh** thành "người khác" (mic/phòng khác
+> nhau tới ~22 dB RMS). Quy trình 2 lượt trong tool đã xử lý việc này.
+
+Kết quả kênh tham chiếu: pool chủ kênh 12.278 clip/47,68h → loại **48 clip** vì chứa **0,090h**
+tiếng khác (0,19%) → **12.230 clip/47,48h**. Kiểm chứng kèm theo (đạt toàn bộ): anchor đúng `spk0`
+100% clip (cov ≥0,95, 1 clip lệch nhẹ đã kiểm lại), không clip nào vượt cửa sổ model (max 20,6s;
+anchor 6s + 20,6s < 27,2s), chạy lại tái lập tuyệt đối. Chi tiết + bảng số đầy đủ:
+`docs/R6_DIARIZATION_RESULTS.md`.
+
+## 6. Tuỳ chọn chính
 
 | Tuỳ chọn | Mặc định | Ý nghĩa |
 | --- | --- | --- |
@@ -112,7 +142,7 @@ Chi tiết làm sạch:
 | `--dry-run` / `--refresh` | tắt | Xem trước không tải / bỏ cache danh sách video |
 | `--recut` | tắt | Xoá kết quả cũ, cắt lại từ `raw/` + `subs/` (không tải lại) — dùng sau khi sửa overrides |
 
-## 6. Cấu trúc output
+## 7. Cấu trúc output
 
 ```text
 data/codelung/
@@ -130,38 +160,72 @@ data/codelung/
   .done.json / .videos.json     trạng thái resume + danh sách video
 ```
 
-## 7. Giấy phép mở
+## 8. Giấy phép mở
 
 - Mặc định ghi **CC BY 4.0** (ai dùng cũng được, chỉ cần ghi nguồn kênh).
 - Muốn "mở hoàn toàn không điều kiện": `--license "CC0 1.0"`.
 - Dataset card tự ghi nguồn kênh, thời điểm sinh, công cụ và câu lệnh tái tạo — đủ để
   người khác trích dẫn.
 
-## 8. Sau khi lấy: kiểm tra và train
+## 9. Quy trình tái hiện đầy đủ (từ kênh YouTube đến dữ liệu train)
+
+> **Ràng buộc cứng về thứ tự:** overrides → reparse → MFA. Lab/lexicon của MFA sinh từ trường
+> `normalized`; nếu reparse sau khi align thì số âm tiết lệch → durations hỏng, phải align lại.
+> Các bước ghi "(đang hoàn thiện)" thuộc lộ trình `docs/REBUILD_PLAN_M6.md`.
 
 ```bash
-# kiểm tra WAV tồn tại + âm tiết, in coverage thanh/coda/fallback
-vifasttts validate-manifest --manifest data/codelung/manifest.jsonl --wav-dir data/codelung/audio
+# (1) Tải kênh của bạn → clip 24 kHz + manifest + SRT + dataset card (resume được)
+vifasttts youtube-fetch "https://www.youtube.com/@<kênh>/videos" --out data/<ds> --sleep 1.5
 
-# (khuyến nghị) siết chính tả nguồn bằng lexicon sinh từ chính dataset
-vifasttts build-lexicon --manifest data/codelung/manifest.jsonl --output data/codelung/lexicon.json
+# (2) QC từ lạ (OOV): tạo gói rà soát → nghe clip mẫu, điền filled.txt → merge vào overrides
+python tools/fallback_review.py --manifest data/<ds>/manifest.jsonl --out data/<ds>/review
+python tools/fallback_review.py --merge data/<ds>/review/filled.txt \
+  --overrides configs/overrides_tech_vi.json
 
-# tính trước feature rồi mới train
-vifasttts cache-features --manifest data/codelung/manifest.jsonl \
-  --config configs/base_24k.yaml --cache-dir cache/codelung
-
-# thấy oov_report.json có nhiều từ lạ thì điền cách đọc rồi cắt lại từ cache (không tải lại)
-# ví dụ overrides: {"code": "cốt", "copy": "cô pi"} — mẫu: configs/overrides_tech_vi.json
-vifasttts youtube-fetch "https://www.youtube.com/@codelung/videos" --out data/codelung \
+# (3) Cắt lại KHÔNG tải lại với overrides mới (giữ raw/, nới biên B3)
+vifasttts youtube-fetch "https://www.youtube.com/@<kênh>/videos" --out data/<ds> \
   --overrides configs/overrides_tech_vi.json --recut
 
-# báo cáo dataset + chia train/val theo video (tránh rò rỉ)
-python tools/dataset_report.py --dataset data/codelung
-python tools/split_manifest.py --manifest data/codelung/manifest.jsonl \
-  --out-dir data/codelung --val-videos 4
+# (4) Lọc rẻ chất lượng clip (im lặng/clipping/RMS) rồi áp danh sách loại — B4
+python tools/clip_quality.py --manifest data/<ds>/manifest.jsonl \
+  --out-jsonl data/<ds>/quality.jsonl --out-drop data/<ds>/quality_drop.txt --workers 8
+python tools/clip_quality.py --apply --drop data/<ds>/quality_drop.txt \
+  --manifest data/<ds>/manifest.jsonl --excluded-out data/<ds>/quality_excluded.jsonl
+
+# (5) Lọc giọng tự động: TTS/AI/demo/nhạc/khách (xem mục 5) → loại id trong drop_other_ge_0p5.txt
+pip install -e ".[diar]"
+python tools/diarize_filter.py --manifest data/<ds>/manifest.jsonl \
+  --anchor-video <video_sạch> --out-dir data/<ds>/review/diar
+
+# (6) Báo cáo dataset + lexicon kiểm chính tả
+python tools/dataset_report.py --dataset data/<ds>
+vifasttts build-lexicon --manifest data/<ds>/manifest.jsonl --output data/<ds>/lexicon.json
+
+# (7) Chuẩn hoá loudness theo video (đang hoàn thiện): −26 dBFS trên frame có tiếng, clip lệch
+#     >±6 dB sửa riêng, chặn peak >−1 dBFS, KHÔNG ghi đè bản gốc → xuất data/<ds>_v2/
+
+# (8) Chia split theo video + khoá split (lock đang hoàn thiện; hiện chạy tất định theo seed)
+python tools/split_manifest.py --manifest data/<ds>/manifest.jsonl \
+  --out-dir data/<ds> --val-videos <N> --seed 13
+
+# (9) Kiểm tra manifest + mel stats toàn cục + cache feature
+vifasttts validate-manifest --manifest data/<ds>/manifest.jsonl --wav-dir data/<ds>/audio
+python tools/compute_mel_stats.py --manifest data/<ds>/train.jsonl \
+  --config configs/<config>.yaml --out data/<ds>/mel_stats.json --sample 2000 --workers 8
+vifasttts cache-features --manifest data/<ds>/train.jsonl --config configs/<config>.yaml \
+  --cache-dir cache/<ds> --workers 8
+
+# (10) MFA (CPU) → converter TextGrid→durations cấp âm tiết (đang hoàn thiện)
+python tools/mfa_build_corpus.py --manifest data/<ds>/train.jsonl \
+  --manifest data/<ds>/val.jsonl --out data/<ds>/mfa
+#     → .mamba-mfa/bin/mfa train ... (xem docs/DATA_PIPELINE.md bước 6–7)
+#     → tools/mfa_to_durations.py (quy đổi biên tích luỹ + SIL + assert)
 ```
 
-## 9. Giới hạn (đọc trước khi train)
+Kết quả thật của các bước (1)–(5) trên kênh tham chiếu: xem `docs/YOUTUBE_DATASET.md` mục 3 và
+`docs/R6_DIARIZATION_RESULTS.md`.
+
+## 10. Giới hạn (đọc trước khi train)
 
 - **Thời lượng là cấp câu** theo phụ đề YouTube, chưa phải cấp âm tiết. Muốn chất lượng cao,
   chạy **forced alignment (MFA)** trên `raw/` rồi bổ sung trường `durations` — xem
@@ -174,7 +238,7 @@ python tools/split_manifest.py --manifest data/codelung/manifest.jsonl \
 - Video rất dài sẽ nạp cả WAV vào RAM (~5,8 MB/phút, ≈ 350 MB/giờ ở 24 kHz float32) —
   dùng `--max-video-duration` nếu máy ít RAM.
 
-## 10. Roadmap
+## 11. Roadmap
 
 - ⬜ Căn chỉnh từ mức (whisper word timestamps / MFA) để có `durations` cấp âm tiết.
 - ⬜ Lệnh xuất/đẩy dataset lên Hugging Face (`dataset_card.md` đã sẵn sàng).
