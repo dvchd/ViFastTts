@@ -181,6 +181,10 @@ python tools/parser_audit.py --wordlist words.txt   # audit từ điển (+ --pr
     (whisper/MFA) để có `durations` cấp âm tiết; ⬜ publish Hugging Face; ⬜ VAD/speaker
     tách nhạc – nhiều người nói.
 
+- Batch size (dự đoán, ghi ở `docs/TRAINING_ESTIMATES.md` §3.2): giữ **16** cho `small` (đã kiểm
+  chứng, đỉnh MPS 25GB); 20/24 chỉ lợi ~5–9% thời gian và 24 sát ngưỡng bộ nhớ — cần A/B thật.
+  `base` dự đoán cần batch 6–8 và ~30–42h acoustic; `large` batch 4 và ~52–72h.
+
 ## 7. Commit tiêu biểu trong phiên
 
 ```text

@@ -115,5 +115,9 @@ vifasttts serve --config configs/small_codelung.yaml \
    Chất lượng sẽ tăng rõ khi chạy **MFA** trên `data/codelung/raw/` rồi retrain (resume
    hoặc train lại với durations thật).
 2. Vocoder là bản **tham chiếu** (MPD-lite); production cần discriminator lớn + spectral loss.
-3. Sau alignment: có thể nâng lên `large` (32M) — 51 giờ dữ liệu đủ chỗ.
+3. Sau alignment: có thể nâng lên `base` (16,4M) hoặc `large` (32M) — 51 giờ dữ liệu đủ chỗ.
+   **Dự đoán chi tiết batch/bộ nhớ/thời gian cho base/large: `docs/TRAINING_ESTIMATES.md` §3.2**
+   (base ~30–42h với batch 6–8; large ~52–72h với batch 4).
 4. Fallback còn 1,22% — bổ sung `--overrides` cho các token còn lại trong `oov_report.json`.
+5. Batch size cho `small`: giữ **16** (đã kiểm chứng); muốn tối ưu ~5–9% thời gian thì A/B
+   **20/24** theo hướng dẫn ở `docs/TRAINING_ESTIMATES.md` §3.2 (20 an toàn, 24 sát ngưỡng bộ nhớ).

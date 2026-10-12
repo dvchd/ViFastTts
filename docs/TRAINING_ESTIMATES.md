@@ -126,11 +126,56 @@ Cùng batch đo như trên:
 | Hạng mục | Đo được | Ghi chú |
 | --- | --- | --- |
 | Model MPS fp32 | **0,478 s/bước** | Batch đã trên thiết bị; fp16 autocast 0,52 → không lợi, AMP chỉ cho CUDA |
-| Train thật (cache + empty_cache) | **~0,67 s/bước** | 60k bước ≈ 12h |
+| Train thật (cache + empty_cache) | **~0,67–0,75 s/bước** | 60k bước ≈ 12–12,5h |
 | Dataloader **không** cache | **6,34 s/batch** | STFT + F0 autocorrelation → **cache feature là bắt buộc** với clip dài |
 | Cache feature 8 workers | **33 giây / 51 giờ audio** | 6,7 GB cho 13.225 clip |
 | Vocoder CPU + crop 128 frame | **0,166 s/bước** | Random crop ngắn thay vì clip 14s (nhanh ~50×) |
 | Bộ nhớ MPS | leo tới **40 GB → OOM** | Phải `empty_cache` định kỳ + cap validation + chunked runner — xem `docs/TRAINING_RUN_CODELUNG.md` §3 |
+
+### 3.2 Dự đoán `base`/`large` trên dataset @codelung (Mac mini M6 32GB) — *ước lượng*
+
+> **Tất cả số ở mục này là DỰ ĐOÁN**, neo vào số đo thật của `small` và quy luật tỉ lệ;
+> chưa chạy A/B thật (cách tự đo ở cuối mục).
+
+**Mô hình bộ nhớ (MPS driver allocated):**
+
+- Tham số + gradient + optimizer: `base` chỉ ≈ **0,26 GB** (16,4M × 4B × 4) — không đáng kể.
+- **Activation chiếm gần hết**, tỉ lệ với `frame mỗi bước × hidden × số layer decoder`
+  (encoder chạy ở cấp âm tiết nên rất nhỏ).
+- Neo đo thật: `small` (hidden 192, decoder 2 layer) @batch 16 = 29.300 frame → đỉnh **25 GB**
+  driver (≈17 GB thật; lúc driver 21 GB thì GPU `In use system memory` chỉ 14,7 GB).
+- Hệ số so với `small`: **base ≈ 2,7×** (256/192 × 4/2) · **large ≈ 4,2×** (320/192 × 5/2).
+
+**Bảng dự đoán (cùng ~84 epoch trên 44,4h train):**
+
+| Model | Batch | Frame/bước | Đỉnh MPS (dự đoán) | s/bước (dự đoán) | Bước cần | Tổng acoustic | Rủi ro |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| small (đo thật) | 16 | 29.300 | 25 GB | **0,75s** | 60k | **~12,5h** | ✅ đang chạy ổn |
+| small (tối ưu nhẹ) | 20 | 36.700 | ~31 GB | ~0,89s | 48k | ~11,9h | ✅ thấp |
+| small (tối đa an toàn) | 24 | 44.000 | ~37 GB | ~1,03s | 40k | ~11,4h | ⚠️ sát ngưỡng |
+| small (quá lớn) | 32 | 58.600 | ~48 GB | – | – | – | ❌ OOM |
+| **base** | 6 | ~11.000 | ~25 GB | ~0,75–1,1s | 160k | **~33–48h** | ✅ an toàn |
+| **base** | 8 | ~14.700 | ~34 GB | ~0,90–1,25s | 120k | **~30–42h** | ⚠️ có thể swap nhẹ |
+| base | 12 | ~22.000 | ~51 GB | – | – | – | ❌ OOM |
+| large | 4 | ~7.300 | ~26 GB | ~0,8–1,1s | 240k | **~52–72h** | ✅ nhưng quá lâu |
+
+- Khoảng dao động của `s/bước` phản ánh hệ số base/large trên frame chưa chắc chắn
+  (2,5–4× tuỳ mức tối ưu kernel); **cần A/B thật để chốt**.
+- **RAM hệ thống (unified 32GB)**: nên giữ đỉnh driver ≤ **~30–32 GB** (thật ~20 GB) để tránh swap;
+  base batch 6 nằm ngưỡng an toàn, batch 8 chớm rủi ro, batch 12 chắc chắn OOM.
+- **Khuyến nghị**: muốn lên `base` → dùng **batch 6–8 + `tools/train_chunked.py`**,
+  dự trù **~1,5 ngày** cho acoustic (chưa kể vocoder ~1,4h + export). `large` chỉ nên tính
+  khi đã có alignment thật và chấp nhận ≥2 ngày.
+
+**Cách chọn batch cho `small` (kết luận thực dụng):**
+
+- **Mặc định giữ 16** — đã kiểm chứng qua run 60k bước, đỉnh bộ nhớ 25 GB, không rủi ro.
+- Muốn tối ưu: **20 là điểm cân bằng** (dự đoán lợi ~5%, đỉnh ~31 GB); **24 lợi ~9%**
+  nhưng sát ngưỡng — phải A/B + chunked. **Không cần số bội của 2**: trên Apple GPU, song song
+  chủ yếu theo trục frame (T), batch chỉ ảnh hưởng phụ.
+- **Cách tự đo A/B** (300 bước, ~4 phút): đổi `training.batch_size`, chạy
+  `vifasttts train ... --max-steps 300` với `log_every: 50`, so `s/bước` và `mps=` đỉnh trong log;
+  giữ cấu hình nào có `s/clip` thấp nhất mà đỉnh ≤ ~30 GB.
 
 Ghi chú: ANE (Dual 16-core Neural Engine) **không được dùng** trong pipeline hiện tại —
 PyTorch MPS chỉ chạy trên GPU; muốn khai thác ANE cần chuyển model sang Core ML (hướng
