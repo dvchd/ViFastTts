@@ -60,38 +60,85 @@ class MultiPeriodDiscriminatorLite(nn.Module):
         return [discriminator(wav) for discriminator in self.discriminators]
 
 
+def _sub_losses(
+    discriminant: torch.Tensor,
+    *,
+    real: bool,
+    mode: str,
+) -> torch.Tensor:
+    """Loss của một sub-discriminator: BCE (mặc định) hoặc LSGAN relu (kiểu Vocos).
+
+    - `bce`:  real → 1, fake → 0 (BCE-with-logits).
+    - `lsgan`: real → clamp(1 − d, 0), fake → clamp(1 + d, 0) — đúng công thức
+      mà checkpoint `charactr/vocos-mel-24khz` được huấn luyện (Vocos dùng loss này).
+    """
+    if mode == "lsgan":
+        target = 1.0 - discriminant if real else 1.0 + discriminant
+        return torch.clamp(target, min=0.0).mean()
+    target = torch.ones_like(discriminant) if real else torch.zeros_like(discriminant)
+    return F.binary_cross_entropy_with_logits(discriminant, target)
+
+
+def _normalize_weights(weights: list[float] | None, count: int) -> list[float]:
+    """Trọng số mỗi sub-discriminator (mặc định 1.0); luôn trả list đủ `count` phần tử."""
+    if weights is None:
+        return [1.0] * count
+    if len(weights) != count:
+        raise ValueError(f"weights có {len(weights)} phần tử nhưng có {count} sub-discriminator")
+    return [float(weight) for weight in weights]
+
+
 def discriminator_loss(
     real_outputs: list[tuple[torch.Tensor, list[torch.Tensor]]],
     fake_outputs: list[tuple[torch.Tensor, list[torch.Tensor]]],
+    *,
+    weights: list[float] | None = None,
+    mode: str = "bce",
 ) -> torch.Tensor:
-    """BCE: real -> 1, fake -> 0 (tổng qua các period)."""
+    """Loss discriminator: real → 1, fake → 0, trung bình có trọng số qua các sub.
+
+    `weights` cho phép hạ đóng góp của MRD (ví dụ ``[1.0]*5 + [0.1]*3`` như Vocos gốc);
+    `mode="lsgan"` dùng relu(1∓d) thay BCE.
+    """
+    grouped = _normalize_weights(weights, len(real_outputs))
     total = torch.zeros((), device=real_outputs[0][0].device)
-    for (real_logits, _), (fake_logits, _) in zip(real_outputs, fake_outputs):
-        total = total + F.binary_cross_entropy_with_logits(real_logits, torch.ones_like(real_logits))
-        total = total + F.binary_cross_entropy_with_logits(fake_logits, torch.zeros_like(fake_logits))
-    return total / max(1, len(real_outputs))
+    for (real_logits, _), (fake_logits, _), weight in zip(real_outputs, fake_outputs, grouped):
+        total = total + weight * (
+            _sub_losses(real_logits, real=True, mode=mode)
+            + _sub_losses(fake_logits, real=False, mode=mode)
+        )
+    return total / max(sum(grouped), 1e-8)
 
 
-def generator_adversarial_loss(fake_outputs: list[tuple[torch.Tensor, list[torch.Tensor]]]) -> torch.Tensor:
-    """BCE: generator muốn discriminator đoán fake là real."""
+def generator_adversarial_loss(
+    fake_outputs: list[tuple[torch.Tensor, list[torch.Tensor]]],
+    *,
+    weights: list[float] | None = None,
+    mode: str = "bce",
+) -> torch.Tensor:
+    """Loss đối kháng của generator (fake → 1), trung bình có trọng số qua các sub."""
+    grouped = _normalize_weights(weights, len(fake_outputs))
     total = torch.zeros((), device=fake_outputs[0][0].device)
-    for fake_logits, _ in fake_outputs:
-        total = total + F.binary_cross_entropy_with_logits(fake_logits, torch.ones_like(fake_logits))
-    return total / max(1, len(fake_outputs))
+    for fake_logits, weight in zip((item[0] for item in fake_outputs), grouped):
+        total = total + weight * _sub_losses(fake_logits, real=True, mode=mode)
+    return total / max(sum(grouped), 1e-8)
 
 
 def feature_matching_loss(
     real_outputs: list[tuple[torch.Tensor, list[torch.Tensor]]],
     fake_outputs: list[tuple[torch.Tensor, list[torch.Tensor]]],
+    *,
+    weights: list[float] | None = None,
 ) -> torch.Tensor:
     """L1 giữa feature map real (detach) và fake — gradient chảy vào generator."""
+    grouped = _normalize_weights(weights, len(real_outputs))
     total = torch.zeros((), device=real_outputs[0][0].device)
-    count = 0
-    for (_, real_features), (_, fake_features) in zip(real_outputs, fake_outputs):
+    weight_sum = 0.0
+    for (_, real_features), (_, fake_features), weight in zip(real_outputs, fake_outputs, grouped):
         for real_map, fake_map in zip(real_features, fake_features):
-            total = total + F.l1_loss(real_map.detach(), fake_map)
-            count += 1
-    return total / max(1, count)
+            total = total + weight * F.l1_loss(real_map.detach(), fake_map)
+            weight_sum += weight
+    return total / max(weight_sum, 1e-8)
 
 
 class PeriodDiscriminator(nn.Module):

@@ -6,6 +6,7 @@ Luồng chi tiết: `docs/MODEL_FLOW.md` §4–§5; cảnh báo alignment: `docs
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 import random
@@ -128,6 +129,40 @@ def _learning_rate(step: int, warmup: int, steps: int, base_lr: float,
     progress = min(1.0, (step - warmup) / max(1, total - warmup))
     factor = min_ratio + (1.0 - min_ratio) * 0.5 * (1.0 + math.cos(math.pi * progress))
     return base_lr * factor
+
+
+def _sub_discriminator_weights(discriminator: Any, mrd_weight: Any) -> list[float] | None:
+    """Trọng số từng sub-discriminator khi train vocoder: MPD 1.0, MRD `mrd_weight`.
+
+    Vocos gốc dùng `mrd_loss_coeff = 0.1`; None (mặc định) giữ hành vi cũ (đều 1.0).
+    """
+    if mrd_weight is None:
+        return None
+    mpd = getattr(discriminator, "mpd", None)
+    mrd = getattr(discriminator, "mrd", None)
+    if mpd is None or mrd is None:
+        return None
+    return [1.0] * len(mpd.discriminators) + [float(mrd_weight)] * len(mrd.discriminators)
+
+
+def _pretrained_sha256(vocoder_training: dict[str, Any]) -> str | None:
+    """sha256 của checkpoint pretrained (nếu có) — ghi vào checkpoint fine-tune để truy vết.
+
+    Nếu config ghi `pretrained_sha256` thì bắt buộc khớp file (phát hiện tải nhầm/gãy).
+    """
+    path = vocoder_training.get("pretrained_path")
+    if not path:
+        return None
+    candidate = Path(str(path))
+    if not candidate.exists():
+        return None
+    digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    expected = str(vocoder_training.get("pretrained_sha256", "") or "")
+    if expected and expected != digest:
+        raise ValueError(
+            f"pretrained_sha256 không khớp: config {expected[:12]}… vs file {digest[:12]}… ({candidate})"
+        )
+    return digest
 
 
 def _resume_history_state(path: Path) -> tuple[float, int]:
@@ -365,11 +400,14 @@ def train_vocoder_reference(
         generator_adversarial_loss,
         multi_resolution_stft_loss,
     )
-    from vifasttts.models.istftnet import build_generator
+    from vifasttts.models.istftnet import build_generator, load_generator_state
 
     vt: dict[str, Any] = dict(config.get("vocoder_training", {}))
     training: dict[str, Any] = dict(config.get("training", {}))
     discriminator_kind = str(vt.get("discriminator", "lite"))
+    pretrained_sha256 = _pretrained_sha256(vt)
+    if pretrained_sha256:
+        print(f"Checkpoint pretrained sha256: {pretrained_sha256[:12]}…")
     set_seed(int(seed if seed is not None else config.get("seed", 42)))
     out = Path(output)
     out.mkdir(parents=True, exist_ok=True)
@@ -384,8 +422,7 @@ def train_vocoder_reference(
     print(f"Generator {type(generator).__name__}: "
           f"{sum(p.numel() for p in generator.parameters()) / 1e6:.2f}M tham số")
     if vocoder_checkpoint and Path(vocoder_checkpoint).exists():
-        state = torch.load(vocoder_checkpoint, map_location="cpu")
-        generator.load_state_dict(state.get("vocoder", state))
+        load_generator_state(generator, vocoder_checkpoint)
     resolutions_raw = vt.get("mrd_resolutions") or DEFAULT_MRD_RESOLUTIONS
     resolutions: tuple[tuple[int, int, int], ...] = tuple(
         (int(item[0]), int(item[1]), int(item[2])) for item in resolutions_raw
@@ -437,8 +474,15 @@ def train_vocoder_reference(
         raise ValueError("manifest rỗng")
 
     learning_rate = float(vt.get("learning_rate", training.get("learning_rate", 2e-4)))
-    opt_g = Adam(generator.parameters(), lr=learning_rate, betas=(0.8, 0.99))
-    opt_d = Adam(discriminator.parameters(), lr=learning_rate, betas=(0.8, 0.99))
+    disc_learning_rate = float(vt.get("discriminator_learning_rate", learning_rate))
+    lr_base = learning_rate * float(lr_scale)
+    lr_base_d = disc_learning_rate * float(lr_scale)
+    lr_schedule = str(vt.get("lr_schedule", "constant")).lower()
+    lr_min_ratio = float(vt.get("lr_min_ratio", 0.05))
+    lr_decay_steps = int(vt.get("lr_decay_steps", 0)) or None
+    lr_warmup = int(vt.get("warmup_steps", 0))
+    opt_g = Adam(generator.parameters(), lr=lr_base, betas=(0.8, 0.99))
+    opt_d = Adam(discriminator.parameters(), lr=lr_base_d, betas=(0.8, 0.99))
     start_step = 0
     if resume:
         # Tiếp tục vocoder (G + D + optimizer) — xem train_reference.
@@ -451,16 +495,20 @@ def train_vocoder_reference(
             opt_d.load_state_dict(state["opt_d"])
         start_step = int(state.get("step", 0))
         print(f"Tiếp tục vocoder từ {resume} (bước {start_step})")
+    if lr_scale != 1.0:
+        print(f"lr_scale={lr_scale}: G {learning_rate:.2e} → {lr_base:.2e} | D {disc_learning_rate:.2e} → {lr_base_d:.2e} "
+              "(hạ tiếp nếu NaN lặp lại — E4)")
     mel_weight = float(vt.get("mel_weight", 45.0))
     fm_weight = float(vt.get("feature_matching_weight", 2.0))
     adv_weight = float(vt.get("adversarial_weight", 1.0))
     stft_weight = float(vt.get("stft_weight", 0.0))
     grad_clip = float(vt.get("grad_clip", 5.0))
-    if lr_scale != 1.0:
-        for group in (*opt_g.param_groups, *opt_d.param_groups):
-            group["lr"] = float(group["lr"]) * lr_scale
-        print(f"lr_scale={lr_scale}: LR hiện tại {opt_g.param_groups[0]['lr']:.2e} "
-              "(hạ tiếp nếu NaN lặp lại — E4)")
+    adv_mode = str(vt.get("adv_loss", "bce")).lower()
+    d_warmup = max(0, int(vt.get("d_warmup_steps", 0)))
+    sub_weights = _sub_discriminator_weights(discriminator, vt.get("mrd_weight"))
+    # Loss mel của vocoder sống trong không gian của generator (Vocos: log-magnitude
+    # thô, khử z nội bộ; hybrid: như config) — xem docs/VOCODER_VOCOS.md §2.
+    mel_cfg_loss = generator.loss_mel_config(mel_config) if hasattr(generator, "loss_mel_config") else mel_config
     steps = max_steps if max_steps is not None else int(vt.get("max_steps", 100_000))
     log_every = int(vt.get("log_every", 50))
     save_every = int(vt.get("save_every", 5000))
@@ -491,6 +539,15 @@ def train_vocoder_reference(
         while step < steps:
             for batch in loader:
                 step += 1
+                train_g = step > d_warmup
+                lr_now = _learning_rate(step, lr_warmup, steps, lr_base, lr_schedule, lr_min_ratio,
+                                        decay_steps=lr_decay_steps)
+                lr_now_d = _learning_rate(step, lr_warmup, steps, lr_base_d, lr_schedule, lr_min_ratio,
+                                          decay_steps=lr_decay_steps)
+                for group in opt_g.param_groups:
+                    group["lr"] = lr_now
+                for group in opt_d.param_groups:
+                    group["lr"] = lr_now_d
                 real = batch["wav"].to(device)
                 mel_real = batch["mel"].to(device)
                 # Random crop ngắn (chuẩn GAN vocoder): giữ bước train nhanh và ổn định
@@ -501,39 +558,46 @@ def train_vocoder_reference(
                     start = random.randrange(mel_real.size(1) - crop_frames)
                     mel_real = mel_real[:, start:start + crop_frames]
                     real = real[:, start * hop:(start + crop_frames) * hop]
-                fake = generator(mel_real)
+                if train_g:
+                    fake = generator(mel_real)
+                else:
+                    # D warm-up: G đóng băng — sinh fake không grad (đỡ bộ nhớ/thời gian).
+                    with torch.no_grad():
+                        fake = generator(mel_real)
                 length = min(real.size(-1), fake.size(-1))
                 real_crop, fake_crop = real[..., :length], fake[..., :length]
 
                 opt_d.zero_grad(set_to_none=True)
                 real_outputs = discriminator(real_crop)
                 fake_outputs = discriminator(fake_crop.detach())
-                d_loss = discriminator_loss(real_outputs, fake_outputs)
+                d_loss = discriminator_loss(real_outputs, fake_outputs, weights=sub_weights, mode=adv_mode)
                 finite_ok = finite_ok & torch.isfinite(d_loss)  # E4: không sync mỗi bước
                 d_loss.backward()
                 torch.nn.utils.clip_grad_norm_(discriminator.parameters(), grad_clip)
                 opt_d.step()
 
-                opt_g.zero_grad(set_to_none=True)
-                fake_outputs = discriminator(fake_crop)
-                g_adv = generator_adversarial_loss(fake_outputs)
-                g_fm = feature_matching_loss(real_outputs, fake_outputs)
-                # torch.stft (complex) không chạy trên MPS → tính mel trên CPU;
-                # autograd vẫn truyền ngược qua phép copy thiết bị về generator.
-                if device.type == "mps":
-                    mel_fake, _ = extract_mel_energy_batched(fake_crop.cpu(), mel_config)
-                    mel_target = mel_real.cpu()
-                else:
-                    mel_fake, _ = extract_mel_energy_batched(fake_crop, mel_config)
-                    mel_target = mel_real
-                frames = min(mel_fake.size(1), mel_target.size(1))
-                g_mel = (mel_fake[:, :frames] - mel_target[:, :frames]).abs().mean()
-                g_stft = torch.zeros((), device=fake_crop.device)
-                if stft_weight > 0:
-                    g_stft = multi_resolution_stft_loss(fake_crop, real_crop, resolutions)
-                g_loss = adv_weight * g_adv + fm_weight * g_fm + mel_weight * g_mel + stft_weight * g_stft
-                finite_ok = finite_ok & torch.isfinite(g_loss)
-                window_min = torch.minimum(window_min, g_loss.detach())
+                g_loss: torch.Tensor | None = None
+                g_adv: torch.Tensor | None = None
+                g_fm: torch.Tensor | None = None
+                g_mel: torch.Tensor | None = None
+                g_stft: torch.Tensor | None = None
+                if train_g:
+                    opt_g.zero_grad(set_to_none=True)
+                    fake_outputs = discriminator(fake_crop)
+                    g_adv = generator_adversarial_loss(fake_outputs, weights=sub_weights, mode=adv_mode)
+                    g_fm = feature_matching_loss(real_outputs, fake_outputs, weights=sub_weights)
+                    # Loss mel sống trong không gian của generator (Vocos: log-magnitude thô,
+                    # đã khử z nội bộ). stft/FFT chạy trực tiếp trên MPS được (torch 2.14).
+                    mel_target = generator.denormalize(mel_real) if hasattr(generator, "denormalize") else mel_real
+                    mel_fake, _ = extract_mel_energy_batched(fake_crop, mel_cfg_loss)
+                    frames = min(mel_fake.size(1), mel_target.size(1))
+                    g_mel = (mel_fake[:, :frames] - mel_target[:, :frames]).abs().mean()
+                    g_stft = torch.zeros((), device=fake_crop.device)
+                    if stft_weight > 0:
+                        g_stft = multi_resolution_stft_loss(fake_crop, real_crop, resolutions)
+                    g_loss = adv_weight * g_adv + fm_weight * g_fm + mel_weight * g_mel + stft_weight * g_stft
+                    finite_ok = finite_ok & torch.isfinite(g_loss)
+                    window_min = torch.minimum(window_min, g_loss.detach())
                 check_passed, window_value = False, float("inf")
                 if step % 10 == 0:
                     # E4 + rev.6 §1a: kiểm gộp mỗi 10 bước (một sync). NaN → raise NGAY, không ghi gì;
@@ -548,25 +612,34 @@ def train_vocoder_reference(
                     last_clean_loss = window_value
                     finite_ok = torch.ones((), dtype=torch.bool, device=device)
                     window_min = torch.full((), float("inf"), device=device)
-                g_loss.backward()
-                torch.nn.utils.clip_grad_norm_(generator.parameters(), grad_clip)
-                opt_g.step()
+                if train_g:
+                    assert g_loss is not None  # chỉ None khi đang ở D warm-up
+                    g_loss.backward()
+                    torch.nn.utils.clip_grad_norm_(generator.parameters(), grad_clip)
+                    opt_g.step()
 
                 if step % log_every == 0:
                     speed = (time.perf_counter() - started) / max(1, step - start_step)
-                    print(f"step {step}: g={g_loss.detach().item():.4f} adv={g_adv.detach().item():.4f} "
-                          f"mel={g_mel.detach().item():.4f} stft={g_stft.detach().item():.4f} "
-                          f"d={d_loss.detach().item():.4f} ({speed:.3f}s/bước)")
+                    g_bits = ""
+                    if g_loss is not None and g_adv is not None and g_mel is not None and g_stft is not None:
+                        g_bits = (f"g={g_loss.detach().item():.4f} adv={g_adv.detach().item():.4f} "
+                                  f"mel={g_mel.detach().item():.4f} stft={g_stft.detach().item():.4f} ")
+                    print(f"step {step}: {g_bits}d={d_loss.detach().item():.4f} "
+                          f"lr={lr_now:.2e}/{lr_now_d:.2e} ({speed:.3f}s/bước)")
                 if device.type == "mps" and step % 500 == 0:
                     torch.mps.empty_cache()  # E2: thưa hơn để tái dùng buffer
-                if check_passed and (step % save_every == 0 or window_value < best):
+                if (check_passed and window_value < float("inf")
+                        and (step % save_every == 0 or window_value < best)):
                     best = min(best, window_value)
                     save_clean({"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
                                 "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict(),
-                                "config": config, "step": step, "mel_hash": _mel_hash(config)},
+                                "config": config, "step": step, "mel_hash": _mel_hash(config),
+                                "pretrained_sha256": pretrained_sha256},
                                marker_loss=window_value)
-                    writer.writerow([step, window_value, float(g_adv.detach().item()),
-                                     float(g_mel.detach().item()), float(g_stft.detach().item()),
+                    writer.writerow([step, window_value,
+                                     float(g_adv.detach().item()) if g_adv is not None else 0.0,
+                                     float(g_mel.detach().item()) if g_mel is not None else 0.0,
+                                     float(g_stft.detach().item()) if g_stft is not None else 0.0,
                                      float(d_loss.detach().item())])
                     history.flush()
                 if step >= steps:
@@ -577,7 +650,8 @@ def train_vocoder_reference(
         finish_loss = last_clean_loss if last_clean_loss < float("inf") else (best if best < float("inf") else 0.0)
         save_clean({"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
                     "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict(),
-                    "config": config, "step": step, "mel_hash": _mel_hash(config)},
+                    "config": config, "step": step, "mel_hash": _mel_hash(config),
+                    "pretrained_sha256": pretrained_sha256},
                    marker_loss=finish_loss)
         print(f"Đã huấn luyện vocoder {step} bước, checkpoint sạch tại {out}/last.pt")
     else:

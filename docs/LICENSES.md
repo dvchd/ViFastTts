@@ -28,6 +28,16 @@ ViFastTts (MIT) **không** nhúng code của các hệ G2P bên ngoài. Tài li�
 - Mọi công cụ GPL chỉ chạy trong môi trường nghiên cứu/audit ngoài repo, không import vào package.
 - Dữ liệu giọng nói, lexicon và checkpoint do người dùng tạo có giấy phép riêng.
 
+## Checkpoint pretrained dùng cho vocoder (R7)
+
+| Thành phần | Giấy phép | Dùng cho |
+| --- | --- | --- |
+| `charactr/vocos-mel-24khz` (Hugging Face) | **MIT** | Khởi tạo + fine-tune generator Vocos (`vocos_pretrained`); tải bằng `python tools/fetch_vocos_pretrained.py` (ghim revision `0feb3fdd929bcd6649e0e7c5a688cf7dd012ef21`, sha256 `97ec976a…a91b2a` của `pytorch_model.bin`) |
+
+File tải về nằm ở `artifacts/pretrained/vocos-mel-24khz/` (ngoài git) kèm `manifest.json`
+(revision + sha256 + license). Checkpoint fine-tune ghi thêm `pretrained_sha256` cạnh
+`mel_hash` để truy vết nguồn — xem `docs/VOCODER_VOCOS.md`.
+
 ## Dependency runtime chính
 
 | Thành phần | Giấy phép | Dùng cho |

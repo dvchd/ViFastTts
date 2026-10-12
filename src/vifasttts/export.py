@@ -86,16 +86,16 @@ def _export_fp32(config: dict, checkpoint: str, output: str, opset_version: int)
 
 
 def _build_vocoder(config: dict, checkpoint: str):
-    """Dựng generator theo `vocoder_training` (lite/vocos) và nạp trọng số (khóa `vocoder`)."""
-    import torch
+    """Dựng generator theo `vocoder_training` (lite/vocos/vocos_pretrained) và nạp trọng số.
 
-    from vifasttts.models.istftnet import build_generator
+    Nhận checkpoint `train-vocoder` (khóa `vocoder`) hoặc file HF thô `pytorch_model.bin`.
+    """
+    from vifasttts.models.istftnet import build_generator, load_generator_state
 
     mel_config = config["mel"]
     vt = config.get("vocoder_training", {})
     vocoder = build_generator(vt, mel_config)
-    state = torch.load(checkpoint, map_location="cpu")
-    vocoder.load_state_dict(state.get("vocoder", state))
+    load_generator_state(vocoder, checkpoint)
     vocoder.eval()
     return vocoder, vt
 
@@ -155,23 +155,43 @@ def export_onnx(
         intermediate.unlink(missing_ok=True)
 
 
-def export_vocoder_onnx(config: dict, checkpoint: str, output: str, *, opset_version: int = 18) -> None:
+def export_vocoder_onnx(config: dict, checkpoint: str, output: str, *, opset_version: int = 18,
+                        precision: str = "fp32") -> None:
     """Xuất vocoder ONNX: mel [B,T,n_mels] → spec_real/spec_imag [B,bins,T*ratio].
 
-    Kèm metadata (sample_rate, n_fft, hop_length, upsample_ratio) để
-    `vifasttts synthesize-onnx` ghép waveform bằng iSTFT numpy.
+    Kèm metadata (sample_rate, n_fft, hop_length, mel_hop_length, upsample_ratio) để
+    `vifasttts synthesize-onnx` ghép waveform bằng iSTFT numpy. `hop_length` ghi vào
+    metadata là hop iSTFT **của graph** (hybrid = hop_mel/ratio, Vocos = hop_mel).
+
+    `precision="fp16"`: giữ nguyên phép kẹp `exp(mag) ≤ 1e2` trong graph (bắt buộc để
+    không tràn số fp16 — Vocos gốc cũng kẹp); nên đối chiếu fp16 với fp32 trước khi dùng
+    (xem `tests/test_vocos_generator.py::test_vocoder_fp16_matches_fp32`).
     """
-    import torch
-
-    from vifasttts.models.istftnet import _ISTFTNetBase
-
+    if precision not in ("fp32", "fp16"):
+        raise ValueError(f"precision không hợp lệ cho vocoder: {precision!r} (dùng fp32|fp16)")
     validate_config(config, "vocoder")
     vocoder, vt = _build_vocoder(config, checkpoint)
+
+    target = Path(output)
+    if precision == "fp16":
+        intermediate = target.with_name(target.stem + ".fp32.onnx")
+        _export_vocoder_fp32(config, vt, vocoder, str(intermediate), opset_version)
+        try:
+            convert_fp16(intermediate, target)
+        finally:
+            intermediate.unlink(missing_ok=True)
+        return
+    _export_vocoder_fp32(config, vt, vocoder, output, opset_version)
+
+
+def _export_vocoder_fp32(config: dict, vt: dict, vocoder, output: str, opset_version: int) -> None:
+    """Xuất graph vocoder fp32 (dùng chung cho fp32/fp16) + ghi metadata."""
+    import torch
 
     class _VocoderSpectrogramWrapper(torch.nn.Module):
         """mel -> (spec_real, spec_imag); iSTFT ghép ở runtime bằng numpy."""
 
-        def __init__(self, module: _ISTFTNetBase) -> None:
+        def __init__(self, module) -> None:
             """Nhận generator để gọi `spectrogram_parts` (không tạo tensor complex)."""
             super().__init__()
             self.vocoder = module
@@ -198,7 +218,10 @@ def export_vocoder_onnx(config: dict, checkpoint: str, output: str, *, opset_ver
         "vifasttts.model": "vocoder",
         "sample_rate": int(config.get("sample_rate", 24000)),
         "n_fft": int(config["mel"]["n_fft"]),
-        "hop_length": int(config["mel"]["hop_length"]),
+        # Hop iSTFT THẬT của graph: hybrid = hop_mel // upsample_ratio; Vocos = hop_mel.
+        "hop_length": int(vocoder.hop_length),
+        "mel_hop_length": int(config["mel"]["hop_length"]),
         "n_mels": int(config["mel"]["n_mels"]),
-        "upsample_ratio": int(vt.get("upsample_ratio", 4)),
+        "upsample_ratio": int(getattr(vocoder, "upsample_ratio", 1)),
+        "generator": str(vt.get("generator", "lite")),
     })

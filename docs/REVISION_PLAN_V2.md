@@ -159,3 +159,23 @@
 - **Clip được nới biên (4.745)**: theo dõi riêng tỷ lệ bị MFA loại (so với nhóm thường) khi có score;
   chưa xử lý riêng — MFA sẽ bắt qua sp dài/score thấp.
 
+## 11. rev.7 — Vocos thật + mel khớp checkpoint (R7-1/R8)
+
+- **R7-1 (đo thật, 12/10/2026)**: mel repo ↔ `charactr/vocos-mel-24khz` khác **chuẩn hoá
+  filterbank** (Slaney vs `norm=None` — lệch −3,03…−5,87 nats/bin) + log floor (`+1e-5` vs
+  `clamp 1e-7`); các thành phần còn lại trùng. Đã sửa extractor (`mel.norm: none`,
+  `log_floor_mode: clamp`) — stats/cache tính lại theo `mel_hash` mới.
+  Chi tiết + số đo: `docs/VOCODER_VOCOS.md`.
+- **Zero-shot** đã hơn vocoder lite 46k: F0 85 vs 116 cents (bỏ quãng tám), VUV 4,1% vs
+  15,1%, mel L1 0,243; suy luận ONNX CPU nhanh ~2,9× (RTF 0,0031 vs 0,0089).
+- **Generator**: `vocos_pretrained` (512/1536/8, **không upsample**, khử z nội bộ); hybrid
+  giữ làm fallback. Fine-tune: D warm-up 1k, G lr 5e-5 / D 2e-4, cosine 10k, LSGAN + MRD 0,1,
+  mel 45 ở không gian thô, crop 64 — đo **0,653 s/bước MPS** → 10k ≈ 1,8h.
+- **Cổng**: bước 0 (tải về dùng ngay) là mốc so sánh; chỉ giữ checkpoint khi hơn bước 0
+  (`eval_clips_v1` + `tools/eval_vocoder.py`); GTA 2–5k sau acoustic; ngã/nặng theo dõi bằng
+  `tools/voice_quality.py` (`hnr_creak_delta`) — chỉ đổi sang vocoder nguồn F0 nếu vẫn kém.
+- **Test mới**: mel vs torchaudio, loader HF, ONNX fp32/fp16 vs torch, MPS–CPU parity
+  (sai số tương đối ≤ ~1e-4). Sửa luôn 2 lỗi phát hiện khi kiểm: (a) window/bank/stats phải
+  theo device — trước đây mel loss chỉ chạy được trên CPU; (b) metadata `hop_length` vocoder
+  ONNX ghi hop **của graph** (hybrid cũ bị kéo dài 4× ở `synthesize-onnx`).
+

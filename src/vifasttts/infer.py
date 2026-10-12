@@ -58,7 +58,7 @@ class Synthesizer:
         from vifasttts.data.features import canonical_mel_config, verify_mel_hash
         from vifasttts.device import resolve_device
         from vifasttts.frontend.vocab import ComponentVocabs
-        from vifasttts.models.istftnet import build_generator
+        from vifasttts.models.istftnet import build_generator, load_generator_state
         from vifasttts.models.vifasttts import ViFastTtsModel
 
         validate_config(config, "acoustic")
@@ -83,9 +83,11 @@ class Synthesizer:
         if vocoder_checkpoint and Path(vocoder_checkpoint).exists():
             vocoder_state = torch.load(vocoder_checkpoint, map_location="cpu")
             verify_mel_hash(vocoder_state, canonical_mel_config(config), str(vocoder_checkpoint))
-            self.vocoder.load_state_dict(vocoder_state.get("vocoder", vocoder_state))
+            load_generator_state(self.vocoder, vocoder_checkpoint, state=vocoder_state)
         elif isinstance(state, dict) and "vocoder" in state:
             self.vocoder.load_state_dict(state["vocoder"])
+        elif getattr(self.vocoder, "pretrained_loaded", False):
+            pass  # zero-shot: đã nạp checkpoint pretrained trong build_generator (config)
         else:
             warnings.warn(
                 "Chưa có trọng số vocoder (random weights). Huấn luyện bằng "

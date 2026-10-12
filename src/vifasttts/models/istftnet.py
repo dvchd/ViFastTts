@@ -11,10 +11,28 @@ Xem `docs/MODEL_FLOW.md` §5 và `docs/REVISION_PLAN_V2.md` §10.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import torch
 from torch import nn
+
+
+class MelSpaceGenerator(nn.Module):
+    """Giao diện chung generator vocoder (lite/hybrid và Vocos).
+
+    `denormalize` + `loss_mel_config` cho phép vòng train làm việc trong **không gian mel
+    của generator**: hybrid dùng nguyên config (có thể đã z-score); Vocos khử z về
+    log-magnitude thô đúng như lúc pretrained — xem `docs/VOCODER_VOCOS.md` §2.
+    """
+
+    def denormalize(self, mel: torch.Tensor) -> torch.Tensor:
+        """Mel đầu vào → không gian mel dùng cho loss (mặc định: giữ nguyên)."""
+        return mel
+
+    def loss_mel_config(self, mel_config: dict[str, Any]) -> dict[str, Any]:
+        """Config mel cho loss của vocoder (mặc định: đúng config hiện hành)."""
+        return mel_config
 
 
 class ConvNeXtBlock(nn.Module):
@@ -39,7 +57,7 @@ class ConvNeXtBlock(nn.Module):
         return residual + (self.gamma * x).transpose(1, 2)
 
 
-class _ISTFTNetBase(nn.Module):
+class _ISTFTNetBase(MelSpaceGenerator):
     """Phần chung: mel [B, T, M] → (real, imag) phổ → iSTFT.
 
     Lớp con chỉ cần dựng các module `pre`, `net`, `up`, `post`, `out` với tên giữ nguyên
@@ -54,6 +72,11 @@ class _ISTFTNetBase(nn.Module):
     up: nn.Module
     post: nn.Module
     out: nn.Module
+
+    @property
+    def mel_normalized(self) -> bool:
+        """Hybrid dùng mel đúng như config (có thể đã z-score); không khử nội bộ."""
+        return False
 
     def spectrogram_parts(self, mel: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Mel [B, T, M] -> (real, imag) [B, bins, T*ratio] — dùng cho export ONNX.
@@ -140,8 +163,46 @@ class ISTFTNetVocos(_ISTFTNetBase):
         self.out = nn.Conv1d(hidden, bins * 2, 7, padding=3)
 
 
-def build_generator(vocoder_training: dict[str, Any], mel_config: dict[str, Any]) -> _ISTFTNetBase:
-    """Dựng generator theo `vocoder_training.generator`: "lite" (mặc định) hoặc "vocos"."""
+def load_generator_state(generator: nn.Module, checkpoint: str | Path, *, map_location: str = "cpu",
+                         state: dict | None = None) -> None:
+    """Nạp trọng số generator từ một trong ba định dạng:
+
+    - checkpoint `train-vocoder` của repo (khóa ``"vocoder"``);
+    - file HF thô ``pytorch_model.bin`` của Vocos (chỉ hợp generator Vocos);
+    - state dict trần (tương thích test/cũ).
+
+    Truyền `state` nếu đã `torch.load` sẵn (tránh đọc file hai lần).
+    """
+    import torch
+
+    if state is None:
+        state = torch.load(str(checkpoint), map_location=map_location, weights_only=False)
+    if isinstance(state, dict) and "vocoder" in state:
+        generator.load_state_dict(state["vocoder"])
+        return
+    if isinstance(state, dict) and any(str(key).startswith("backbone.") for key in state):
+        from vifasttts.models.vocos import VocosGenerator, load_vocos_pretrained
+
+        if not isinstance(generator, VocosGenerator):
+            raise ValueError(
+                "Checkpoint là Vocos pretrained nhưng generator không phải VocosGenerator "
+                "(config cần `vocoder_training.generator: vocos_pretrained`)"
+            )
+        load_vocos_pretrained(generator, checkpoint)
+        return
+    generator.load_state_dict(state)
+
+
+def build_generator(vocoder_training: dict[str, Any], mel_config: dict[str, Any]) -> MelSpaceGenerator:
+    """Dựng generator theo `vocoder_training.generator`:
+
+    - ``"lite"`` (mặc định cũ): iSTFTNet nhẹ, upsample ×ratio.
+    - ``"vocos"``: hybrid ConvNeXt + upsample ×ratio (không nạp được checkpoint gốc).
+    - ``"vocos_pretrained"`` (hoặc ``"vocos_true"``): Vocos thật — head iSTFT hop mel,
+      nạp checkpoint MIT `charactr/vocos-mel-24khz` nếu `vocoder_training.pretrained_path`
+      được đặt (xem `docs/VOCODER_VOCOS.md`). Mel z-score được khử nội bộ nếu config có
+      `mel.normalize_path`.
+    """
     kind = str(vocoder_training.get("generator", "lite"))
     common = {
         "n_mels": int(mel_config["n_mels"]),
@@ -149,6 +210,28 @@ def build_generator(vocoder_training: dict[str, Any], mel_config: dict[str, Any]
         "hop_length": int(mel_config["hop_length"]),
         "upsample_ratio": int(vocoder_training.get("upsample_ratio", 4)),
     }
+    if kind in ("vocos_pretrained", "vocos_true"):
+        from vifasttts.models.vocos import (
+            DEFAULT_DIM,
+            DEFAULT_INTERMEDIATE_DIM,
+            DEFAULT_LAYERS,
+            VocosGenerator,
+            load_vocos_pretrained,
+        )
+
+        generator = VocosGenerator(
+            n_mels=common["n_mels"],
+            n_fft=common["n_fft"],
+            hop_length=common["hop_length"],
+            dim=int(vocoder_training.get("hidden", DEFAULT_DIM)),
+            intermediate_dim=int(vocoder_training.get("intermediate_dim", DEFAULT_INTERMEDIATE_DIM)),
+            num_layers=int(vocoder_training.get("generator_blocks", DEFAULT_LAYERS)),
+            stats_path=mel_config.get("normalize_path"),
+        )
+        pretrained_path = vocoder_training.get("pretrained_path")
+        if pretrained_path:
+            load_vocos_pretrained(generator, str(pretrained_path))
+        return generator
     if kind == "vocos":
         return ISTFTNetVocos(
             hidden=int(vocoder_training.get("hidden", 384)),

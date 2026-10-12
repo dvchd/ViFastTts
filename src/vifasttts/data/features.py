@@ -26,8 +26,19 @@ def _mel_to_hz(mel: float) -> float:
     return float(700.0 * (10.0 ** (mel / 2595.0) - 1.0))
 
 
-def mel_filterbank(sample_rate: int, n_fft: int, n_mels: int, f_min: float = 0.0, f_max: float | None = None) -> torch.Tensor:
-    """Bộ lọc mel kiểu HTK/Slaney, trả về [n_mels, n_fft // 2 + 1]."""
+def mel_filterbank(sample_rate: int, n_fft: int, n_mels: int, f_min: float = 0.0,
+                   f_max: float | None = None, norm: str | None = "slaney") -> torch.Tensor:
+    """Bộ lọc mel kiểu HTK, trả về [n_mels, n_fft // 2 + 1].
+
+    `norm`:
+      - ``"slaney"`` (mặc định cũ): chia tam giác theo bề rộng dải ``2/(f_{m+2} - f_m)``
+        — trùng ``torchaudio.melscale_fbanks(norm="slaney")``.
+      - ``None`` hoặc ``"none"``: tam giác thô, KHÔNG chuẩn hoá diện tích — trùng
+        ``torchaudio`` mặc định (``norm=None``) và biểu diễn mel của Vocos
+        (``charactr/vocos-mel-24khz``). Xem ``docs/VOCODER_VOCOS.md``.
+    """
+    if norm not in (None, "none", "slaney"):
+        raise ValueError(f"norm không hợp lệ: {norm!r} (dùng None|'none'|'slaney')")
     if f_max is None or f_max <= 0:
         f_max = sample_rate / 2
     bins = n_fft // 2 + 1
@@ -39,7 +50,10 @@ def mel_filterbank(sample_rate: int, n_fft: int, n_mels: int, f_min: float = 0.0
         lower, center, upper = hz_points[m], hz_points[m + 1], hz_points[m + 2]
         left = (frequencies - lower) / (center - lower).clamp_min(1e-6)
         right = (upper - frequencies) / (upper - center).clamp_min(1e-6)
-        bank[m] = torch.clamp(torch.minimum(left, right), min=0.0) * (2.0 / (upper - lower).clamp_min(1e-6))
+        triangle = torch.clamp(torch.minimum(left, right), min=0.0)
+        if norm == "slaney":
+            triangle = triangle * (2.0 / (upper - lower).clamp_min(1e-6))
+        bank[m] = triangle
     return bank
 
 
@@ -142,7 +156,11 @@ def extract_mel_energy_batched(wav: torch.Tensor, mel_config: dict[str, Any]) ->
     """WAV [B, L] -> mel log [B, T, M] và log-energy [B, T].
 
     Mặc định giữ hành vi cũ (log-power, floor 1e-6). Khi `mel_config["log_magnitude"]`
-    bật → log-**magnitude** với floor `log_floor` (mặc định 1e-5, kiểu HiFi-GAN).
+    bật → log-**magnitude** với floor `log_floor` (mặc định 1e-5, kiểu HiFi-GAN):
+      - `log_floor_mode: "add"` (mặc định cũ) → `log(x + floor)`;
+      - `log_floor_mode: "clamp"` → `log(clamp(x, min=floor))` — trùng `safe_log`
+        của Vocos (floor 1e-7). Xem `docs/VOCODER_VOCOS.md` §2.
+    `mel_config["norm"]` chọn chuẩn hoá filterbank ("slaney" mặc định cũ | "none").
     Khi `mel_config["normalize_path"]` trỏ tới JSON stats (mean/std per-bin) →
     chuẩn hoá toàn cục: `(mel - mean) / std` (xem REVISION_PLAN_V2 §2).
     """
@@ -150,21 +168,30 @@ def extract_mel_energy_batched(wav: torch.Tensor, mel_config: dict[str, Any]) ->
     hop = int(mel_config["hop_length"])
     win = int(mel_config.get("win_length", n_fft))
     sample_rate = int(mel_config.get("sample_rate", 24000))
-    window = torch.hann_window(win)
+    # Cửa sổ/bank/stats phải nằm cùng device với waveform (MPS: torch.stft yêu cầu trùng device).
+    window = torch.hann_window(win, device=wav.device)
     spec = torch.stft(wav, n_fft=n_fft, hop_length=hop, win_length=win, window=window, return_complex=True, center=True)
     magnitude = spec.abs()  # [B, bins, T]
     power = magnitude ** 2
-    bank = mel_filterbank(sample_rate, n_fft, int(mel_config["n_mels"]), float(mel_config.get("f_min", 0)), float(mel_config.get("f_max", 0)))
+    bank = mel_filterbank(
+        sample_rate, n_fft, int(mel_config["n_mels"]),
+        float(mel_config.get("f_min", 0)), float(mel_config.get("f_max", 0)),
+        norm=mel_config.get("norm", "slaney"),
+    ).to(wav.device)
     if bool(mel_config.get("log_magnitude", False)):
         floor = float(mel_config.get("log_floor", 1e-5))
-        mel = torch.log(torch.einsum("mc,bct->btm", bank, magnitude) + floor)  # [B, T, M]
+        magnitude_mel = torch.einsum("mc,bct->btm", bank, magnitude)  # [B, T, M]
+        if str(mel_config.get("log_floor_mode", "add")).lower() == "clamp":
+            mel = torch.log(magnitude_mel.clamp_min(floor))
+        else:
+            mel = torch.log(magnitude_mel + floor)
     else:
         mel = torch.log(torch.einsum("mc,bct->btm", bank, power) + 1e-6)  # [B, T, M]
     energy = torch.log(power.mean(dim=1) + 1e-6)  # [B, T]
     normalize_path = mel_config.get("normalize_path")
     if normalize_path:
         mean, std = _mel_norm_stats(str(normalize_path))
-        mel = (mel - mean) / std
+        mel = (mel - mean.to(mel.device)) / std.to(mel.device)
     return mel, energy
 
 
@@ -226,6 +253,36 @@ def _fit_length(values: torch.Tensor, frames: int) -> torch.Tensor:
     if values.size(0) > frames:
         return values[:frames]
     return torch.nn.functional.pad(values, (0, frames - values.size(0)))
+
+
+def dct4_frames(values: torch.Tensor, keep: int = 4) -> torch.Tensor:
+    """DCT-II chuẩn hoá trực giao trên chuỗi `[T]` → `[K]` với `K = min(keep, T)`.
+
+    Đúng quy ước đã chốt (docs/AI_REVIEW_ANSWERS_R3 §C2): vị trí `(t+0.5)/T`,
+    hệ số 0 nhân `1/sqrt(2)` trong basis; n < keep → chỉ tính K = n hệ số
+    (loss mask các hệ số thiếu; IDCT dùng đúng K đó).
+    """
+    n = int(values.size(0))
+    if n == 0:
+        return values.new_zeros(0)
+    k = min(int(keep), n)
+    index = torch.arange(k, device=values.device, dtype=values.dtype).unsqueeze(1)
+    frames = torch.arange(n, device=values.device, dtype=values.dtype).unsqueeze(0)
+    basis = torch.cos(math.pi * index * (frames + 0.5) / n)  # [K, T]
+    basis[0] = basis[0] / math.sqrt(2.0)
+    return basis @ values * math.sqrt(2.0 / n)
+
+
+def idct4_frames(coeffs: torch.Tensor, frames: int) -> torch.Tensor:
+    """IDCT khớp `dct4_frames` (giữ K hệ số đầu) → chuỗi `[frames]` tạm dựng contour."""
+    k = int(coeffs.size(0))
+    if k == 0 or frames <= 0:
+        return coeffs.new_zeros(max(0, frames))
+    index = torch.arange(k, device=coeffs.device, dtype=coeffs.dtype).unsqueeze(1)
+    positions = torch.arange(int(frames), device=coeffs.device, dtype=coeffs.dtype).unsqueeze(0)
+    basis = torch.cos(math.pi * index * (positions + 0.5) / int(frames))  # [K, T]
+    basis[0] = basis[0] / math.sqrt(2.0)
+    return coeffs @ basis * math.sqrt(2.0 / int(frames))
 
 
 def extract_features(wav_path: str | Path, config: dict[str, Any]) -> dict[str, torch.Tensor]:

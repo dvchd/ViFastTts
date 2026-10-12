@@ -55,16 +55,19 @@ def copy_synthesis(generator: Any, mel: Any) -> Any:
     return wave
 
 
-def _metrics(real_mel: Any, synth_wav: Any, mel_config: dict[str, Any]) -> dict[str, float]:
-    """mel L1 (mel tái trích của bản synth vs mel thật) + clipping + tỉ lệ độ dài."""
+def _metrics(generator: Any, real_mel: Any, synth_wav: Any, mel_config: dict[str, Any]) -> dict[str, float]:
+    """mel L1 trong **không gian của generator** (Vocos: log-magnitude thô) + clipping + tỉ lệ độ dài."""
 
     from vifasttts.data.features import extract_mel_energy
 
-    synth_mel, _ = extract_mel_energy(synth_wav.cpu(), mel_config)
-    frames = min(synth_mel.size(0), real_mel.size(0))
-    mel_l1 = float((synth_mel[:frames] - real_mel[:frames]).abs().mean()) if frames else float("inf")
+    loss_config = generator.loss_mel_config(mel_config) if hasattr(generator, "loss_mel_config") else mel_config
+    target = generator.denormalize(real_mel) if hasattr(generator, "denormalize") else real_mel
+    synth_mel, _ = extract_mel_energy(synth_wav.cpu(), loss_config)
+    frames = min(synth_mel.size(0), target.size(0))
+    mel_l1 = float((synth_mel[:frames] - target[:frames]).abs().mean()) if frames else float("inf")
     clipping = float((synth_wav.abs() > 0.985).float().mean())
-    length_ratio = float(synth_wav.numel()) / max(1, real_mel.size(0) * int(mel_config["hop_length"]))
+    hop = int(loss_config["hop_length"])
+    length_ratio = float(synth_wav.numel()) / max(1, target.size(0) * hop)
     return {
         "mel_l1": round(mel_l1, 4),
         "clipping_ratio": round(clipping, 5),
@@ -91,7 +94,7 @@ def run_milestone(config: dict[str, Any], rows: list[dict[str, Any]], checkpoint
         synth = copy_synthesis(generator, real_mel)
         wav_path = out_dir / f"{row['id']}.wav"
         write_wav(wav_path, synth.cpu().numpy(), sample_rate)
-        metrics = _metrics(real_mel, synth, mel_config)
+        metrics = _metrics(generator, real_mel, synth, mel_config)
         metrics["id"] = row["id"]
         summary.append(metrics)
     aggregate = {

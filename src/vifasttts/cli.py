@@ -199,11 +199,12 @@ def export_vocoder_onnx_cmd(
     checkpoint: str = typer.Option(..., help="Checkpoint vocoder .pt"),
     output: str = typer.Option(..., help="File .onnx đầu ra (mel → phổ)"),
     opset: int = typer.Option(18, help="Opset ONNX (mặc định 18)"),
+    precision: str = typer.Option("fp32", help="fp32 | fp16 (so fp16 với fp32 trước khi dùng)"),
 ) -> None:
     """Xuất vocoder ONNX (mel → spec_real/spec_imag) để chạy `synthesize-onnx`."""
     from vifasttts.export import export_vocoder_onnx
-    export_vocoder_onnx(load_config(config), checkpoint, output, opset_version=opset)
-    typer.echo(f"Đã xuất {output} (vocoder)")
+    export_vocoder_onnx(load_config(config), checkpoint, output, opset_version=opset, precision=precision)
+    typer.echo(f"Đã xuất {output} (vocoder, {precision})")
 
 
 @app.command("check-profile")

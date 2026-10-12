@@ -90,7 +90,10 @@ def test_onnx_runtime_end_to_end(tmp_path: Path):
     export_vocoder_onnx(TINY_CONFIG, str(vocoder_run / "last.pt"), str(vocoder_onnx))
     vocoder_meta = read_metadata(vocoder_onnx)
     assert vocoder_meta["n_fft"] == "256"
-    assert vocoder_meta["hop_length"] == "64"
+    # `hop_length` là hop iSTFT CỦA GRAPH (lite upsample 4: 64 // 4 = 16); hop mel ghi riêng.
+    assert vocoder_meta["hop_length"] == "16"
+    assert vocoder_meta["mel_hop_length"] == "64"
+    assert vocoder_meta["upsample_ratio"] == "4"
     assert vocoder_meta["sample_rate"] == "24000"
 
     # 3) Mel ONNX phải khớp PyTorch (cùng checkpoint, eval mode)
@@ -109,6 +112,14 @@ def test_onnx_runtime_end_to_end(tmp_path: Path):
     assert onnx_outputs["mel"].shape == mel_torch.shape
     assert float(np.max(np.abs(onnx_outputs["mel"] - mel_torch))) < 1e-2
     assert onnx_outputs["lengths"].tolist()[0] == onnx_outputs["durations"].sum()
+
+    # 3b) Độ dài waveform phải khớp hop mel (chặn lỗi "metadata hop sai → kéo dài 4×").
+    from vifasttts.runtime.onnx_engine import OnnxVocoder
+
+    mel_onnx = onnx_outputs["mel"]
+    waveform = OnnxVocoder(vocoder_onnx, provider="cpu").waveform(mel_onnx)
+    expected_samples = (mel_onnx.shape[1] - 1) * 64  # hop mel (lite: hop graph 16 × ratio 4)
+    assert abs(waveform.size - expected_samples) <= 256
 
     # 4) Tổng hợp bằng runtime ONNX (không cần PyTorch cho bước này)
     output = tmp_path / "out.wav"

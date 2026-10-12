@@ -46,6 +46,45 @@ def test_log_magnitude_khac_log_power():
     assert torch.allclose(power_silence, torch.full_like(power_silence, math.log(1e-6)), atol=1e-6)
 
 
+def test_mel_kieu_vocos_khop_torchaudio():
+    """`norm: none` + `log(clamp(x, 1e-7))` phải khớp MelSpectrogram của torchaudio (Vocos R7-1)."""
+    torchaudio = pytest.importorskip("torchaudio")
+    torch.manual_seed(0)
+    wav = torch.randn(24000) * 0.1
+    vocos_mel, _ = extract_mel_energy(wav, {
+        **MEL, "norm": "none", "log_magnitude": True, "log_floor": 1e-7, "log_floor_mode": "clamp",
+    })
+    transform = torchaudio.transforms.MelSpectrogram(
+        sample_rate=24000, n_fft=256, hop_length=64, n_mels=20, center=True, power=1,
+    )
+    reference = torch.log(torch.clamp(transform(wav.unsqueeze(0)), min=1e-7))[0].transpose(0, 1)
+    assert vocos_mel.shape == reference.shape
+    assert torch.allclose(vocos_mel, reference, atol=1e-4)
+
+
+def test_log_floor_mode_clamp_va_add():
+    """`clamp` (Vocos) kẹp đúng tại log(floor); `add` giữ hành vi cũ."""
+    silence = torch.zeros(4096)
+    clamped, _ = extract_mel_energy(silence, {
+        **MEL, "log_magnitude": True, "log_floor": 1e-7, "log_floor_mode": "clamp",
+    })
+    assert torch.allclose(clamped, torch.full_like(clamped, math.log(1e-7)), atol=1e-6)
+    added, _ = extract_mel_energy(silence, {**MEL, "log_magnitude": True, "log_floor": 1e-5})
+    assert torch.allclose(added, torch.full_like(added, math.log(1e-5)), atol=1e-6)
+
+
+def test_filterbank_norm_none_vs_slaney():
+    """`norm=None` = tam giác thô (Vocos); `slaney` = nhân 2/(f_hi−f_lo) mỗi filter (hành vi cũ)."""
+    from vifasttts.data.features import mel_filterbank
+
+    slaney = mel_filterbank(24000, 256, 20, 0, 12000)
+    raw = mel_filterbank(24000, 256, 20, 0, 12000, norm=None)
+    assert raw.max() > 0.5 > slaney.max()
+    active = slaney[10] > 1e-9
+    ratio = raw[10][active] / slaney[10][active]
+    assert torch.allclose(ratio, ratio[0].expand_as(ratio), rtol=1e-5)
+
+
 def test_chuan_hoa_toan_cuc_theo_stats(tmp_path: Path):
     torch.manual_seed(0)
     wav = torch.randn(4096) * 0.2
