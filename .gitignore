@@ -15,5 +15,6 @@ data/youtube/
 *.wav
 .DS_Store
 .venv-mfa/
+.venv-speaker/
 .mamba-mfa/
 

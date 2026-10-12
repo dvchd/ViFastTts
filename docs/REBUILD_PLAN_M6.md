@@ -39,8 +39,8 @@ thiết bị khác). Với TTS một giọng, đây là hai nguồn nhiễu hệ
 
 **Kết luận:** trước khi bàn base/large, phải làm **lọc người nói + chuẩn hoá loudness**. May mắn là
 chưa có gì đáng tiếc: MFA chưa train, duration vẫn placeholder, checkpoint cũ chỉ để test pipeline.
-→ Chủ dự án đã chốt: **bỏ hẳn loạt "Học Từ Thiện"** (937 clip/4,05h, xem §3); phần clip lẻ giọng
-khác xử lý bằng lọc F0 cấp clip (chờ chốt phương án §6.1).
+→ Chủ dự án đã chốt: **bỏ hẳn loạt "Học Từ Thiện"**; phần clip lẻ "giọng khác" đã được kiểm tra
+**tự động** bằng NVIDIA Nemotron 3 Diarization — kết quả và danh sách loại: `docs/R6_DIARIZATION_RESULTS.md`.
 
 ---
 
@@ -100,10 +100,12 @@ raw/<video>.wav + subs  ──(1) recut/filter──▶ clips một giọng
   (giữ file để sau này có thể làm multi-speaker).
 - **Pool còn lại: 25 video · 12.278 clip · 47,68h** (chủ kênh). Lưu ý `UJ_AOlM3cr0` ("Học làm web —
   Dự Án Học Từ Thiện") **vẫn giữ** vì là video chủ kênh.
-- Còn ~300 clip lẻ giọng khác ở các video trộn: `6GXw85XfiKo` (~25%) · `o8RjAmBtyZo` (~22%) ·
-  `50swDIypplU` (~21%) và rải rác 1–5% (`fx303iiDb7M`, `VGYWEeV2CzM`…). **[CẦN CHỐT]:** (a) lọc tự
-  động F0 cấp clip (giữ clip chủ kênh — rẻ, không thêm dependency) hay (b) loại luôn 3 video trộn
-  nhiều nhất (mất thêm ~600 clip chủ kênh). Đề xuất **(a)**.
+- **Lọc âm thanh không phải giọng bạn — TỰ ĐỘNG HOÁ bằng NVIDIA Nemotron 3 Diarization**
+  (chi tiết: `docs/R6_DIARIZATION_RESULTS.md`): ghép anchor 6s giọng bạn + mỗi clip → `spk0` = bạn;
+  chạy 12.278 clip pool chủ kênh trong ~14 phút CPU. Kết quả chỉ **0,22h** tiếng lạ, tập trung 149 clip
+  (≥0,5s). **Quy tắc chốt: loại 149 clip** (`data/codelung/review/diar/drop_other_ge_0p5.txt`) →
+  **12.129 clip · 47,17h sạch giọng bạn**. Các clip F0 cao 163–173 Hz ở `6GXw85XfiKo`/`o8RjAmBtyZo`
+  là **giọng bạn** (model xác nhận, không lọc oan); mốc thời gian lạ từng clip lưu sẵn để cắt tinh sau.
 
 **(3) Chuẩn hoá loudness:** chuẩn hoá từng clip về **RMS mục tiêu −26 dBFS** (peak-safe, giữ fade);
 hoặc tối thiểu là gain theo video. Ghi lại gain vào metadata. Sau bước này energy target mới có phân
@@ -164,7 +166,7 @@ loại clip, mask loss…). Chạy MFA **sau khi lọc giọng** để không m�
 - **Cổng base:** CER ≤ copy-synthesis +2–3 điểm; nghe 50–100 câu đạt.
 
 ## 6. Việc cần chốt trước khi thực thi
-1. **Lọc nốt ~300 clip lẻ giọng khác:** (a) tự động F0 cấp clip — khuyến nghị — hay (b) loại luôn 3 video trộn nhiều nhất?
+1. ~~Lọc clip lẻ giọng khác~~ ✅ **đã xong tự động** (Nemotron 3 Diarization — `docs/R6_DIARIZATION_RESULTS.md`); chốt loại 149 clip như §3.
 2. **Chuẩn hoá loudness:** clip→−26 dBFS (khuyến nghị) hay chỉ gain theo video? Có cho phép ghi đè WAV không?
 3. **Quy mô dựng lại:** recut lại từ `raw/` (sạch nhất, dùng overrides + QC mới) hay chỉ lọc/normalize trên clip hiện có (nhanh hơn ~1 ngày)?
 4. **Split:** chốt **N=12/cap150** (khuyến nghị — bỏ ngưỡng 40h) hay **N=8/cap200** (giữ 40h)?
