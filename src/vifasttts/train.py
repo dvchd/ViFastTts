@@ -83,7 +83,7 @@ def _run_validation(model, loader, config, device, max_batches: int = 0) -> floa
             loss, _ = acoustic_losses(outputs, batch, weights)
             total_loss += float(loss.item())
             batches += 1
-            if device.type == "mps" and batches % 10 == 0:
+            if device.type == "mps" and batches % 100 == 0:
                 torch.mps.empty_cache()
             if max_batches and batches >= max_batches:
                 break
@@ -273,9 +273,10 @@ def train_reference(
                                if device.type == "mps" else "")
                     print(f"step {step}: loss={loss.detach().item():.4f} mel={parts['mel'].detach().item():.4f} "
                           f"lr={lr:.2e} ({speed:.3f}s/bước){mps_mem}")
-                if device.type == "mps" and step % 10 == 0:
+                if device.type == "mps" and step % 500 == 0:
                     # MPS giữ cache block theo shape; batch dài ngắn khác nhau làm cache phình
-                    # tới hàng chục GB (đo thật: 40GB → chậm/OOM). Giải phóng định kỳ.
+                    # tới hàng chục GB (đo thật: 40GB → chậm/OOM). E2: giãn còn mỗi ~500 bước
+                    # (đủ thưa để tái dùng buffer) + sau mỗi lần validation.
                     torch.mps.empty_cache()
                 if step % validate_every == 0:
                     val_loss = _run_validation(model, val_loader, config, device,
@@ -352,7 +353,7 @@ def train_vocoder_reference(
         generator_adversarial_loss,
         multi_resolution_stft_loss,
     )
-    from vifasttts.models.istftnet import ISTFTNetLite
+    from vifasttts.models.istftnet import build_generator
 
     vt: dict[str, Any] = dict(config.get("vocoder_training", {}))
     training: dict[str, Any] = dict(config.get("training", {}))
@@ -366,14 +367,10 @@ def train_vocoder_reference(
 
     mel_config = dict(config["mel"])
     mel_config.setdefault("sample_rate", int(config.get("sample_rate", 24000)))
-    # Vocoder độc lập với acoustic model; mặc định 256 khớp `infer.synthesize`.
-    hidden = int(vt.get("hidden", 256))
-    upsample_ratio = int(vt.get("upsample_ratio", 4))
-    generator = ISTFTNetLite(
-        n_mels=int(mel_config["n_mels"]), hidden=hidden,
-        n_fft=int(mel_config["n_fft"]), hop_length=int(mel_config["hop_length"]),
-        upsample_ratio=upsample_ratio,
-    )
+    # Vocoder độc lập với acoustic model; generator chọn theo `vocoder_training.generator`.
+    generator = build_generator(vt, mel_config)
+    print(f"Generator {type(generator).__name__}: "
+          f"{sum(p.numel() for p in generator.parameters()) / 1e6:.2f}M tham số")
     if vocoder_checkpoint and Path(vocoder_checkpoint).exists():
         state = torch.load(vocoder_checkpoint, map_location="cpu")
         generator.load_state_dict(state.get("vocoder", state))
@@ -422,6 +419,7 @@ def train_vocoder_reference(
         shuffle=True,
         collate_fn=collate_vocoder_batch,
         num_workers=int(vt.get("num_workers", training.get("num_workers", 0))),
+        drop_last=True,  # batch đủ → một shape duy nhất trên MPS (E4)
     )
     if len(dataset) == 0:
         raise ValueError("manifest rỗng")
@@ -445,6 +443,7 @@ def train_vocoder_reference(
     fm_weight = float(vt.get("feature_matching_weight", 2.0))
     adv_weight = float(vt.get("adversarial_weight", 1.0))
     stft_weight = float(vt.get("stft_weight", 0.0))
+    grad_clip = float(vt.get("grad_clip", 5.0))
     steps = max_steps if max_steps is not None else int(vt.get("max_steps", 100_000))
     log_every = int(vt.get("log_every", 50))
     save_every = int(vt.get("save_every", 5000))
@@ -479,7 +478,10 @@ def train_vocoder_reference(
                 real_outputs = discriminator(real_crop)
                 fake_outputs = discriminator(fake_crop.detach())
                 d_loss = discriminator_loss(real_outputs, fake_outputs)
+                if not torch.isfinite(d_loss):
+                    raise RuntimeError(f"NaN/Inf ở D loss tại bước {step} — runner sẽ resume từ last.pt")
                 d_loss.backward()
+                torch.nn.utils.clip_grad_norm_(discriminator.parameters(), grad_clip)
                 opt_d.step()
 
                 opt_g.zero_grad(set_to_none=True)
@@ -500,7 +502,10 @@ def train_vocoder_reference(
                 if stft_weight > 0:
                     g_stft = multi_resolution_stft_loss(fake_crop, real_crop, resolutions)
                 g_loss = adv_weight * g_adv + fm_weight * g_fm + mel_weight * g_mel + stft_weight * g_stft
+                if not torch.isfinite(g_loss):
+                    raise RuntimeError(f"NaN/Inf ở G loss tại bước {step} — runner sẽ resume từ last.pt")
                 g_loss.backward()
+                torch.nn.utils.clip_grad_norm_(generator.parameters(), grad_clip)
                 opt_g.step()
 
                 if step % log_every == 0:
@@ -508,6 +513,8 @@ def train_vocoder_reference(
                     print(f"step {step}: g={g_loss.detach().item():.4f} adv={g_adv.detach().item():.4f} "
                           f"mel={g_mel.detach().item():.4f} stft={g_stft.detach().item():.4f} "
                           f"d={d_loss.detach().item():.4f} ({speed:.3f}s/bước)")
+                if device.type == "mps" and step % 500 == 0:
+                    torch.mps.empty_cache()  # E2: thưa hơn để tái dùng buffer
                 if step % save_every == 0 or g_loss.detach().item() < best:
                     best = min(best, float(g_loss.detach().item()))
                     state = {"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
@@ -520,6 +527,8 @@ def train_vocoder_reference(
                     history.flush()
                 if step >= steps:
                     break
+    if device.type == "mps":
+        torch.mps.empty_cache()
     torch.save({"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
                 "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict(),
                 "config": config, "step": step}, out / "last.pt")

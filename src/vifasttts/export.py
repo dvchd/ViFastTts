@@ -86,20 +86,14 @@ def _export_fp32(config: dict, checkpoint: str, output: str, opset_version: int)
 
 
 def _build_vocoder(config: dict, checkpoint: str):
-    """Dựng ISTFTNetLite theo config `vocoder_training` và nạp trọng số (khóa `vocoder`)."""
+    """Dựng generator theo `vocoder_training` (lite/vocos) và nạp trọng số (khóa `vocoder`)."""
     import torch
 
-    from vifasttts.models.istftnet import ISTFTNetLite
+    from vifasttts.models.istftnet import build_generator
 
     mel_config = config["mel"]
     vt = config.get("vocoder_training", {})
-    vocoder = ISTFTNetLite(
-        n_mels=int(mel_config["n_mels"]),
-        hidden=int(vt.get("hidden", 256)),
-        n_fft=int(mel_config["n_fft"]),
-        hop_length=int(mel_config["hop_length"]),
-        upsample_ratio=int(vt.get("upsample_ratio", 4)),
-    )
+    vocoder = build_generator(vt, mel_config)
     state = torch.load(checkpoint, map_location="cpu")
     vocoder.load_state_dict(state.get("vocoder", state))
     vocoder.eval()
@@ -169,7 +163,7 @@ def export_vocoder_onnx(config: dict, checkpoint: str, output: str, *, opset_ver
     """
     import torch
 
-    from vifasttts.models.istftnet import ISTFTNetLite
+    from vifasttts.models.istftnet import _ISTFTNetBase
 
     validate_config(config, "vocoder")
     vocoder, vt = _build_vocoder(config, checkpoint)
@@ -177,7 +171,7 @@ def export_vocoder_onnx(config: dict, checkpoint: str, output: str, *, opset_ver
     class _VocoderSpectrogramWrapper(torch.nn.Module):
         """mel -> (spec_real, spec_imag); iSTFT ghép ở runtime bằng numpy."""
 
-        def __init__(self, module: ISTFTNetLite) -> None:
+        def __init__(self, module: _ISTFTNetBase) -> None:
             """Nhận generator để gọi `spectrogram_parts` (không tạo tensor complex)."""
             super().__init__()
             self.vocoder = module

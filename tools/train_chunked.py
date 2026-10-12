@@ -15,10 +15,19 @@ Chạy:
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+
+def _mps_env() -> dict[str, str]:
+    """E1: đặt watermark MPS cho tiến trình con (tránh leo 40GB khi chạy dài)."""
+    env = dict(os.environ)
+    env.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.8")
+    env.setdefault("PYTORCH_MPS_LOW_WATERMARK_RATIO", "0.7")
+    return env
 
 
 def read_step(checkpoint: Path) -> int:
@@ -62,7 +71,7 @@ def main() -> None:
         if step > 0:
             command += ["--resume", str(out / "last.pt")]
         print(f"[chunked] {step} → {target} bước (khối {args.chunk})", flush=True)
-        code = subprocess.run(command, check=False).returncode
+        code = subprocess.run(command, check=False, env=_mps_env()).returncode
         new_step = read_step(out / "last.pt")
         if (out / "early_stop.json").exists():
             print(f"[chunked] dừng theo early-stop (val chững): {new_step}/{args.total_steps} bước", flush=True)

@@ -140,7 +140,8 @@ features [B,N,7]
       · expanded [B,T,256], lengths [B], frame_mask [B,T]
       · variance mở rộng theo frame → nối (f0,vuv,energy[,phonation]) → Linear(3→256)
       · frame position 0..1 trong âm tiết → Linear(1→256)
- └─ Decoder ConformerLite ×4 → Mel head Linear(256→100) → mel [B,T,100]
+ └─ Decoder ConformerLite ×4 → Mel head Linear(256→100) → mel_pre [B,T,100]
+      └─ (khi `model.use_postnet: true`) Postnet 5 lớp conv 256 kênh residual → mel [B,T,100]
 ```
 
 Số tham số thật (base_24k):
@@ -201,7 +202,7 @@ chỉ giúp encoder học biểu diễn phân biệt thanh; ở inference `tone_
 
 ```text
 VocoderDataset: mel [T,100] + wav [T*hop]  (cùng cache feature)
-generator  = ISTFTNetLite(n_mels, hidden, n_fft, hop, upsample_ratio=4)
+generator  = build_generator: ISTFTNetLite (mặc định) hoặc ISTFTNetVocos (ConvNeXt, hidden 384 × 8)
 discriminator = MPD đầy đủ (2/3/5/7/11) + MRD  (config `discriminator: mpd_mrd`;
                mặc định cũ: MultiPeriodDiscriminatorLite)
 mỗi bước:
@@ -418,7 +419,7 @@ vifasttts serve --config configs/base_24k.yaml --checkpoint runs/base/best.pt --
 | `tests/test_phonation.py` | HNR/tilt/glottalization đúng dải; kênh đi vào dataset |
 | `tests/test_losses*` (qua smoke) | công thức loss/trọng số không NaN, backward chạy |
 
-Chạy tất cả: `pytest` (2237 test). Ma trận parser: `python tools/parser_audit.py`.
+Chạy tất cả: `pytest` (2250 test). Ma trận parser: `python tools/parser_audit.py`.
 
 ## 13. Tài liệu liên quan
 

@@ -66,6 +66,17 @@ class ViFastTtsModel(nn.Module):
         self.position_proj = nn.Linear(1, h)
         self.decoder = ConformerLite(m["decoder_layers"], h, m["attention_heads"], m["ffn_size"], m["conv_kernel_size"], m["dropout"])
         self.mel = nn.Linear(h, config["mel"]["n_mels"])
+        # Postnet (F2): 5 lớp conv residual làm nét mel — loss dùng cả mel trước và sau.
+        self.use_postnet = bool(m.get("use_postnet", False))
+        if self.use_postnet:
+            mel_dim = int(config["mel"]["n_mels"])
+            self.postnet = nn.Sequential(
+                nn.Conv1d(mel_dim, 256, 5, padding=2), nn.LeakyReLU(0.1),
+                nn.Conv1d(256, 256, 5, padding=2), nn.LeakyReLU(0.1),
+                nn.Conv1d(256, 256, 5, padding=2), nn.LeakyReLU(0.1),
+                nn.Conv1d(256, 256, 5, padding=2), nn.LeakyReLU(0.1),
+                nn.Conv1d(256, mel_dim, 5, padding=2),
+            )
 
     @staticmethod
     def _frame_positions(durations: torch.Tensor, max_frames: int) -> torch.Tensor:
@@ -119,10 +130,16 @@ class ViFastTtsModel(nn.Module):
             expanded + self.variance_proj(variance) + self.position_proj(positions.unsqueeze(-1)),
             frame_mask,
         )
+        mel_pre = self.mel(decoded)
+        mel_refined = mel_pre
+        if self.use_postnet:
+            mel_refined = mel_pre + self.postnet(mel_pre.transpose(1, 2)).transpose(1, 2)
         outputs: dict[str, torch.Tensor] = {
-            "mel": self.mel(decoded), "log_duration": log_d, "durations": durations,
+            "mel": mel_refined, "log_duration": log_d, "durations": durations,
             "f0": syllable_f0, "vuv_logits": syllable_vuv, "energy": syllable_energy,
         }
+        if self.use_postnet:
+            outputs["mel_pre"] = mel_pre
         if syllable_phonation is not None:
             outputs["phonation"] = syllable_phonation
         outputs["tone_logits"] = self.tone_classifier(x)

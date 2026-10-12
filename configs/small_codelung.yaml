@@ -47,6 +47,7 @@ model:
   duration_layers: 3
   variance_layers: 3
   use_phonation: false
+  use_postnet: true   # F2: 5 lớp conv residual làm nét mel (+1,24M tham số); loss dùng cả mel trước
 
 training:
   batch_size: 16
@@ -82,11 +83,14 @@ vocoder_training:
   log_every: 100
   save_every: 2000
   crop_frames: 64    # 0,68 giây @ hop 256 — đo MPS: crop 64 nhanh gần gấp đôi crop 128 (0,67 vs 1,35 s/bước, ch=16)
-  hidden: 256        # nâng từ 192 — điểm ngọt tham chiếu (generator 3,53M)
+  generator: vocos   # backbone ConvNeXt kiểu Vocos (ARCH_DISCUSSION_M6 D3); "lite" = bản cũ 3,5M
+  generator_blocks: 8
+  hidden: 384        # Vocos hidden 384
   upsample_ratio: 4
   discriminator: mpd_mrd        # MPD đầy đủ 2/3/5/7/11 + MRD (thay MPD-lite 39k)
   discriminator_channels: 16    # đo MPS: ch=16 (D 7,7M) 0,67 s/bước; ch=32 (D 31M) 1,49 s/bước
   device: auto       # auto → MPS cho MPD+MRD (đã đo nhanh hơn CPU 3,8–4,7×)
+  grad_clip: 5.0     # E4: clip grad cho cả G và D
   mel_weight: 5.0     # mel mới đã chuẩn hoá toàn cục → đơn vị đổi, hạ từ 45
   feature_matching_weight: 2.0
   adversarial_weight: 1.0
@@ -94,8 +98,9 @@ vocoder_training:
 
 loss_weights:
   mel: 1.0
+  mel_pre: 0.2    # F2: loss phụ trên mel trước postnet
   duration: 1.0
   f0: 1.0
   vuv: 0.5
   energy: 0.5
-  tone: 0.25
+  tone: 0.1       # F3: hạ từ 0.25 (aux nhẹ; mask bỏ SIL khi có SIL ở bước 4)

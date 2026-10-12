@@ -1,5 +1,9 @@
 # Thảo luận lại kiến trúc & ngân sách train — Mac mini M6 32GB + dữ liệu @codelung
 
+> ✅ **Đã có kết luận đầy đủ (A–F) — xem `docs/REVISION_PLAN_V2.md` (rev.4)**: lịch chạy chốt,
+> smoke small 20k → base 100k, MFA ∥ vocoder, cắt segment theo SIL, generator Vocos, postnet,
+> watermark MPS. File này giữ làm bản ghi vòng hỏi–đáp.
+>
 > Bản gửi chuyên gia (vòng 4). Trạng thái: **mọi tiến trình đã dừng** để phân tích lại trước khi
 > dồn máy chạy lần cuối. Cập nhật: 12/10/2026.
 

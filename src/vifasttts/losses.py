@@ -69,6 +69,9 @@ def acoustic_losses(outputs: dict[str, torch.Tensor], batch: dict[str, torch.Ten
     }
     if "phonation" in outputs and "phonation" in batch:
         losses["phonation"] = _masked_mean((outputs["phonation"] - batch["phonation"]).abs(), syllable_mask)
+    if "mel_pre" in outputs:
+        # F2: loss trên cả mel trước postnet (trọng số mặc định 0.2, cấu hình ở loss_weights).
+        losses["mel_pre"] = masked_l1(outputs["mel_pre"], batch["mel"], batch.get("mel_lengths"), mean_over_bins=True)
     total = torch.zeros((), device=next(iter(losses.values())).device)
     for key, value in losses.items():
         total = total + value * float(weights.get(key, 1.0))

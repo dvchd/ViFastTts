@@ -124,6 +124,22 @@ def test_multi_resolution_stft_loss():
     assert pred.grad is not None and torch.isfinite(pred.grad).all()
 
 
+def test_build_generator_lite_vs_vocos():
+    """Factory generator: mặc định lite (tương thích checkpoint cũ), vocos khi cấu hình."""
+    from vifasttts.models.istftnet import ISTFTNetLite, ISTFTNetVocos, build_generator
+
+    mel_config = {"n_mels": 20, "n_fft": 256, "hop_length": 64}
+    lite = build_generator({}, mel_config)
+    assert isinstance(lite, ISTFTNetLite)
+    vocos = build_generator({"generator": "vocos", "hidden": 32, "generator_blocks": 2}, mel_config)
+    assert isinstance(vocos, ISTFTNetVocos)
+    mel = torch.randn(2, 16, 20)
+    real, imag = vocos.spectrogram_parts(mel)
+    assert real.shape == imag.shape and real.dim() == 3
+    wave = vocos(mel)
+    assert wave.dim() == 2 and wave.size(0) == 2
+
+
 def test_vocoder_training_mpd_mrd_smoke(tmp_path: Path):
     """Train vocoder 1 bước với MPD đầy đủ + MRD + MR-STFT loss (config-driven)."""
     manifest = _manifest(tmp_path)
@@ -131,6 +147,9 @@ def test_vocoder_training_mpd_mrd_smoke(tmp_path: Path):
         **VOC_CONFIG,
         "vocoder_training": {
             **VOC_CONFIG["vocoder_training"],
+            "generator": "vocos",
+            "generator_blocks": 2,
+            "hidden": 16,
             "discriminator": "mpd_mrd",
             "discriminator_channels": 8,
             "mrd_resolutions": [[64, 16, 64], [128, 32, 128]],

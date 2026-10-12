@@ -8,11 +8,13 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **2237 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
-- **Run `small` @codelung dừng ở 20.850 bước** (val tăng ngược từ 8k do nhãn chia đều) — chuyển
-  sang `docs/REVISION_PLAN_V2.md` (rev.3). Đang triển khai **bước 2**: mel **log-magnitude clamp
-  1e-5 + chuẩn hoá toàn cục per-bin** (`tools/compute_mel_stats.py`), **F0 pyworld harvest+stonemask**,
-  và **vocoder nâng cấp** (MPD đầy đủ 2/3/5/7/11 + MRD + MR-STFT, 100k bước, MPS).
+- **2250 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **Kết luận chuyên gia (rev.4)** đã chốt toàn bộ A–F và lịch chạy — xem `docs/REVISION_PLAN_V2.md`.
+  Đã code xong: mel log-magnitude + chuẩn hoá toàn cục, F0 pyworld, vocoder **MPD đầy đủ + MRD +
+  MR-STFT + generator Vocos** (đo 0,659 s/bước MPS), **postnet** (small → 7,38M), VAD nới biên clip (B3),
+  công cụ rà soát fallback (B1), watermark MPS 0.8/0.7 + grad clip + NaN/Inf tự resume.
+- **Run `small` @codelung dừng ở 20.850 bước** (val tăng ngược từ 8k do nhãn chia đều) — không dùng
+  làm model cuối, chỉ giữ để test pipeline; kế hoạch mới ở `docs/REVISION_PLAN_V2.md` (rev.4).
 - Audit parser: **ma trận 49.166 tổ hợp hợp lệ — 0 vấn đề**; từ điển 39k từ →
   6.633 âm tiết, **6.617 parse OK**, 16 fallback đều là typo/từ vay (đã phân loại).
 - Audit mở rộng (11/10/2026): Viet74K 73.901 mục — chữ HOA/NFD/dấu kép/gạch nối

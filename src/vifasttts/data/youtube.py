@@ -49,6 +49,10 @@ from vifasttts.types import ParseStatus
 
 PAD_START = 0.06  # giây cắt trước câu để không mất phụ âm đầu
 PAD_END = 0.12    # giây cắt sau câu để không mất âm cuối
+BOUNDARY_MAX_EXTEND = 0.20  # giây — nới mỗi biên ra tối đa để tìm khoảng lặng (VAD năng lượng)
+BOUNDARY_FRAME = 0.01       # khung VAD 10 ms
+BOUNDARY_DROP_DB = 28.0     # ngưỡng "lặng" so với mức nói (percentile 90 của cụm)
+BOUNDARY_TIGHT_SEC = 0.15   # băng qua ≤150 ms tiếng nói mới tới lặng → đuôi/đầu âm tiết bị cắt
 LogFn = Callable[[str], None]
 
 _LICENSE_LINKS = {
@@ -365,6 +369,61 @@ def _prepare_dataset_text(raw: str, options: NormalizerOptions, respell_codes: b
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _frame_rms_db(frame: np.ndarray) -> float:
+    """RMS dBFS của một khung âm thanh float [-1, 1]."""
+    return 20.0 * math.log10(float(np.sqrt(np.mean(np.square(frame)))) + 1e-12)
+
+
+def _clip_level_db(segment: np.ndarray, sample_rate: int) -> float:
+    """Mức nói tham chiếu của cụm: percentile 90 của RMS khung 10 ms."""
+    step = max(1, int(sample_rate * BOUNDARY_FRAME))
+    count = segment.size // step
+    if count < 2:
+        return _frame_rms_db(segment)
+    frames = segment[: count * step].reshape(count, step)
+    rms = np.sqrt(np.mean(np.square(frames), axis=1)) + 1e-12
+    return 20.0 * math.log10(float(np.percentile(rms, 90)))
+
+
+def _adjust_boundary(samples: np.ndarray, sample_rate: int, boundary: float,
+                     direction: int, threshold_db: float) -> tuple[float, str | None]:
+    """Nới một biên tới mép khoảng lặng gần nhất (≤200 ms) — tránh cụt âm.
+
+    `direction` = -1 (biên trái, mở về trước) hoặc +1 (biên phải, mở về sau).
+    Trả `(biên mới, cờ)`: None = dừng trong lặng, "tight" = phải băng qua tiếng nói
+    ngắn (đuôi/đầu âm tiết bị cắt) mới tới lặng, "speech" = tiếng nói liên tục
+    (giữ nguyên biên — dùng cho QC, tránh nuốt câu kề bên).
+    """
+    step = max(1, int(sample_rate * BOUNDARY_FRAME))
+    pos = round(boundary * sample_rate)
+    limit = int(BOUNDARY_MAX_EXTEND * sample_rate)
+    offset = 0
+    crossed_speech = False
+    # Pha A: băng qua tiếng nói ngắn sát biên (âm tiết bị cắt) — quá 150 ms thì bỏ.
+    while offset + step <= limit:
+        index = pos + direction * (offset + step)
+        if index < 0 or index + step > samples.size:
+            break
+        if _frame_rms_db(samples[index:index + step]) < threshold_db:
+            break
+        offset += step
+        crossed_speech = True
+        if offset > int(BOUNDARY_TIGHT_SEC * sample_rate):
+            return boundary, "speech"
+    # Pha B: đi hết khoảng lặng sát biên (biên mới nằm giữa lặng).
+    silence = offset
+    while offset + step <= limit:
+        index = pos + direction * (offset + step)
+        if index < 0 or index + step > samples.size:
+            break
+        if _frame_rms_db(samples[index:index + step]) >= threshold_db:
+            break
+        offset += step
+    if offset == silence:
+        return boundary, "speech" if crossed_speech else None
+    return (pos + direction * offset) / sample_rate, "tight" if crossed_speech else None
+
+
 def cut_clips(
     video: dict[str, Any],
     cues: list[Cue],
@@ -395,6 +454,20 @@ def cut_clips(
         if end - start < options.min_duration:
             stats["skipped_short"] += 1
             continue
+        # B3: nới biên tới mép khoảng lặng gần nhất (VAD năng lượng, ≤200 ms mỗi phía)
+        # — tránh cụt âm tiết ở biên mà không nuốt tiếng nói câu kề bên.
+        boundary_flags: list[str] = []
+        raw_segment = samples[round(start * sample_rate):round(end * sample_rate)]
+        if raw_segment.size > 0:
+            threshold_db = _clip_level_db(raw_segment, sample_rate) - BOUNDARY_DROP_DB
+            start, start_flag = _adjust_boundary(samples, sample_rate, start, -1, threshold_db)
+            end, end_flag = _adjust_boundary(samples, sample_rate, end, 1, threshold_db)
+            start = max(0.0, start)
+            end = min(total_seconds, end)
+            for side, flag in (("start", start_flag), ("end", end_flag)):
+                if flag:
+                    boundary_flags.append(f"{side}_{flag}")
+                    stats[f"boundary_{flag}"] = stats.get(f"boundary_{flag}", 0) + 1
         segment = samples[round(start * sample_rate):round(end * sample_rate)]
         if segment.size == 0:
             stats["skipped_short"] += 1
@@ -433,6 +506,7 @@ def cut_clips(
             "fallback_ratio": round(ratio, 4),
             "text": text,
             "audio_path": str(clip_path),
+            "boundary_flags": boundary_flags,
         })
     log(f"    {len(merged)} câu → {len(records)} clip hợp lệ")
     return records
@@ -721,6 +795,9 @@ def fetch_dataset(options: FetchOptions, *, log: LogFn = print) -> dict[str, Any
     log(f"Clip: {stats['clips']} · {total_seconds / 3600.0:.2f} giờ · TB {average:.2f}s")
     log(f"Bỏ: {stats['skipped_short']} ngắn · {stats['skipped_silence']} im lặng · "
         f"{stats['skipped_duplicate']} trùng · {stats['skipped_fallback']} fallback cao")
+    if stats.get("boundary_tight") or stats.get("boundary_speech"):
+        log(f"Biên VAD: {stats.get('boundary_tight', 0)} nới qua âm tiết bị cắt · "
+            f"{stats.get('boundary_speech', 0)} giữ nguyên vì tiếng nói liền (theo dõi QC)")
     log(f"Manifest: {manifest_path} ({validation['total']} dòng, "
         f"{len(validation['issues'])} vấn đề)")
     log(f"Coverage: {coverage['syllables']} âm tiết, {coverage['fallback']} fallback")

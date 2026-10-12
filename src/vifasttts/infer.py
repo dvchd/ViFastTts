@@ -57,7 +57,7 @@ class Synthesizer:
 
         from vifasttts.device import resolve_device
         from vifasttts.frontend.vocab import ComponentVocabs
-        from vifasttts.models.istftnet import ISTFTNetLite
+        from vifasttts.models.istftnet import build_generator
         from vifasttts.models.vifasttts import ViFastTtsModel
 
         validate_config(config, "acoustic")
@@ -76,14 +76,8 @@ class Synthesizer:
 
         mel_config = config["mel"]
         vocoder_training = config.get("vocoder_training", {})
-        # Cùng quy ước với train-vocoder: hidden/upsample_ratio mặc định 256/4.
-        self.vocoder = ISTFTNetLite(
-            n_mels=int(mel_config["n_mels"]),
-            hidden=int(vocoder_training.get("hidden", 256)),
-            n_fft=int(mel_config["n_fft"]),
-            hop_length=int(mel_config["hop_length"]),
-            upsample_ratio=int(vocoder_training.get("upsample_ratio", 4)),
-        )
+        # Cùng quy ước với train-vocoder: generator chọn theo `vocoder_training.generator`.
+        self.vocoder = build_generator(vocoder_training, mel_config)
         if vocoder_checkpoint and Path(vocoder_checkpoint).exists():
             vocoder_state = torch.load(vocoder_checkpoint, map_location="cpu")
             self.vocoder.load_state_dict(vocoder_state.get("vocoder", vocoder_state))

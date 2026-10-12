@@ -101,6 +101,10 @@ wait   # đợi cả hai xong
 - Trên máy **CUDA**: cả hai cùng tranh GPU → chạy song song ít lợi hơn; nên tuần tự hoặc giới hạn
   `vocoder_training.device: cpu`.
 - Bật song song trong script trọn gói: `PARALLEL=1 bash tools/run_small_codelung.sh`.
+- **MPS trên máy dài**: runner khối + script tự đặt `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.8` và
+  `PYTORCH_MPS_LOW_WATERMARK_RATIO=0.7` (E1 — chặn leo 40GB; phải đặt **cả hai**, low < high).
+  `empty_cache` giãn còn mỗi ~500 bước + sau validation (E2) — gọi quá dày làm mất tái dùng buffer.
+  Vocoder còn có grad clip 5.0 + kiểm NaN/Inf mỗi bước (dừng → runner resume từ `last.pt`).
 
 Checkpoint lưu khóa `vocoder` nên `vifasttts synthesize` tự dùng ngay (không còn cảnh báo
 "chưa có trọng số vocoder"). Cấu hình ở nhóm `vocoder_training` trong config; `crop_frames`

@@ -9,6 +9,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# E1: chặn MPS leo tới trần vật lý (đo thật: 40GB → OOM); low phải < high.
+export PYTORCH_MPS_HIGH_WATERMARK_RATIO="${PYTORCH_MPS_HIGH_WATERMARK_RATIO:-0.8}"
+export PYTORCH_MPS_LOW_WATERMARK_RATIO="${PYTORCH_MPS_LOW_WATERMARK_RATIO:-0.7}"
+
 CFG=configs/small_codelung.yaml
 DATA=data/codelung
 CACHE=cache/codelung
