@@ -12,16 +12,23 @@
 3. `data/dataset.py` mã hoá âm tiết thành 7 ID, gom target cấp âm tiết (f0/vuv/energy) theo duration, collate có padding + mask.
 4. Train với teacher forcing: decoder mở rộng theo **duration thật** để sinh mel đúng độ dài; duration/f0/vuv/energy/tone dự đoán từ syllable state (chuẩn FastSpeech 2).
 5. Mask được áp cho encoder, decoder và mọi loss (không tính vào vùng pad).
-6. Lưu `best.pt`, `last.pt` (kèm config, step), `history.csv`; có warmup LR, grad clip, AMP nếu chạy CUDA.
-7. (Tùy chọn) Cache feature mel/f0/vuv theo hash(audio, config): đặt `training.cache_features: true` hoặc `cache_dir`, hoặc chạy trước `vifasttts cache-features`. (Tùy chọn) Bật `phonation.enabled: true` để trích thêm HNR/spectral tilt/glottalization cấp frame cho nghiên cứu chất giọng.
+6. Lưu `best.pt`, `last.pt` (kèm config, step **và optimizer**), `history.csv`; có warmup LR,
+   grad clip, AMP (CUDA **và MPS**); log in kèm tốc độ `(x.xxx s/bước)`. **Resume**:
+   `--resume runs/.../last.pt` tiếp tục đúng bước/optimizer (job dài không mất tiến độ).
+7. (Tùy chọn) Cache feature mel/f0/vuv theo hash(audio, config): đặt `training.cache_features: true` hoặc `cache_dir`, hoặc chạy trước `vifasttts cache-features --workers 8` (ProcessPool, nhanh hơn nhiều cho dataset chục giờ). (Tùy chọn) Bật `phonation.enabled: true` để trích thêm HNR/spectral tilt/glottalization cấp frame cho nghiên cứu chất giọng.
 
 ```bash
 vifasttts train --config configs/base_24k.yaml \
   --train-manifest data/train.jsonl --val-manifest data/val.jsonl \
   --output runs/base --max-steps 5000
 
+# Chạy tiếp nếu bị ngắt (resume từ last.pt, giữ nguyên optimizer + số bước)
+vifasttts train --config configs/base_24k.yaml \
+  --train-manifest data/train.jsonl --val-manifest data/val.jsonl \
+  --output runs/base --resume runs/base/last.pt
+
 vifasttts cache-features --manifest data/train.jsonl \
-  --config configs/base_24k.yaml --cache-dir cache/train
+  --config configs/base_24k.yaml --cache-dir cache/train --workers 8
 ```
 
 Cache khoá theo `(đường dẫn audio, size, mtime, mel config)` nên đổi dữ liệu/cấu hình sẽ tự
@@ -41,10 +48,19 @@ trích lại. Bật phonation thì nhớ tính lại cache.
 ```bash
 vifasttts train-vocoder --config configs/base_24k.yaml \
   --manifest data/train.jsonl --output runs/vocoder --max-steps 100000
+
+# Resume tương tự acoustic:
+vifasttts train-vocoder --config configs/base_24k.yaml \
+  --manifest data/train.jsonl --output runs/vocoder --resume runs/vocoder/last.pt
 ```
 
+> **Pipeline đầy đủ cho run thật** (cache → acoustic → vocoder → ONNX → demo) đóng gói trong
+> `tools/run_small_codelung.sh`; kết quả đo + hướng dẫn triển khai: `docs/TRAINING_RUN_CODELUNG.md`.
+
 Checkpoint lưu khóa `vocoder` nên `vifasttts synthesize` tự dùng ngay (không còn cảnh báo
-"chưa có trọng số vocoder"). Cấu hình ở nhóm `vocoder_training` trong config. Đây là bản
+"chưa có trọng số vocoder"). Cấu hình ở nhóm `vocoder_training` trong config; `crop_frames`
+(mặc định 0) bật **random crop ngắn** mỗi bước (ví dụ 128 frame ≈ 1,36 giây @ hop 256) —
+chuẩn GAN vocoder, giữ bước train nhanh và ổn định dù clip dài 3–20 giây. Đây là bản
 **tham chiếu**: cần discriminator lớn hơn, spectral loss và dữ liệu nhiều hơn cho production.
 
 ## Phonation (tùy chọn)

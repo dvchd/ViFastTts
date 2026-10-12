@@ -172,9 +172,11 @@ def train(
     val_manifest: str = typer.Option(..., help="Manifest validation (JSONL)"),
     output: str = typer.Option(..., help="Thư mục run"),
     max_steps: int | None = typer.Option(None, help="Ghi đè số bước tối đa (chạy thử nhanh)"),
+    resume: str | None = typer.Option(None, help="Checkpoint .pt để tiếp tục (resume)"),
 ) -> None:
     """Huấn luyện acoustic model (device lấy từ `training.device`, auto = cuda→mps→cpu)."""
-    train_reference(load_config(config), train_manifest, val_manifest, output, max_steps=max_steps)
+    train_reference(load_config(config), train_manifest, val_manifest, output,
+                    max_steps=max_steps, resume=resume)
 
 
 @app.command("export-onnx")
@@ -259,11 +261,12 @@ def cache_features_cmd(
     config: str = typer.Option(..., help="File YAML cấu hình"),
     cache_dir: str = typer.Option(..., help="Thư mục cache"),
     limit: int | None = typer.Option(None, help="Giới hạn số mẫu (chạy thử)"),
+    workers: int = typer.Option(0, help="Số tiến trình song song (0 = tuần tự)"),
 ) -> None:
     """Tính trước mel/f0/vuv cho manifest để training nhanh hơn."""
     from vifasttts.data.cache import precompute_features
 
-    done = precompute_features(manifest, load_config(config), cache_dir, limit=limit)
+    done = precompute_features(manifest, load_config(config), cache_dir, limit=limit, workers=workers)
     typer.echo(f"Đã cache {done} mẫu vào {cache_dir}")
 
 
@@ -274,13 +277,14 @@ def train_vocoder_cmd(
     output: str = typer.Option(..., help="Thư mục run"),
     max_steps: int | None = typer.Option(None, help="Ghi đè số bước tối đa"),
     vocoder_checkpoint: str | None = typer.Option(None, help="Checkpoint vocoder để huấn luyện tiếp"),
+    resume: str | None = typer.Option(None, help="Checkpoint .pt để tiếp tục (resume)"),
 ) -> None:
     """Huấn luyện vocoder tham chiếu (iSTFTNetLite + MPD-lite)."""
     from vifasttts.train import train_vocoder_reference
 
     train_vocoder_reference(
         load_config(config), manifest, output,
-        max_steps=max_steps, vocoder_checkpoint=vocoder_checkpoint,
+        max_steps=max_steps, vocoder_checkpoint=vocoder_checkpoint, resume=resume,
     )
     typer.echo(f"Đã lưu vocoder vào {output}")
 

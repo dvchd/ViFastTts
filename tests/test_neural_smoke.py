@@ -133,6 +133,53 @@ def test_istftnet_shapes():
     assert torch.isfinite(wav).all()
 
 
+def test_train_resume_continues_from_step(tmp_path: Path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "s1.wav", freq=220)
+    _write_wav(wav_dir / "s2.wav", freq=300)
+    metadata = tmp_path / "metadata.csv"
+    with metadata.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh, delimiter="|")
+        writer.writerow(["s1", "Chào bạn hôm nay"])
+        writer.writerow(["s2", "Thử hệ thống mới"])
+    manifest = tmp_path / "manifest.jsonl"
+    build_manifest(str(metadata), str(wav_dir), str(manifest))
+
+    out_dir = tmp_path / "run"
+    train_reference(TINY_CONFIG, str(manifest), str(manifest), str(out_dir), max_steps=3)
+    state = torch.load(out_dir / "last.pt", map_location="cpu", weights_only=False)
+    assert state["step"] == 3
+    assert "optimizer" in state  # đủ để resume đúng trạng thái
+
+    train_reference(TINY_CONFIG, str(manifest), str(manifest), str(out_dir),
+                    max_steps=5, resume=str(out_dir / "last.pt"))
+    state = torch.load(out_dir / "last.pt", map_location="cpu", weights_only=False)
+    assert state["step"] == 5
+
+
+def test_run_validation_max_batches(tmp_path: Path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "s1.wav", freq=220)
+    _write_wav(wav_dir / "s2.wav", freq=300)
+    metadata = tmp_path / "metadata.csv"
+    with metadata.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh, delimiter="|")
+        writer.writerow(["s1", "Chào bạn hôm nay"])
+        writer.writerow(["s2", "Thử hệ thống mới"])
+    manifest = tmp_path / "manifest.jsonl"
+    build_manifest(str(metadata), str(wav_dir), str(manifest))
+
+    from vifasttts.models.vifasttts import ViFastTtsModel
+    from vifasttts.train import _build_loaders, _run_validation
+
+    _, val_loader = _build_loaders(TINY_CONFIG, str(manifest), str(manifest), TINY_CONFIG["training"], None)
+    model = ViFastTtsModel(TINY_CONFIG, _vocab_sizes())
+    loss = _run_validation(model, val_loader, TINY_CONFIG, torch.device("cpu"), max_batches=1)
+    assert loss > 0
+
+
 def test_end_to_end_train_synth_export(tmp_path: Path):
     wav_dir = tmp_path / "wavs"
     wav_dir.mkdir()

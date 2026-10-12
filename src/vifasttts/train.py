@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import json
 import random
+import time
 from pathlib import Path
 from typing import Any
 
@@ -61,8 +62,12 @@ def _to_device(batch: dict[str, Any], device):
     return moved
 
 
-def _run_validation(model, loader, config, device) -> float:
-    """Chạy validation không backward; trả loss trung bình (model về lại train())."""
+def _run_validation(model, loader, config, device, max_batches: int = 0) -> float:
+    """Chạy validation không backward; trả loss trung bình (model về lại train()).
+
+    `max_batches > 0` giới hạn số batch (MPS: validation dài làm bộ nhớ Metal phình
+    → giới hạn + `empty_cache` định kỳ để không OOM).
+    """
     import torch
 
     from vifasttts.losses import acoustic_losses
@@ -77,6 +82,12 @@ def _run_validation(model, loader, config, device) -> float:
             loss, _ = acoustic_losses(outputs, batch, weights)
             total_loss += float(loss.item())
             batches += 1
+            if device.type == "mps" and batches % 10 == 0:
+                torch.mps.empty_cache()
+            if max_batches and batches >= max_batches:
+                break
+    if device.type == "mps":
+        torch.mps.empty_cache()
     model.train()
     return total_loss / max(1, batches)
 
@@ -98,6 +109,7 @@ def train_reference(
     output: str,
     *,
     max_steps: int | None = None,
+    resume: str | None = None,
 ) -> None:
     """Vòng huấn luyện acoustic model tham chiếu.
 
@@ -141,6 +153,15 @@ def train_reference(
     train_loader, val_loader = _build_loaders(config, train_manifest, val_manifest, training, cache_dir=_resolve_cache_dir(training, out))
     optimizer = AdamW(model.parameters(), lr=float(training.get("learning_rate", 2e-4)),
                       weight_decay=float(training.get("weight_decay", 1e-4)))
+    start_step = 0
+    if resume:
+        # Tiếp tục từ checkpoint (model + optimizer + bước) — job dài không mất tiến độ.
+        state = torch.load(resume, map_location=device, weights_only=False)
+        model.load_state_dict(state["model"])
+        if "optimizer" in state:
+            optimizer.load_state_dict(state["optimizer"])
+        start_step = int(state.get("step", 0))
+        print(f"Tiếp tục từ {resume} (bước {start_step})")
     steps = max_steps if max_steps is not None else int(training.get("max_steps", 100_000))
     warmup = max(1, int(training.get("warmup_steps", 1000)))
     grad_clip = float(training.get("grad_clip", 1.0))
@@ -148,12 +169,15 @@ def train_reference(
     validate_every = int(training.get("validate_every", 2000))
     save_every = int(training.get("save_every", 5000))
     base_lr = float(training.get("learning_rate", 2e-4))
+    # Đo trên Mac mini M6: fp16 autocast trên MPS không nhanh hơn (0,52 vs 0,48 s/bước)
+    # → chỉ bật AMP cho CUDA; MPS giữ fp32.
     use_amp = bool(training.get("mixed_precision", False)) and device.type == "cuda"
     weights = config.get("loss_weights", {})
 
     history_path = out / "history.csv"
     best_val = float("inf")
-    step = 0
+    step = start_step
+    started = time.perf_counter()
     with history_path.open("w", encoding="utf-8", newline="") as history:
         writer = csv.writer(history)
         writer.writerow(["step", "train_total", "train_mel", "val_total"])
@@ -177,22 +201,36 @@ def train_reference(
                 optimizer.step()
 
                 if step % log_every == 0:
-                    print(f"step {step}: loss={loss.detach().item():.4f} mel={parts['mel'].detach().item():.4f} lr={lr:.2e}")
+                    speed = (time.perf_counter() - started) / max(1, step)
+                    mps_mem = (f" mps={torch.mps.driver_allocated_memory() / 2**30:.1f}G"
+                               if device.type == "mps" else "")
+                    print(f"step {step}: loss={loss.detach().item():.4f} mel={parts['mel'].detach().item():.4f} "
+                          f"lr={lr:.2e} ({speed:.3f}s/bước){mps_mem}")
+                if device.type == "mps" and step % 10 == 0:
+                    # MPS giữ cache block theo shape; batch dài ngắn khác nhau làm cache phình
+                    # tới hàng chục GB (đo thật: 40GB → chậm/OOM). Giải phóng định kỳ.
+                    torch.mps.empty_cache()
                 if step % validate_every == 0:
-                    val_loss = _run_validation(model, val_loader, config, device)
+                    val_loss = _run_validation(model, val_loader, config, device,
+                                               max_batches=int(training.get("validate_batches", 0)))
+                    if device.type == "mps":
+                        torch.mps.empty_cache()
                     print(f"step {step}: val={val_loss:.4f}")
                     writer.writerow([step, float(loss), float(parts["mel"]), val_loss])
                     history.flush()
-                    state = {"model": model.state_dict(), "config": config, "step": step}
+                    state = {"model": model.state_dict(), "optimizer": optimizer.state_dict(),
+                             "config": config, "step": step}
                     torch.save(state, out / "last.pt")
                     if val_loss < best_val:
                         best_val = val_loss
                         torch.save(state, out / "best.pt")
                 elif step % save_every == 0:
-                    torch.save({"model": model.state_dict(), "config": config, "step": step}, out / "last.pt")
+                    torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
+                                "config": config, "step": step}, out / "last.pt")
                 if step >= steps:
                     break
-    torch.save({"model": model.state_dict(), "config": config, "step": step}, out / "last.pt")
+    torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
+                "config": config, "step": step}, out / "last.pt")
     print(f"Đã huấn luyện {step} bước, checkpoint tại {out}/last.pt")
 
 
@@ -203,6 +241,7 @@ def train_vocoder_reference(
     *,
     max_steps: int | None = None,
     vocoder_checkpoint: str | None = None,
+    resume: str | None = None,
 ) -> None:
     """Huấn luyện vocoder tham chiếu: iSTFTNetLite + MPD-lite.
 
@@ -285,6 +324,18 @@ def train_vocoder_reference(
     learning_rate = float(vt.get("learning_rate", training.get("learning_rate", 2e-4)))
     opt_g = Adam(generator.parameters(), lr=learning_rate, betas=(0.8, 0.99))
     opt_d = Adam(discriminator.parameters(), lr=learning_rate, betas=(0.8, 0.99))
+    start_step = 0
+    if resume:
+        # Tiếp tục vocoder (G + D + optimizer) — xem train_reference.
+        state = torch.load(resume, map_location=device, weights_only=False)
+        generator.load_state_dict(state["vocoder"])
+        discriminator.load_state_dict(state["discriminator"])
+        if "opt_g" in state:
+            opt_g.load_state_dict(state["opt_g"])
+        if "opt_d" in state:
+            opt_d.load_state_dict(state["opt_d"])
+        start_step = int(state.get("step", 0))
+        print(f"Tiếp tục vocoder từ {resume} (bước {start_step})")
     mel_weight = float(vt.get("mel_weight", 45.0))
     fm_weight = float(vt.get("feature_matching_weight", 2.0))
     adv_weight = float(vt.get("adversarial_weight", 1.0))
@@ -294,7 +345,8 @@ def train_vocoder_reference(
 
     history_path = out / "history_vocoder.csv"
     best = float("inf")
-    step = 0
+    step = start_step
+    started = time.perf_counter()
     with history_path.open("w", encoding="utf-8", newline="") as history:
         writer = csv.writer(history)
         writer.writerow(["step", "g_total", "g_adv", "g_mel", "d_loss"])
@@ -303,6 +355,14 @@ def train_vocoder_reference(
                 step += 1
                 real = batch["wav"].to(device)
                 mel_real = batch["mel"].to(device)
+                # Random crop ngắn (chuẩn GAN vocoder): giữ bước train nhanh và ổn định
+                # dù clip dài 3–20 giây; crop cắt cả mel lẫn wav theo đúng hop.
+                crop_frames = int(vt.get("crop_frames", 0))
+                if crop_frames > 0 and mel_real.size(1) > crop_frames:
+                    hop = int(mel_config["hop_length"])
+                    start = random.randrange(mel_real.size(1) - crop_frames)
+                    mel_real = mel_real[:, start:start + crop_frames]
+                    real = real[:, start * hop:(start + crop_frames) * hop]
                 fake = generator(mel_real)
                 length = min(real.size(-1), fake.size(-1))
                 real_crop, fake_crop = real[..., :length], fake[..., :length]
@@ -333,11 +393,13 @@ def train_vocoder_reference(
                 opt_g.step()
 
                 if step % log_every == 0:
+                    speed = (time.perf_counter() - started) / max(1, step)
                     print(f"step {step}: g={g_loss.detach().item():.4f} adv={g_adv.detach().item():.4f} "
-                          f"mel={g_mel.detach().item():.4f} d={d_loss.detach().item():.4f}")
+                          f"mel={g_mel.detach().item():.4f} d={d_loss.detach().item():.4f} ({speed:.3f}s/bước)")
                 if step % save_every == 0 or g_loss.detach().item() < best:
                     best = min(best, float(g_loss.detach().item()))
                     state = {"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
+                             "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict(),
                              "config": config, "step": step}
                     torch.save(state, out / "last.pt")
                     writer.writerow([step, float(g_loss.detach().item()), float(g_adv.detach().item()),
@@ -346,5 +408,6 @@ def train_vocoder_reference(
                 if step >= steps:
                     break
     torch.save({"vocoder": generator.state_dict(), "discriminator": discriminator.state_dict(),
+                "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict(),
                 "config": config, "step": step}, out / "last.pt")
     print(f"Đã huấn luyện vocoder {step} bước, checkpoint tại {out}/last.pt")

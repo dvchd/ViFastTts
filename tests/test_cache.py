@@ -91,6 +91,14 @@ def test_precompute_features(tmp_path: Path):
     assert len(list(cache_dir.glob("*.pt"))) == 2
 
 
+def test_precompute_features_parallel_workers(tmp_path: Path):
+    manifest = _manifest(tmp_path, [("s1", "ba"), ("s2", "mẹ"), ("s3", "nhà")])
+    cache_dir = tmp_path / "cache_parallel"
+    done = precompute_features(manifest, CONFIG, cache_dir, workers=2)
+    assert done == 3
+    assert len(list(cache_dir.glob("*.pt"))) == 3
+
+
 def test_feature_cache_get_put_roundtrip(tmp_path: Path):
     cache = FeatureCache(tmp_path / "c", CONFIG)
     row = {"audio_path": str(tmp_path / "missing.wav")}

@@ -34,7 +34,7 @@ VOC_CONFIG = {
     "training": {"batch_size": 1, "num_workers": 0},
     "vocoder_training": {
         "batch_size": 1, "hidden": 16, "max_steps": 2, "log_every": 1, "save_every": 1,
-        "discriminator_channels": 8,
+        "discriminator_channels": 8, "crop_frames": 8,
     },
 }
 
@@ -117,6 +117,19 @@ def test_vocoder_training_smoke(tmp_path: Path):
     # Checkpoint khớp kiến trúc ISTFTNetLite mà `synthesize` dựng lên.
     vocoder = ISTFTNetLite(n_mels=20, hidden=16, n_fft=256, hop_length=64)
     vocoder.load_state_dict(state["vocoder"])
+
+
+def test_vocoder_training_resume(tmp_path: Path):
+    manifest = _manifest(tmp_path)
+    out = tmp_path / "vocoder_run"
+    train_vocoder_reference(VOC_CONFIG, str(manifest), str(out), max_steps=2)
+    state = torch.load(out / "last.pt", map_location="cpu", weights_only=False)
+    assert state["step"] == 2 and "opt_g" in state and "opt_d" in state
+
+    train_vocoder_reference(VOC_CONFIG, str(manifest), str(out), max_steps=4,
+                            resume=str(out / "last.pt"))
+    state = torch.load(out / "last.pt", map_location="cpu", weights_only=False)
+    assert state["step"] == 4
 
 
 def test_train_vocoder_cli(tmp_path: Path):

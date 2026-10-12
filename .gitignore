@@ -6,6 +6,7 @@ __pycache__/
 .ruff_cache/
 runs/
 artifacts/
+cache/
 data/wavs/
 data/codelung/
 data/youtube/

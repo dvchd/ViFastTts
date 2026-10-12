@@ -121,6 +121,17 @@ Cùng batch đo như trên:
 | Train vocoder (G+D) | **0,39 s/bước** | – | 0,93 s/bước | CPU nhanh hơn 2,4× → **mặc định vocoder dùng CPU trên Mac** (`vocoder_training.device=mps` để ép) |
 | Vocoder inference | – | – | ~0,004 s cho 2×50 frame mel | Rất nhanh, dùng tốt cho tổng hợp |
 
+**Đo bổ sung trên dữ liệu thật (run `small` @codelung, clip 14s, batch 16 ≈ 29.000 frame):**
+
+| Hạng mục | Đo được | Ghi chú |
+| --- | --- | --- |
+| Model MPS fp32 | **0,478 s/bước** | Batch đã trên thiết bị; fp16 autocast 0,52 → không lợi, AMP chỉ cho CUDA |
+| Train thật (cache + empty_cache) | **~0,67 s/bước** | 60k bước ≈ 12h |
+| Dataloader **không** cache | **6,34 s/batch** | STFT + F0 autocorrelation → **cache feature là bắt buộc** với clip dài |
+| Cache feature 8 workers | **33 giây / 51 giờ audio** | 6,7 GB cho 13.225 clip |
+| Vocoder CPU + crop 128 frame | **0,166 s/bước** | Random crop ngắn thay vì clip 14s (nhanh ~50×) |
+| Bộ nhớ MPS | leo tới **40 GB → OOM** | Phải `empty_cache` định kỳ + cap validation + chunked runner — xem `docs/TRAINING_RUN_CODELUNG.md` §3 |
+
 Ghi chú: ANE (Dual 16-core Neural Engine) **không được dùng** trong pipeline hiện tại —
 PyTorch MPS chỉ chạy trên GPU; muốn khai thác ANE cần chuyển model sang Core ML (hướng
 tương lai, đặc biệt cho inference trên máy người dùng).
@@ -173,7 +184,7 @@ Số bước tham khảo: mô hình NAR kiểu này thường cần **100k–300
 
 | Mức | Cấu hình | Dùng cho |
 | --- | --- | --- |
-| Tối thiểu (dev) | CPU bất kỳ, 8 GB RAM | Chạy test (2219 test), parse, thử ONNX |
+| Tối thiểu (dev) | CPU bất kỳ, 8 GB RAM | Chạy test (2223 test), parse, thử ONNX |
 | **Mac Apple Silicon** | ≥ 16 GB RAM hợp nhất (M-series); đo trên Mac mini M6 32 GB | Train small/base cỡ vừa; acoustic dùng MPS, vocoder CPU — xem mục 3.1 |
 | Vừa (khuyến nghị) | 1× GPU ≥ 12 GB VRAM (3060/4070), 32 GB RAM, SSD 100 GB | Train base với 10–20 h |
 | Thoải mái | 1× 4090 24 GB / A10G, 64 GB RAM | Train + nhiều thí nghiệm A/B, vocoder lớn |

@@ -65,23 +65,44 @@ class FeatureCache:
         torch.save(features, self.path_for(row))
 
 
+def _extract_one(payload: tuple[str, dict[str, Any]]) -> dict[str, torch.Tensor]:
+    """Worker (module-level) cho ProcessPoolExecutor: trích feature một file."""
+    audio_path, config = payload
+    return extract_features(audio_path, config)
+
+
 def precompute_features(
     manifest: str | Path,
     config: dict[str, Any],
     cache_dir: str | Path,
     *,
     limit: int | None = None,
+    workers: int = 0,
 ) -> int:
-    """Tính trước feature cho toàn bộ manifest; trả về số mẫu đã xử lý."""
+    """Tính trước feature cho toàn bộ manifest; trả về số mẫu đã xử lý.
+
+    `workers > 1` dùng ProcessPoolExecutor (mỗi tiến trình một file) — nhanh hơn
+    nhiều cho dataset hàng chục giờ; mặc định 0 = tuần tự (an toàn cho test).
+    """
     from vifasttts.data.dataset import ManifestDataset
 
     rows = ManifestDataset(manifest).rows
     if limit is not None:
         rows = rows[:limit]
     cache = FeatureCache(cache_dir, config)
-    done = 0
-    for row in rows:
-        if cache.get(row) is None:
+    # Chỉ kiểm tra sự tồn tại (path), KHÔNG load file — tránh đọc lại hàng GB cache.
+    pending = [row for row in rows if not cache.path_for(row).exists()]
+    done = len(rows) - len(pending)
+    if workers and workers > 1 and len(pending) > 1:
+        from concurrent.futures import ProcessPoolExecutor
+
+        payloads = [(str(row["audio_path"]), config) for row in pending]
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            for row, features in zip(pending, pool.map(_extract_one, payloads), strict=True):
+                cache.put(row, features)
+                done += 1
+    else:
+        for row in pending:
             cache.put(row, extract_features(row["audio_path"], config))
-        done += 1
+            done += 1
     return done
