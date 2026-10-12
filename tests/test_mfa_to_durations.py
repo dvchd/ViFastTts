@@ -132,14 +132,31 @@ def test_convert_manifest_giu_pause_o_ranh_gioi_cau(tmp_path: Path):
     assert sum(kept["durations"]) == 94 and kept["pauses"] == [{"after": 1, "seconds": 0.2}]
 
 
-def test_convert_manifest_loai_ngung_tho_giua_cau(tmp_path: Path):
+def test_convert_manifest_giu_pause_giua_cau_luon(tmp_path: Path):
+    # D5-b (13/10/2026): pause ≥150 ms giữa câu KHÔNG loại clip — thành điểm cắt segment.
     row = _row(tmp_path, [{}, {"sentence_end": False, "phrase_end": False}, {}])
     manifest = _manifest(tmp_path, row)
     grid_dir = tmp_path / "grid"
     grid_dir.mkdir()
     _textgrid(grid_dir / "s1.TextGrid",
               [(0.0, 0.3, "chào"), (0.35, 0.6, "bạn"), (0.8, 1.0, "nhé")],
-              [(0.0, 0.3, "o_ch")])
+              [(0.0, 0.3, "Och")])
+    stats = convert_manifest(manifest, grid_dir, tmp_path / "out.jsonl")
+    assert stats["kept"] == 1 and stats["pauses"] == 1
+    assert not any("ngừng thở" in reason for reason in stats["dropped"])
+    kept = json.loads((tmp_path / "out.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert kept["pauses"] == [{"after": 1, "seconds": 0.2}]
+
+
+def test_convert_manifest_loai_ngung_tho_dai_giua_cau(tmp_path: Path):
+    # Ngừng thở thật giữa câu (≥1,5 s) vẫn bị loại (D5).
+    row = _row(tmp_path, [{}, {"sentence_end": False, "phrase_end": False}, {}])
+    manifest = _manifest(tmp_path, row)
+    grid_dir = tmp_path / "grid"
+    grid_dir.mkdir()
+    _textgrid(grid_dir / "s1.TextGrid",
+              [(0.0, 0.3, "chào"), (0.4, 0.7, "bạn"), (2.4, 2.7, "nhé")],
+              [(0.0, 0.3, "Och")])
     stats = convert_manifest(manifest, grid_dir, tmp_path / "out.jsonl")
     assert stats["kept"] == 0
     assert any("ngừng thở" in reason for reason in stats["dropped"])
@@ -152,7 +169,7 @@ def test_convert_manifest_loai_phone_qua_dai_va_thieu_grid(tmp_path: Path):
     grid_dir.mkdir()
     _textgrid(grid_dir / "s1.TextGrid",
               [(0.0, 0.3, "chào"), (0.35, 0.6, "bạn"), (0.8, 1.0, "nhé")],
-              [(0.0, 0.7, "o_ch")])  # phone 0,7s > 0,5s
+              [(0.0, 0.7, "o_ch")])  # phone hữu thanh 0,7s > 0,5s → loại
     stats = convert_manifest(manifest, grid_dir, tmp_path / "out.jsonl")
     assert stats["kept"] == 0 and any("phone" in reason for reason in stats["dropped"])
 
@@ -160,6 +177,20 @@ def test_convert_manifest_loai_phone_qua_dai_va_thieu_grid(tmp_path: Path):
     grid_dir2.mkdir()
     stats2 = convert_manifest(manifest, grid_dir2, tmp_path / "out2.jsonl")
     assert stats2["kept"] == 0 and "thiếu TextGrid" in stats2["dropped"]
+
+
+def test_convert_manifest_khong_loai_vi_sil_dai(tmp_path: Path):
+    # Pause im lặng dài (sil 1,2s, sp 0,8s) KHÔNG được tính là "phone quá dài" (C4 chỉ xét phone hữu thanh).
+    row = _row(tmp_path, [{}, {"sentence_end": True}, {}])
+    manifest = _manifest(tmp_path, row)
+    grid_dir = tmp_path / "grid"
+    grid_dir.mkdir()
+    _textgrid(grid_dir / "s1.TextGrid",
+              [(0.0, 0.3, "chào"), (0.35, 0.6, "bạn"), (0.8, 1.0, "nhé")],
+              [(0.0, 0.3, "o_ch"), (0.3, 1.5, "sil"), (1.5, 1.7, "sp"), (1.7, 1.8, "n_a_ngang")])
+    stats = convert_manifest(manifest, grid_dir, tmp_path / "out.jsonl")
+    assert stats["kept"] == 1
+    assert not any("phone" in reason for reason in stats["dropped"])
 
 
 def test_compute_durations_infeasible_thi_loai():

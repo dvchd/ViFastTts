@@ -50,16 +50,17 @@ def test_build_corpus(tmp_path: Path):
     lexicon = dict(
         line.split("\t") for line in (out / "lexicon.txt").read_text(encoding="utf-8").splitlines() if line
     )
-    assert lexicon["chào"] == "o_ch n_a_huyen c_w"
-    assert lexicon["bạn"] == "o_b n_a_nang c_n"
+    assert lexicon["chào"] == "Och NaHuyen Cw"
+    assert lexicon["bạn"] == "Ob NaNang Cn"
 
     phones = set((out / "phones.txt").read_text(encoding="utf-8").split())
-    assert {"o_ch", "n_a_huyen", "n_a_nang", "c_n"} <= phones
+    assert {"Och", "NaHuyen", "NaNang", "Cn"} <= phones
+    assert all("_" not in phone for phone in phones)
 
     index = json.loads((out / "syllable_index.json").read_text(encoding="utf-8"))
     assert index["bạn"]["components"]["tone"] == "NANG"
     assert phones_for_syllable({"onset": "NONE", "medial": "W", "nucleus": "A", "coda": "NONE", "tone": "SAC"}) == [
-        "m_w", "n_a_sac",
+        "Mw", "NaSac",
     ]
 
 

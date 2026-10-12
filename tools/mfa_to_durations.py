@@ -6,10 +6,11 @@ Quy tắc (docs/AI_REVIEW_ANSWERS_R3 §3.3, REVISION_PLAN_V2 §9.2, REBUILD_PLAN
   (T = 1 + len(wav)//hop) ⇒ **âm tiết đầu gánh khoảng lặng đầu clip, âm tiết cuối gánh đuôi clip**,
   khoảng lặng giữa các từ nằm trong âm tiết đứng trước (đúng tinh thần "gán silence vào âm tiết
   mang dấu câu" khi chưa có SIL token).
-- **Pause ≥150 ms giữa hai từ**: nếu âm tiết trước kết thúc câu/đoạn (`boundaries.sentence_end|phrase_end`)
-  → giữ và ghi vào `pauses` (để `cut_segments.py` cắt segment tại đó); nếu nằm giữa câu
-  (ngừng thở) → **loại clip** (D5).
-- Vi phạm cứng (C4): phone > 500 ms · âm tiết hữu thanh > 1,0 s → loại clip.
+- **Pause ≥150 ms giữa hai từ**: ghi vào `pauses` — **điểm cắt segment** (D5 phương án (b);
+  đo thực tế thấy phương án (a) "loại clip" vượt xa ngưỡng 5% nên đã chuyển sang (b)).
+  Chỉ **loại clip** khi pause giữa câu ≥ `--max-mid-pause-seconds` (mặc định 1,5 s — ngừng
+  thở/disfluency thật, không phải nhịp ngắt bình thường).
+- Vi phạm cứng (C4): phone hữu thanh > 500 ms · âm tiết hữu thanh > 1,0 s → loại clip.
 - **Assert** `sum(durations) == T`, mọi âm tiết ≥ 1 frame; không xếp được → loại clip + log.
 
 Chạy (sau `mfa align`):
@@ -27,8 +28,11 @@ from pathlib import Path
 from typing import Any
 
 MERGE_PAUSE_SECONDS = 0.150   # pause ≥ ngưỡng: tách SIL/loại (D5)
-HARD_PHONE_SECONDS = 0.500    # phone quá dài (C4)
+HARD_PHONE_SECONDS = 0.500    # phone quá dài (C4) — chỉ xét phone hữu thanh
 HARD_SYLLABLE_SECONDS = 1.000  # âm tiết hữu thanh quá dài (C4)
+HARD_MID_PAUSE_SECONDS = 1.500  # ngừng thở ≥ ngưỡng GIỮA CÂU → loại clip (ngắn hơn: cắt segment, D5-b)
+#: Nhãn im lặng của MFA — KHÔNG áp ngưỡng "phone dài" cho chúng (pause dài là bình thường).
+SILENCE_PHONES = {"sil", "sp", "spn", "silence", "<eps>", ""}
 
 
 def parse_long_textgrid(path: str | Path) -> dict[str, list[tuple[float, float, str]]]:
@@ -58,6 +62,7 @@ def compute_durations(
     hop_length: int,
     syllable_boundaries: list[dict[str, Any]],
     phrase_boundary_ok: bool = True,
+    hard_mid_pause_seconds: float = HARD_MID_PAUSE_SECONDS,
 ) -> dict[str, Any]:
     """Tính durations (frames) cho một clip từ word intervals của TextGrid.
 
@@ -70,7 +75,8 @@ def compute_durations(
     if count != len(syllable_boundaries):
         return {"dropped": f"số từ lệch manifest ({count} vs {len(syllable_boundaries)})"}
 
-    # Pause giữa hai từ: kiểm tra ngưỡng + vị trí ranh giới câu.
+    # Pause ≥150 ms giữa hai từ: LUÔN ghi làm điểm cắt segment (D5-b); chỉ loại clip khi
+    # pause giữa câu quá dài (ngừng thở/disfluency thật).
     pauses: list[dict[str, Any]] = []
     for i in range(count - 1):
         gap = word_intervals[i + 1][0] - word_intervals[i][1]
@@ -78,7 +84,7 @@ def compute_durations(
             continue
         bounds = syllable_boundaries[i] or {}
         at_boundary = bool(bounds.get("sentence_end") or (phrase_boundary_ok and bounds.get("phrase_end")))
-        if not at_boundary:
+        if not at_boundary and gap >= hard_mid_pause_seconds:
             return {"dropped": f"ngừng thở {gap * 1000:.0f} ms giữa câu (sau âm tiết {i})"}
         pauses.append({"after": i, "seconds": round(gap, 3)})
 
@@ -140,7 +146,8 @@ def score_drop_ids(scores: dict[str, float], fraction: float) -> set[str]:
 
 def convert_manifest(manifest: str | Path, textgrid_dir: str | Path, out_path: str | Path, *,
                      sample_rate: int = 24000, hop_length: int = 256,
-                     drop_score_ids: set[str] | None = None) -> dict[str, Any]:
+                     drop_score_ids: set[str] | None = None,
+                     hard_mid_pause_seconds: float = HARD_MID_PAUSE_SECONDS) -> dict[str, Any]:
     """Chuyển một manifest: thêm `durations` (+`pauses`), loại clip lỗi; ghi manifest mới + trả thống kê."""
     from vifasttts.data.features import load_wav
 
@@ -167,7 +174,8 @@ def convert_manifest(manifest: str | Path, textgrid_dir: str | Path, out_path: s
         tiers = parse_long_textgrid(grid_path)
         words = [(a, b, t) for a, b, t in tiers.get("words", []) if t.strip()]
         phones = tiers.get("phones", [])
-        if any(0.0 < (xmax - xmin) > HARD_PHONE_SECONDS for xmin, xmax, _ in phones if xmax > xmin):
+        spoken = [(a, b) for a, b, label in phones if label.strip().lower() not in SILENCE_PHONES]
+        if any((b - a) > HARD_PHONE_SECONDS for a, b in spoken):
             drop(sample_id, f"phone > {HARD_PHONE_SECONDS:.1f}s")
             continue
         spoken = _duration_seconds(words)
@@ -178,6 +186,7 @@ def convert_manifest(manifest: str | Path, textgrid_dir: str | Path, out_path: s
         result = compute_durations(
             words, frames_total=frames_total, sample_rate=sample_rate, hop_length=hop_length,
             syllable_boundaries=[s.get("boundaries", {}) for s in row["syllables"]],
+            hard_mid_pause_seconds=hard_mid_pause_seconds,
         )
         if result.get("dropped"):
             drop(sample_id, str(result["dropped"]))
@@ -221,6 +230,8 @@ def main() -> None:
     parser.add_argument("--report", default=None, help="File JSON report tổng (mặc định <out-dir>/mfa_durations_report.json)")
     parser.add_argument("--mfa-db", default=None, help="DB MFA (sau align) để lọc 10%% score thấp nhất (C4)")
     parser.add_argument("--score-drop-fraction", type=float, default=0.10)
+    parser.add_argument("--max-mid-pause-seconds", type=float, default=HARD_MID_PAUSE_SECONDS,
+                        help="Pause giữa câu ≥ ngưỡng này → loại clip (D5; mặc định 1,5 s)")
     args = parser.parse_args()
 
     drop_score_ids: set[str] = set()
@@ -236,7 +247,8 @@ def main() -> None:
         out_path = Path(args.out_dir) / f"{name}_dur.jsonl"
         stats = convert_manifest(manifest, args.textgrid_dir, out_path,
                                  sample_rate=args.sample_rate, hop_length=args.hop_length,
-                                 drop_score_ids=drop_score_ids or None)
+                                 drop_score_ids=drop_score_ids or None,
+                                 hard_mid_pause_seconds=args.max_mid_pause_seconds)
         report[name] = stats
         print(f"{name}: giữ {stats['kept']}/{stats['clips']} clip · 1-frame {stats['one_frame']} "
               f"· median {stats['median_ms']} ms · p95 {stats['p95_ms']} ms · loại {stats['dropped']}")

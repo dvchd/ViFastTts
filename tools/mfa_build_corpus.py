@@ -4,12 +4,18 @@ Sinh trong `--out`:
 - `wavs/<id>.wav`   — symlink tới audio gốc (copy nếu không symlink được)
 - `labs/<id>.lab`   — câu đã respell, token = trường `normalized` của từng âm tiết
 - `lexicon.txt`     — `<âm tiết>\t<phone ...>` (gốc để `mfa train` bằng lexicon riêng)
-- `phones.txt`      — danh sách phone (tiền tố vị trí: o_/m_/n_/c_)
+- `phones.txt`      — danh sách phone (tiền tố vị trí: O/M/N/C)
 - `syllable_index.json` — normalized → {components, phones} để map ngược TextGrid
 
-Phone set: `o_<onset>`, `m_<medial>`, `c_<coda>`, `n_<nucleus>_<tone>` (thanh gắn liền
+Phone set: `O<onset>`, `M<medial>`, `C<coda>`, `N<nucleus><Tone>` (thanh gắn liền
 nguyên âm chính — không align thanh thành đoạn riêng). Tiền tố bắt buộc vì cùng ký hiệu
 nhưng khác vị trí là khác âm học (NG đầu vs NG cuối, W đệm vs W cuối).
+
+⚠️ **Không dùng `_` trong tên phone** (bài học 13/10/2026): MFA/Kaldi coi hậu tố sau `_`
+cuối cùng là "vị trí" (`split_phone_position` = `rsplit("_", 1)`), nên tên kiểu
+`n_a_huyen` bị hiểu thành base `n_a` + position `huyen` → TextGrid export mất tone,
+thống kê base phone gộp sai. Tên CamelCase ở đây an toàn với mọi regex phone-set của MFA
+(không khớp ARPA/PINYIN/IPA) và ≤10 ký tự.
 
 Chạy:
     python tools/mfa_build_corpus.py --manifest data/codelung/train.jsonl \
@@ -26,22 +32,32 @@ from pathlib import Path
 from typing import Any
 
 
-def phones_for_syllable(abstract: dict[str, str]) -> list[str]:
-    """5 thành phần abstract → danh sách phone có tiền tố vị trí (thứ tự thời gian)."""
-    phones: list[str] = []
+def phones_with_sources(abstract: dict[str, str]) -> list[tuple[str, str]]:
+    """5 thành phần → [(tên phone, chữ ký nguồn)] theo thứ tự thời gian.
+
+    Chữ ký chỉ gồm thành phần tạo ra phone đó (để phát hiện hai thành phần khác nhau
+    sinh cùng một tên). Tên phone **không chứa `_`** (MFA dùng `_` cuối làm dấu vị trí).
+    Quy ước: `O<onset>`, `M<medial>`, `N<nucleus><Tone>`, `C<coda>` (Tone viết hoa để tách).
+    """
     onset = str(abstract.get("onset", "NONE"))
     medial = str(abstract.get("medial", "NONE"))
     nucleus = str(abstract.get("nucleus", "NONE"))
     coda = str(abstract.get("coda", "NONE"))
     tone = str(abstract.get("tone", "NGANG"))
+    pairs: list[tuple[str, str]] = []
     if onset != "NONE":
-        phones.append(f"o_{onset.lower()}")
+        pairs.append((f"O{onset.lower()}", f"onset:{onset.lower()}"))
     if medial != "NONE":
-        phones.append(f"m_{medial.lower()}")
-    phones.append(f"n_{nucleus.lower()}_{tone.lower()}")
+        pairs.append((f"M{medial.lower()}", f"medial:{medial.lower()}"))
+    pairs.append((f"N{nucleus.lower()}{tone.lower().title()}", f"nucleus:{nucleus.lower()}/{tone.lower()}"))
     if coda != "NONE":
-        phones.append(f"c_{coda.lower()}")
-    return phones
+        pairs.append((f"C{coda.lower()}", f"coda:{coda.lower()}"))
+    return pairs
+
+
+def phones_for_syllable(abstract: dict[str, str]) -> list[str]:
+    """5 thành phần abstract → danh sách phone có tiền tố vị trí (thứ tự thời gian)."""
+    return [name for name, _ in phones_with_sources(abstract)]
 
 
 def build_corpus(manifests: list[str], out: str | Path) -> dict[str, Any]:
@@ -58,6 +74,7 @@ def build_corpus(manifests: list[str], out: str | Path) -> dict[str, Any]:
 
     lexicon: dict[str, list[str]] = {}
     index: dict[str, dict[str, Any]] = {}
+    phone_sources: dict[str, str] = {}  # tên phone → chữ ký thành phần (chống trùng tên giữa 2 thành phần khác nhau)
     fallback_samples: list[str] = []
     fallback_words: set[str] = set()
     clips = 0
@@ -88,7 +105,16 @@ def build_corpus(manifests: list[str], out: str | Path) -> dict[str, Any]:
             for syllable in row["syllables"]:
                 token = str(syllable["normalized"])
                 abstract = syllable.get("abstract", {})
-                phones = phones_for_syllable(abstract)
+                pairs = phones_with_sources(abstract)
+                phones = [phone for phone, _ in pairs]
+                for phone, signature in pairs:
+                    known = phone_sources.get(phone)
+                    if known is None:
+                        phone_sources[phone] = signature
+                    elif known != signature:
+                        raise ValueError(
+                            f"xung đột tên phone {phone!r}: {known!r} vs {signature!r}"
+                        )
                 if token not in lexicon:
                     lexicon[token] = phones
                     index[token] = {
@@ -115,6 +141,9 @@ def build_corpus(manifests: list[str], out: str | Path) -> dict[str, Any]:
         encoding="utf-8",
     )
     all_phones = sorted({phone for phones in lexicon.values() for phone in phones})
+    too_long = [phone for phone in all_phones if len(phone) > 10]
+    if too_long:
+        raise ValueError(f"tên phone > 10 ký tự (giới hạn kaldi_label String(10) của MFA): {too_long}")
     (out_path / "phones.txt").write_text("\n".join(all_phones) + "\n", encoding="utf-8")
     (out_path / "syllable_index.json").write_text(
         json.dumps(index, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8"

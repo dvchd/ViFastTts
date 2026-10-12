@@ -69,15 +69,66 @@ tách `labs/` + `wavs/` ⇒ MFA đọc text **rỗng** cho cả 9.619 utterance 
 và **kiểm chứng bằng probe 120 clip**: 120/120 utterance có text, 0 ignored, model vào tới
 "monophone - Iteration 11 of 40" (không còn lỗi). Xoá các work-dir MFA cũ trong `~/Documents/MFA`.
 
-Chuỗi hiện tại (log `artifacts/dataset_v2/chain_v2c.log`):
+**Bài học vận hành (13/10):** đêm 12/10 MFA đã train xong (monophone 23:37 → triphone 23:53 →
+LDA 00:09, "Training complete!") nhưng bị **kill ngay lúc xuất model/align** (nghi máy ngủ —
+`Interrupted system call`). Lần chạy lại **KHÔNG được truyền `--clean`** (xóa mất các stage đã
+train) và **phải chạy dưới `caffeinate`**:
+
+```bash
+nohup caffeinate -is bash -c 'micromamba run -p ./.mamba-mfa mfa train data/codelung/mfa_v2b \
+    data/codelung/mfa_v2b/lexicon.txt data/codelung/mfa_v2b_model.zip \
+    --speaker_characters 11 --num_jobs 8 -v' >/dev/null 2>&1 &
+```
+
+Chuỗi hiện tại (log `artifacts/dataset_v2/chain_v2d.log`):
 
 1. **`mfa train`** trên `mfa_v2b` (9.619 clip, layout phẳng, `--num_jobs 8`) → `data/codelung/mfa_v2b_model.zip`
 2. **`mfa align`** mfa_v2b → `data/codelung/mfa_v2b_aligned/*.TextGrid`
 
-(Cache feature v2 đã xong: 10.903 file = 9.262 train + 1.641 val.)
+(Đêm 12/10 MFA train xong nhưng bị kill lúc xuất model — nghi máy ngủ; lần resume đầu lại lỡ truyền
+`--clean` nên phải train lại từ đầu. Từ đó: **chạy dưới `caffeinate -is`** và thêm
+`tools/watch_and_finalize.sh` — watcher tự canh, tự resume/retry khi chain chết (train không `--clean`,
+align `--no_overwrite`), rồi tự chạy finalize + ghi `artifacts/dataset_v2/FINAL_REPORT.md`.)
+
+Cache feature v2 đã xong: 10.903 file = 9.262 train + 1.641 val.
 
 Xong bước 2 → việc kế: converter TextGrid→durations cấp âm tiết + SIL + assert (theo đặc tả
 cũ) → cắt segment 3–10s tại SIL → smoke small → base.
+
+## 3b. Phát hiện & sửa lớn (13/10 sáng): tên phone `_` làm hỏng alignment
+
+**Triệu chứng:** converter `mfa_to_durations` giữ được đúng 94/7.342 clip train — hầu hết bị
+loại vì `phone > 0.5s` và `ngừng thở … giữa câu`. Truy vết từng lớp:
+
+1. **TextGrid export cắt nhãn phone:** MFA coi mọi hậu tố sau `_` cuối cùng là "dấu vị trí"
+   (`helper.split_phone_position` = `rsplit("_", 1)`) ⇒ `n_a_huyen` → base `n_a`, `c_m` → `c` …
+   DB MFA giữ `kaldi_label` đầy đủ nhưng TextGrid xuất ra dùng base phone ⇒ **mất tone + gộp
+   coda trong mọi TextGrid**.
+2. **Chất lượng alignment hỏng thật** (không chỉ ở nhãn): thống kê DB v2b — **22,3% word
+   interval ≤ 55 ms** (sát sàn HMM min-duration), p50 = 140 ms, 61,8% clip có >20% từ sát sàn.
+   QC chéo Whisper 10 clip (`tools/qc_whisper_align.py`, model `small`): coverage 0,448 ·
+   median|Δstart| 0,06 s · duration ratio 0,693. Cùng 10 clip với model VN pretrained
+   (`vietnamese_mfa`): từ sát sàn chỉ **1,7%** (p50 180 ms) ⇒ lỗi ở **model custom** (nghi án
+   chính: tên phone `_` làm hỏng logic base-phone của MFA trong train/align).
+3. **Không phải lỗi dữ liệu:** corpus wav byte-identical với `audio_v2`; VAD + Whisper xác nhận
+   text↔audio khớp (Whisper transcribe đúng nội dung; word start lệch trung vị 0,06–0,07 s).
+
+**Đã sửa (13/10):**
+
+- `tools/mfa_build_corpus.py`: tên phone **không còn `_`** — CamelCase `Och`, `NaHuyen`, `Cw`,
+  `NăNgang`… + chống xung đột tên theo từng thành phần + chặn tên >10 ký tự
+  (`kaldi_label` = `String(10)` của MFA). Corpus mới **`data/codelung/mfa_v2c`** (9.619 clip ·
+  2.877 từ · 120 phone · 0 fallback).
+- `tools/mfa_to_durations.py`: **D5-b** — pause ≥150 ms giữa câu là **điểm cắt segment**,
+  không loại clip; chỉ loại khi "ngừng thở" ≥ `--max-mid-pause-seconds` (mặc định 1,5 s).
+  `phone > 0,5 s` chỉ áp cho phone **hữu thanh** (bỏ `sil`/`sp`/`spn`/`''`) — trước đó luật
+  này loại oan gần hết clip.
+- Thêm `tools/qc_whisper_align.py` (C3): QC chéo timing word MFA ↔ Whisper, đo coverage /
+  median|Δ| / duration ratio / match rate.
+
+**Đang chạy (13/10 ~06:25):** train **subset 800 clip** `mfa_v2c_sub` để nghiệm thu hướng sửa
+(log `artifacts/dataset_v2/mfa_train_v2c_sub.log`). Khi xong: align `mfa_v2c_test` (10 clip) +
+QC lại; nếu đạt (từ sát sàn ~≤5%, coverage ≥0,6) → train full `mfa_v2c` → align → finalize.
 
 ## 4. MFA — vì sao phải train lại (trả lời câu hỏi)
 
@@ -127,3 +178,16 @@ micromamba run -p .mamba-mfa mfa train data/codelung/mfa_v2 data/codelung/mfa_v2
 micromamba run -p .mamba-mfa mfa align data/codelung/mfa_v2 data/codelung/mfa_v2/lexicon.txt \
     data/codelung/mfa_v2_model.zip data/codelung/mfa_v2_aligned --speaker_characters 11 --num_jobs 8 --clean -v
 ```
+
+**v2c (13/10 — tên phone bỏ `_`, thay thế hoàn toàn v2b/v2):** corpus dựng lại bằng cùng lệnh
+trên với `--out data/codelung/mfa_v2c`; chuỗi train+align chạy tự động:
+
+```bash
+nohup caffeinate -is bash tools/chain_mfa_v2c.sh >/dev/null 2>&1 &          # train → align → DONE
+nohup caffeinate -is bash tools/watch_and_finalize.sh >/dev/null 2>&1 &     # canh + finalize + report
+# hoặc finalize tay:
+TEXTGRID_DIR=data/codelung/mfa_v2c_aligned MFA_DB=$HOME/Documents/MFA/mfa_v2c/mfa_v2c.db \
+    bash tools/finalize_dataset_v2.sh
+# QC chéo Whisper (C3):
+.venv/bin/python tools/qc_whisper_align.py --textgrid-dir data/codelung/mfa_v2c_aligned \
+    --corpus data/codelung/mfa_v2c --sample 10 --out artifacts/dataset_v2/qc_whisper_v2c.json
