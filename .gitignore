@@ -17,5 +17,3 @@ data/youtube/
 .venv-mfa/
 .mamba-mfa/
 
-# Demo audio cũ — commit chủ đích để nghe trên GitHub
-!docs/demos/*.wav
