@@ -137,7 +137,19 @@
    Chuỗi hiện tại chạy **stats → cache** nên key nhất quán. (Không đổi sang "cache mel chưa chuẩn hoá"
    vì sẽ phải sửa 3 điểm gọi và làm lại cache giữa chừng — nếu sau này cần đổi stats, key tự vô hiệu.)
 
-### 10.2. Vận hành
+### 10.3. MFA — cài đặt & probe (đang chạy)
+- **Cài đặt**: đường pip bất khả thi cho macOS arm64 (`kalpy-kaldi` chỉ có sdist, cần build Kaldi);
+  đã cài theo đường chuẩn **conda-forge**: `brew install micromamba` → env `montreal-forced-aligner
+  3.4.3` tại `.mamba-mfa/` (227 gói, osx-arm64 dựng sẵn, gồm kaldi 5.5 + openfst + sox).
+  Luôn chạy qua `micromamba run -p "$PWD/.mamba-mfa" mfa ...` (cần PATH của env để thấy `fstcompile`).
+- **Smoke**: `mfa validate` trên 60 clip (~14,3 phút audio) **thành công**, hết 260s. MFA mặc định
+  coi corpus là **1 speaker** → giới hạn song song; quyết định dùng `--speaker_characters 11`
+  (11 ký tự đầu = id video) để tách thành ~31 "speaker" cho `--num_jobs 8` và giữ được
+  speaker-adaptation theo video.
+- **Probe C1** (`tools/mfa_probe.sh`, gác chạy sau khi vocoder khởi động): ~1h clip (240 clip trải
+  đều) → `mfa train` + `mfa align` với `--beam 100 --retry_beam 400`, đo giây; ngoại suy:
+  `thời_gian_full ≈ thời_gian_probe × (44,96h / giờ_probe)`.
+
 - **MFA ∥ vocoder**: dùng `--num_jobs 8` (không 10) + kiểm **s/bước vocoder không tụt quá ~15%**
   khi MFA chạy; tụt hơn thì giảm `--num_jobs` hoặc tạm dừng MFA.
 - **Nghe thử sớm**: `tools/vocoder_milestones.py` (chạy nền, dùng **CPU**) xuất copy-synthesis
