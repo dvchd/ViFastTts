@@ -156,6 +156,12 @@ def test_train_resume_continues_from_step(tmp_path: Path):
                     max_steps=5, resume=str(out_dir / "last.pt"))
     state = torch.load(out_dir / "last.pt", map_location="cpu", weights_only=False)
     assert state["step"] == 5
+    assert "best_val" in state  # lưu lại để best.pt không bị ghi đè oan sau resume
+    # history.csv ghi tiếp, không xoá lịch sử val của lần chạy trước.
+    lines = (out_dir / "history.csv").read_text(encoding="utf-8").strip().splitlines()
+    assert lines[0].startswith("step,")
+    assert sum(1 for line in lines if line.startswith("step,")) == 1
+    assert len(lines) >= 3
 
 
 def test_run_validation_max_batches(tmp_path: Path):

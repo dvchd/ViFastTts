@@ -154,13 +154,14 @@ def train_reference(
     optimizer = AdamW(model.parameters(), lr=float(training.get("learning_rate", 2e-4)),
                       weight_decay=float(training.get("weight_decay", 1e-4)))
     start_step = 0
+    resume_state: dict[str, Any] | None = None
     if resume:
         # Tiếp tục từ checkpoint (model + optimizer + bước) — job dài không mất tiến độ.
-        state = torch.load(resume, map_location=device, weights_only=False)
-        model.load_state_dict(state["model"])
-        if "optimizer" in state:
-            optimizer.load_state_dict(state["optimizer"])
-        start_step = int(state.get("step", 0))
+        resume_state = torch.load(resume, map_location=device, weights_only=False)
+        model.load_state_dict(resume_state["model"])
+        if "optimizer" in resume_state:
+            optimizer.load_state_dict(resume_state["optimizer"])
+        start_step = int(resume_state.get("step", 0))
         print(f"Tiếp tục từ {resume} (bước {start_step})")
     steps = max_steps if max_steps is not None else int(training.get("max_steps", 100_000))
     warmup = max(1, int(training.get("warmup_steps", 1000)))
@@ -175,12 +176,17 @@ def train_reference(
     weights = config.get("loss_weights", {})
 
     history_path = out / "history.csv"
+    # Resume: ghi tiếp vào history cũ (không xoá lịch sử val của các khối trước).
+    append_history = bool(resume) and history_path.exists() and history_path.stat().st_size > 0
     best_val = float("inf")
+    if resume and resume_state is not None:
+        best_val = float(resume_state.get("best_val", float("inf")))
     step = start_step
     started = time.perf_counter()
-    with history_path.open("w", encoding="utf-8", newline="") as history:
+    with history_path.open("a" if append_history else "w", encoding="utf-8", newline="") as history:
         writer = csv.writer(history)
-        writer.writerow(["step", "train_total", "train_mel", "val_total"])
+        if not append_history:
+            writer.writerow(["step", "train_total", "train_mel", "val_total"])
         while step < steps:
             for batch in train_loader:
                 step += 1
@@ -201,7 +207,7 @@ def train_reference(
                 optimizer.step()
 
                 if step % log_every == 0:
-                    speed = (time.perf_counter() - started) / max(1, step)
+                    speed = (time.perf_counter() - started) / max(1, step - start_step)
                     mps_mem = (f" mps={torch.mps.driver_allocated_memory() / 2**30:.1f}G"
                                if device.type == "mps" else "")
                     print(f"step {step}: loss={loss.detach().item():.4f} mel={parts['mel'].detach().item():.4f} "
@@ -219,18 +225,18 @@ def train_reference(
                     writer.writerow([step, float(loss), float(parts["mel"]), val_loss])
                     history.flush()
                     state = {"model": model.state_dict(), "optimizer": optimizer.state_dict(),
-                             "config": config, "step": step}
+                             "config": config, "step": step, "best_val": best_val}
                     torch.save(state, out / "last.pt")
                     if val_loss < best_val:
                         best_val = val_loss
                         torch.save(state, out / "best.pt")
                 elif step % save_every == 0:
                     torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
-                                "config": config, "step": step}, out / "last.pt")
+                                "config": config, "step": step, "best_val": best_val}, out / "last.pt")
                 if step >= steps:
                     break
     torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
-                "config": config, "step": step}, out / "last.pt")
+                "config": config, "step": step, "best_val": best_val}, out / "last.pt")
     print(f"Đã huấn luyện {step} bước, checkpoint tại {out}/last.pt")
 
 
@@ -344,12 +350,14 @@ def train_vocoder_reference(
     save_every = int(vt.get("save_every", 5000))
 
     history_path = out / "history_vocoder.csv"
+    append_history = bool(resume) and history_path.exists() and history_path.stat().st_size > 0
     best = float("inf")
     step = start_step
     started = time.perf_counter()
-    with history_path.open("w", encoding="utf-8", newline="") as history:
+    with history_path.open("a" if append_history else "w", encoding="utf-8", newline="") as history:
         writer = csv.writer(history)
-        writer.writerow(["step", "g_total", "g_adv", "g_mel", "d_loss"])
+        if not append_history:
+            writer.writerow(["step", "g_total", "g_adv", "g_mel", "d_loss"])
         while step < steps:
             for batch in loader:
                 step += 1
@@ -393,7 +401,7 @@ def train_vocoder_reference(
                 opt_g.step()
 
                 if step % log_every == 0:
-                    speed = (time.perf_counter() - started) / max(1, step)
+                    speed = (time.perf_counter() - started) / max(1, step - start_step)
                     print(f"step {step}: g={g_loss.detach().item():.4f} adv={g_adv.detach().item():.4f} "
                           f"mel={g_mel.detach().item():.4f} d={d_loss.detach().item():.4f} ({speed:.3f}s/bước)")
                 if step % save_every == 0 or g_loss.detach().item() < best:
