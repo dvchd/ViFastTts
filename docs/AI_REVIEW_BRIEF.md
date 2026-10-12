@@ -6,11 +6,10 @@
 > trung gian; **agent đã viết tài liệu này (gọi là "agent cầu nối") có thể xác minh mọi chi tiết
 > trong repo** (grep/đọc file/chạy test/đo thử) theo yêu cầu.
 >
-> **Snapshot lấy lúc:** 2026-10-12, HEAD `c9896f7` (đứng sau `379884c` B4, `6b1ffea` rev.5, `17ae651` rev.4).
-> **Trạng thái working tree lúc soạn:** có 1 WIP chưa commit trong `src/vifasttts/train.py` +
-> `tools/train_vocoder_chunked.py` (chính sách "checkpoint sạch" rev.6 §1a — mô tả ở §2.4).
-> Repo đang được commit liên tục (khoảng cách giữa các commit là vài phút); nếu thấy hash lệch,
-> hãy coi tài liệu này là ảnh chụp tại hash ghi trên và hỏi agent cầu nối để xác minh phần đã đổi.
+> **Snapshot lấy lúc:** 2026-10-12, HEAD `1bd127f` (rev.6; đứng sau `3e832c7` brief, `c9896f7` reparse,
+> `379884c` B4, `6b1ffea` rev.5, `17ae651` rev.4).
+> **Trạng thái working tree lúc soạn:** sạch — chính sách "checkpoint sạch" rev.6 §1a và demo nghe
+> thử theo mốc đã được commit ở `1bd127f` (mô tả ở §2.4).
 
 ---
 
