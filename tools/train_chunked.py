@@ -64,6 +64,9 @@ def main() -> None:
         print(f"[chunked] {step} → {target} bước (khối {args.chunk})", flush=True)
         code = subprocess.run(command, check=False).returncode
         new_step = read_step(out / "last.pt")
+        if (out / "early_stop.json").exists():
+            print(f"[chunked] dừng theo early-stop (val chững): {new_step}/{args.total_steps} bước", flush=True)
+            break
         if code == 0:
             failures = 0
             continue

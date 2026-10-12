@@ -46,6 +46,7 @@ training:
   lr_schedule: cosine
   min_lr_ratio: 0.05
   lr_decay_steps: 60000   # mốc cuối TOÀN CỤC cho cosine (không phải mốc cuối mỗi khối)
+  early_stop_patience: 10  # dừng khi val không cải thiện 10 mốc liên tiếp (10k bước)
   grad_clip: 1.0
   log_every: 50
   validate_every: 1000

@@ -16,7 +16,9 @@
    grad clip, AMP (CUDA **và MPS**); log in kèm tốc độ `(x.xxx s/bước)`. **Resume**:
    `--resume runs/.../last.pt` tiếp tục đúng bước/optimizer (job dài không mất tiến độ).
    LR có 2 chế độ: `training.lr_schedule: constant` (mặc định) hoặc `cosine`
-   (`min_lr_ratio` — giảm dần về 5% base_lr, giúp thoát vùng val chững).
+   (`min_lr_ratio`, `lr_decay_steps` — giảm dần về 5% base_lr, giúp thoát vùng val chững).
+   **Early stop**: `training.early_stop_patience: N` — dừng khi val không cải thiện N mốc
+   liên tiếp, ghi `early_stop.json` (chunked runner đọc file này để dừng vòng lặp khối).
 7. (Tùy chọn) Cache feature mel/f0/vuv theo hash(audio, config): đặt `training.cache_features: true` hoặc `cache_dir`, hoặc chạy trước `vifasttts cache-features --workers 8` (ProcessPool, nhanh hơn nhiều cho dataset chục giờ). (Tùy chọn) Bật `phonation.enabled: true` để trích thêm HNR/spectral tilt/glottalization cấp frame cho nghiên cứu chất giọng.
 
 ```bash

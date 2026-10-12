@@ -123,6 +123,34 @@ def _learning_rate(step: int, warmup: int, steps: int, base_lr: float,
     return base_lr * factor
 
 
+def _resume_history_state(path: Path) -> tuple[float, int]:
+    """Đọc `history.csv` để khôi phục (best_val, số lần val không cải thiện).
+
+    Cần cho early-stop khi chạy theo khối: mỗi khối là tiến trình mới nhưng phải
+    "nhớ" val của các khối trước để đếm đúng số lần chững.
+    """
+    if not path.exists():
+        return float("inf"), 0
+    best, no_improve = float("inf"), 0
+    try:
+        with path.open(encoding="utf-8") as handle:
+            rows = list(csv.reader(handle))
+    except OSError:
+        return float("inf"), 0
+    for row in rows[1:]:
+        if len(row) < 4:
+            continue
+        try:
+            val = float(row[3])
+        except ValueError:
+            continue
+        if val < best:
+            best, no_improve = val, 0
+        else:
+            no_improve += 1
+    return best, no_improve
+
+
 def train_reference(
     config: dict,
     train_manifest: str,
@@ -200,14 +228,21 @@ def train_reference(
     use_amp = bool(training.get("mixed_precision", False)) and device.type == "cuda"
     weights = config.get("loss_weights", {})
 
+    early_stop_patience = int(training.get("early_stop_patience", 0))
+
     history_path = out / "history.csv"
     # Resume: ghi tiếp vào history cũ (không xoá lịch sử val của các khối trước).
     append_history = bool(resume) and history_path.exists() and history_path.stat().st_size > 0
     best_val = float("inf")
-    if resume and resume_state is not None:
-        best_val = float(resume_state.get("best_val", float("inf")))
+    no_improve = 0
+    if resume:
+        if resume_state is not None:
+            best_val = float(resume_state.get("best_val", float("inf")))
+        hist_best, no_improve = _resume_history_state(history_path)
+        best_val = min(best_val, hist_best)
     step = start_step
     started = time.perf_counter()
+    early_stopped = False
     with history_path.open("a" if append_history else "w", encoding="utf-8", newline="") as history:
         writer = csv.writer(history)
         if not append_history:
@@ -255,12 +290,26 @@ def train_reference(
                     torch.save(state, out / "last.pt")
                     if val_loss < best_val:
                         best_val = val_loss
+                        no_improve = 0
                         torch.save(state, out / "best.pt")
+                    else:
+                        no_improve += 1
+                    if early_stop_patience and no_improve >= early_stop_patience:
+                        (out / "early_stop.json").write_text(json.dumps({
+                            "step": step, "best_val": best_val,
+                            "no_improve": no_improve, "patience": early_stop_patience,
+                        }, ensure_ascii=False), encoding="utf-8")
+                        print(f"Dừng sớm: val không cải thiện {no_improve} mốc liên tiếp "
+                              f"(patience={early_stop_patience}), best_val={best_val:.4f}")
+                        early_stopped = True
+                        break
                 elif step % save_every == 0:
                     torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
                                 "config": config, "step": step, "best_val": best_val}, out / "last.pt")
-                if step >= steps:
+                if early_stopped or step >= steps:
                     break
+            if early_stopped:
+                break
     torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
                 "config": config, "step": step, "best_val": best_val}, out / "last.pt")
     print(f"Đã huấn luyện {step} bước, checkpoint tại {out}/last.pt")

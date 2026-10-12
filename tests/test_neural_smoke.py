@@ -185,6 +185,43 @@ def test_learning_rate_schedules():
     assert chunk_lr > base * 0.85
 
 
+def test_resume_history_state(tmp_path: Path):
+    from vifasttts.train import _resume_history_state
+
+    path = tmp_path / "history.csv"
+    path.write_text(
+        "step,train_total,train_mel,val_total\n"
+        "1000,10,9,5.0\n2000,9,8,4.0\n3000,9,8,4.5\n4000,9,8,4.2\n",
+        encoding="utf-8",
+    )
+    best, no_improve = _resume_history_state(path)
+    assert best == 4.0 and no_improve == 2
+
+
+def test_early_stop_writes_marker(tmp_path: Path):
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    _write_wav(wav_dir / "s1.wav", freq=220)
+    _write_wav(wav_dir / "s2.wav", freq=300)
+    metadata = tmp_path / "metadata.csv"
+    with metadata.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh, delimiter="|")
+        writer.writerow(["s1", "Chào bạn hôm nay"])
+        writer.writerow(["s2", "Thử hệ thống mới"])
+    manifest = tmp_path / "manifest.jsonl"
+    build_manifest(str(metadata), str(wav_dir), str(manifest))
+
+    config = dict(TINY_CONFIG)
+    config["training"] = {**TINY_CONFIG["training"], "learning_rate": 0.0,
+                          "validate_every": 2, "save_every": 2, "max_steps": 20,
+                          "early_stop_patience": 1}
+    out = tmp_path / "run_early_stop"
+    train_reference(config, str(manifest), str(manifest), str(out))
+    assert (out / "early_stop.json").exists()
+    state = torch.load(out / "last.pt", map_location="cpu", weights_only=False)
+    assert state["step"] < 20  # dừng trước khi hết bước
+
+
 def test_run_validation_max_batches(tmp_path: Path):
     wav_dir = tmp_path / "wavs"
     wav_dir.mkdir()

@@ -229,7 +229,7 @@ Số bước tham khảo: mô hình NAR kiểu này thường cần **100k–300
 
 | Mức | Cấu hình | Dùng cho |
 | --- | --- | --- |
-| Tối thiểu (dev) | CPU bất kỳ, 8 GB RAM | Chạy test (2224 test), parse, thử ONNX |
+| Tối thiểu (dev) | CPU bất kỳ, 8 GB RAM | Chạy test (2226 test), parse, thử ONNX |
 | **Mac Apple Silicon** | ≥ 16 GB RAM hợp nhất (M-series); đo trên Mac mini M6 32 GB | Train small/base cỡ vừa; acoustic dùng MPS, vocoder CPU — xem mục 3.1 |
 | Vừa (khuyến nghị) | 1× GPU ≥ 12 GB VRAM (3060/4070), 32 GB RAM, SSD 100 GB | Train base với 10–20 h |
 | Thoải mái | 1× 4090 24 GB / A10G, 64 GB RAM | Train + nhiều thí nghiệm A/B, vocoder lớn |
