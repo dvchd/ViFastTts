@@ -30,7 +30,7 @@ vị trí, và không có "từ lạ" với tiếng Việt chuẩn.
 
 | Hạng mục | Kết quả |
 | --- | --- |
-| Bộ test | **2235 test pass**; `ruff` + `mypy` sạch |
+| Bộ test | **2237 test pass**; `ruff` + `mypy` sạch |
 | Parser âm tiết | Vét cạn **49.166 tổ hợp = 0 lỗi**; 39K từ thật: 6.617/6.633 parse OK |
 | Kho âm tiết | 24 âm đầu · 2 âm đệm · 15 âm chính · 11 âm cuối · 6 thanh → **264 vần**, **28.800 âm tiết trừu tượng** |
 | Model | Acoustic **16,4 triệu** tham số; vocoder **3,5 triệu** tham số |
@@ -186,7 +186,7 @@ src/vifasttts/
   export.py   ONNX (acoustic + vocoder) + quantization
 configs/      base_24k.yaml + small_24k.yaml + large_24k.yaml + small_codelung.yaml + overrides_tech_vi.json (từ lạ cho youtube-fetch)
 tools/        parser_audit.py, frontend_benchmark.py, compute_mel_stats.py, train_chunked.py, train_vocoder_chunked.py, dataset_report.py, split_manifest.py
-tests/        2235 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server, youtube
+tests/        2237 test: parser, normalizer, G2P, model, train/infer/export, runtime ONNX, server, youtube
 docs/         toàn bộ tài liệu (xem mục 10)
 ```
 
@@ -219,6 +219,7 @@ Roadmap chi tiết có đánh dấu ✅/⬜: `docs/PROJECT_STATUS.md`.
 | | `docs/TRAINING.md` | Hướng dẫn train + cảnh báo alignment |
 | | `docs/TRAINING_RUN_CODELUNG.md` | **Run thật `small` trên kênh @codelung**: số đo MPS, cách chạy lại, triển khai |
 | | `docs/REVISION_PLAN_V2.md` | **Kế hoạch sửa nền tảng** trước khi lên base (A1 mel loss, A2 f0 contour, A3 SIL, MFA, mel log-magnitude) |
+| | `docs/ARCH_DISCUSSION_M6.md` | **Hồ sơ thảo luận kiến trúc/ngân sách** cho Mac mini M6 32GB + đặc thù dữ liệu @codelung (gửi chuyên gia vòng 4) |
 | | `docs/TRAINING_ESTIMATES.md` | **Ước lượng** dữ liệu/tham số/thời gian/máy/chi phí trước khi train |
 | | `docs/APPLE_SILICON.md` | **Mac/M-series**: MPS, MLX, ANE, provider ONNX (đo thật + quyết định) |
 | | `docs/DEPLOYMENT.md` | ONNX Runtime, quantize, nền tảng |

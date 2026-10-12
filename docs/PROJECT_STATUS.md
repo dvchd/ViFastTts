@@ -8,7 +8,7 @@
 
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
-- **2235 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **2237 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - **Run `small` @codelung dừng ở 20.850 bước** (val tăng ngược từ 8k do nhãn chia đều) — chuyển
   sang `docs/REVISION_PLAN_V2.md` (rev.3). Đang triển khai **bước 2**: mel **log-magnitude clamp
   1e-5 + chuẩn hoá toàn cục per-bin** (`tools/compute_mel_stats.py`), **F0 pyworld harvest+stonemask**,
