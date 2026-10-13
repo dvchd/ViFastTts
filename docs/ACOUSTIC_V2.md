@@ -546,3 +546,55 @@ các thanh khó (hỏi/ngã/nặng) đều **tốt hơn B0** (223/197/154 → 14
 **Task 5 ĐẠT toàn bộ cổng** (mel hữu thanh · F0 theo thanh · duration · VUV · free CER · RTF · bất biến
 slot). Chuyển sang T3.2 (prior mềm theo thanh + delta loss) → T3.3 (eval thanh minimal pairs) → R8/T4.1
 (adversarial train-only).
+
+## 27. T3.2 + T3.3 — prior/delta loss và chấm thanh (13/10/2026)
+
+### 27.1 T3.2 — fine-tune run 3 (`runs/acoustic_v2_slot5c`, 20k→30k, resume từ run 2)
+
+Loss mới: `f0_delta` (khớp **độ dốc contour** theo vị trí chuẩn hoá — độc lập độ dài/s0) +
+`f0_prior` (prior mềm theo thanh, z-space, chỉ nucleus hữu thanh). Mel giữ nguyên (đúng thiết kế:
+0,6397–0,6493 trong lúc train).
+
+| Metric (300 clip val; free: 20 holdout) | v2 run 2 | **v2 run 3** |
+|---|---|---|
+| `mel_l1_z` (tf_syl) | 1,182 | **1,175** |
+| `mel_l1_z` (tf_seg) | 1,140 | **1,130** |
+| F0 median 6 thanh (cents) | 129·107·152·153·184·150 | 130·110·164·150·194·156 |
+| duration MAE | 50,8 ms | 51,0 ms |
+| **free CER** | 0,236 | **0,220** |
+| thanh từ **f0 model** (36 pair, prior gần nhất) | 21/36 = 0,583 | **22/36 = 0,611** |
+| — ngang 6/6 · huyền 3/6 · sắc 4→**5**/6 · hỏi 4→**5**/6 · **ngã 0/6** · nặng 4→3/6 | | |
+
+→ Gain nhỏ nhưng đúng hướng (CER −6,7%; sắc/hỏi +1). **Ngã vẫn 0/6** (model thiếu độ *cong* đặc trưng
+dip+rise — prior hiện nặng nhất trong bảng vẫn là chưa học được s2 của ngã; cần T4.1 hoặc tăng
+trọng số prior / dùng phonation cho creak).
+
+### 27.2 T3.3 — tool chấm thanh minimal pairs
+
+- `tools/eval_tone_pairs.py`: 6 base × 6 thanh trong câu khung "Tôi nói ___ nhé"; hai nguồn đo:
+  **`--source model`** (f0 model, chẩn đoán "ý định") và **`--source audio`** (F0 trích từ audio
+  tái tạo, harvest→dio→autocorr chọn bộ nhiều hữu thanh nhất); cửa sổ **nucleus** (khớp định nghĩa
+  prior; có `--window syllable` chẩn đoán); phân loại = **prior gần nhất** (cùng thống kê R5b);
+  kèm **trang nghe A/B mù** (local, không upload) + answer-key JSON.
+- Đo audio trên cùng 36 pair (run 2): **7–8/36 ≈ 0,19–0,22** — thấp hơn nhiều so với 0,58–0,61 khi
+  đo từ f0 model ⇒ **lỗi/độ mờ nằm ở đường mel→audio**, không phải ý định của model.
+- Bug đã bắt khi tích hợp: nhánh `--source model` truyền *log-F0* vào hàm nhận *Hz* (double-log →
+  mọi thanh thành hỏi); đã sửa + xác nhận số liệu hợp lý.
+
+### 27.3 Vocoder — đo độ trung thành (`tools/eval_vocoder_fidelity.py`)
+
+| Nguồn mel → Vocos pretrained | mel_l1 (so mel thật) | voiced recall |
+|---|---|---|
+| **mel thật** (trần của vocoder) | **0,107** | **93,5 %** |
+| mel do acoustic run 2 sinh | 1,747 (16× xa hơn) | 86,1 % |
+
+| Vocoder (trên mel thật, 12 clip) | mel_l1 | voiced recall | F0 | RTF | params |
+|---|---|---|---|---|---|
+| Vocos pretrained | **0,121** | **96,1 %** | **74,8¢** | 0,007 | 13,5M |
+| lite nội bộ (`runs/vocoder_codelung`, hợp đồng mel **thô** đời trước) | 2,411 | 78,7 % | 259,1¢ | **0,002** | 2,4M |
+
+**Kết luận**: Vocos **không phải** nút thắt chính (đọc mel thật gần như trong suốt); nút thắt là
+**mel do model sinh còn mềm** (1,75 vs 0,107). Thứ tự: **T4.1 adversarial trước** (làm nét mel từ gốc,
+đo lại bằng harness này) → **chỉ fine-tune Vocos khi** khoảng cách model-mel↔mel-thật vẫn lớn *kèm*
+recall/CER kém đi (fine-tune 2 bước: mel thật → GTA mel sinh). Không train lại vocoder nhỏ từ đầu
+(lite kém ~20×, cần nhiều ngày M6; RTF hiện đã tốt 0,007 khi cần bản nhẹ sẽ tính sau).

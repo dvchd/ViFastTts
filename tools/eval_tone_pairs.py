@@ -255,17 +255,24 @@ def resolve_f0_stats(checkpoint: str, config: dict, cli_value: str | None = None
 
 def score_pair(engine, pair: dict, stats: dict, priors: np.ndarray, *,
                template: str, dialect: str, speed: float, hop: int,
-               window: str = "nucleus") -> dict:
-    """Tổng hợp một pair, align âm tiết đích, trích F0 thật và phân loại thanh."""
+               window: str = "nucleus", source: str = "audio") -> dict:
+    """Một pair: align âm tiết đích rồi phân loại thanh.
+
+    `source="audio"`: tổng hợp qua vocoder, trích F0 từ audio (đo "nghe được").
+    `source="model"`: lấy thẳng contour `f0` của model trong free mode (đo "ý định",
+    bỏ qua vocoder) — dùng chẩn đoán tách lỗi model vs lỗi đường audio.
+    """
     import torch
 
     from vifasttts.frontend.normalizer import NormalizerOptions
 
     text = frame_sentence(pair["syl"], template)
     options = NormalizerOptions(dialect=dialect)  # type: ignore[arg-type]
-    pieces = [audio for audio, _ in engine.iter_synthesize(
-        text, dialect=dialect, speed=speed, overrides=None)]
-    wav = np.concatenate(pieces).astype(np.float32)
+    wav = None
+    if source == "audio":
+        pieces = [audio for audio, _ in engine.iter_synthesize(
+            text, dialect=dialect, speed=speed, overrides=None)]
+        wav = np.concatenate(pieces).astype(np.float32)
     sample_rate = int(engine.sample_rate)
 
     items = parse_text(text, dialect=dialect, options=options)
@@ -277,6 +284,21 @@ def score_pair(engine, pair: dict, stats: dict, priors: np.ndarray, *,
         outputs = engine.model(features, speed=speed_t)
     slots = [int(v) for v in outputs["slot_durations"][0].cpu().tolist()]
     start_frame, span_frames = target_frame_window(slots, target_index, window)
+    if source == "model":
+        raw = outputs["f0"][0][start_frame:start_frame + span_frames].cpu().numpy()
+        if raw.size < 2:
+            return {"base": pair["base"], "tone_true": pair["tone"], "text": text,
+                    "tone_pred": None, "correct": False, "note": "cửa sổ đích rỗng"}
+        # model xuất **log-F0 tự nhiên**; `contour_to_sk_z` nhận Hz (tự log) → exp trước.
+        contour = np.exp(raw)
+        s_k_z = contour_to_sk_z(contour, f0_log_mean=float(stats["f0_log_mean"]),
+                                f0_log_std=float(stats["f0_log_std"]),
+                                shape_mean=np.asarray(stats["shape_mean"], dtype=np.float64),
+                                shape_std=np.asarray(stats["shape_std"], dtype=np.float64))
+        predicted = classify_shape(s_k_z, priors)
+        return {"base": pair["base"], "tone_true": pair["tone"], "text": text,
+                "n_voiced": int(span_frames), "s_k_z": [round(float(v), 4) for v in s_k_z],
+                "tone_pred": predicted, "correct": bool(predicted == pair["tone"])}
 
     # Frame mel → mẫu audio (khớp quy ước `T = 1 + len(wav)//hop`), clamp WAV thật.
     start_sample = max(int(start_frame * hop), 0)
@@ -364,6 +386,8 @@ def main() -> None:
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--f0-stats", default=None)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--source", choices=["audio", "model"], default="audio",
+                        help="Chấm thanh từ audio tái tạo (mặc định) hay từ f0 của model (chẩn đoán)")
     parser.add_argument("--window", choices=["nucleus", "syllable"], default="nucleus",
                         help="Cửa sổ đo F0: nucleus (khớp prior T3.2, mặc định) | syllable (chẩn đoán)")
     parser.add_argument("--html", default=None)
@@ -391,7 +415,7 @@ def main() -> None:
     for pair in pairs:
         entry = score_pair(engine, pair, stats, priors, template=args.template,
                            dialect=args.dialect, speed=args.speed, hop=hop,
-                           window=args.window)
+                           window=args.window, source=args.source)
         results.append(entry)
         mark = "✓" if entry.get("correct") else "✗"
         print(f"  [{mark}] {pair['base']:5s} {pair['tone']:6s} → {entry.get('tone_pred')} "
