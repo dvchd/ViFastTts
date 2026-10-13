@@ -338,3 +338,33 @@ Probe: `tools/probe_f0_validity.py` · 400 row = 7.991 âm tiết ·
   lớp gác thứ hai cho onset hữu thanh jitter cao (B 0,039 · D 0,056 — vẫn nhận, nhưng re-đo sau R6).
 - Giá trị s_k báo cáo ở §19.1 vẫn tính trên **mọi** segment (chuẩn hoá phục vụ T3.2); trọng số
   loss F0 ở T3.2 dùng đúng mask §19.2.
+
+## 20. R6 — chọn kênh phonation (13/10/2026)
+
+Tool: `tools/r6_phonation.py` · 100 clip (seed 42) · dương = ngã+nặng (444) vs âm = ngang (913) ·
+đo trên **nucleus** hữu thanh (≥ 4 frame) · report `artifacts/dataset_v2/r6_phonation.json`.
+`power = max(AUC, 1−AUC)`; cổng **≥ 0,7**.
+
+| Kênh | AUC gộp | chỉ cuối câu (7%) | ngã | nặng | clip-z | **power** | Cổng |
+|---|---|---|---|---|---|---|---|
+| `hnr` (autocorr, dB) | 0,131 | **0,057** | 0,123 | 0,135 | 0,155 | **0,869** | ✅ |
+| `jitter` (bất ổn chu kỳ) | 0,864 | **0,942** | 0,886 | 0,853 | 0,835 | **0,864** | ✅ |
+| `glottalization` (< 80 Hz) | 0,763 | 0,691 | 0,776 | 0,756 | 0,747 | **0,763** | ✅ |
+| `aper` D4C (1–4 kHz) | 0,424 | 0,466 | 0,282 | 0,499 | 0,423 | 0,576 | ❌ |
+| `tilt` (dB/oct) | 0,478 | 0,379 | 0,571 | 0,430 | 0,496 | 0,521 | ❌ |
+
+- **Kết quả**: creak thể hiện rõ nhất qua **HNR thấp** và **jitter cao** (power ~0,87), mạnh nhất ở
+  **cuối câu** (hnr 0,943 · jitter 0,966) — đúng bản chất creak phrase-final. `glottalization`
+  đạt cổng nhưng yếu hơn. **Kênh cũ `tilt` vô dụng** (0,521) và D4C 1–4 kHz không đạt (0,576).
+- **Bẫy đo đã bắt**: bản đầu tính `aper` dải 0–4 kHz → power 0,704 (tưởng đạt). Đo bằng tín hiệu
+  tổng hợp thấy cheaptrick **thoái hoá dưới 1 kHz** (sine 150 Hz thuần: 0–1 kHz = 1,12 do "hài
+  vắng" bị tính aperiodic; 1–4 kHz = 0,00) → dải 0–4 kHz bị thành phần thoái hoá chi phối.
+  Sửa về chuẩn 1–4 kHz (`estimate_aperiodicity` mặc định) → rớt cổng đúng thực chất.
+- **Chốt (cache v3 + v2)**: bật phonation với **3 kênh đạt cổng** — `hnr` · `glottalization` ·
+  `jitter` (khớp `use_phonation: true` 3 chiều của variance head). `tilt`/`aper` giữ trong code
+  (`data/phonation.py`) làm chẩn đoán, **không** vào cache để tránh phí.
+- **Config riêng `configs/small_codelung_v2.yaml`**: vì `feature_cache_key` gồm cả block
+  `phonation`, đổi config sẽ đổi khoá → tách file để **cache v2 (B0) không bị đè** (2 bộ khoá
+  chung thư mục `cache/codelung_v2`).
+- Ghi chú vận hành: `jitter` tái dùng `f0/vuv` sẵn có (không harvest lần hai); `extract_features`
+  truyền f0/vuv vào `extract_phonation_frames` — xem `tests/test_phonation_r6.py` (6 test).

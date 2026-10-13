@@ -321,6 +321,7 @@ def extract_features(wav_path: str | Path, config: dict[str, Any]) -> dict[str, 
     if config.get("phonation", {}).get("enabled", False):
         from vifasttts.data.phonation import extract_phonation_frames
 
-        for name, values in extract_phonation_frames(wav, config).items():
+        phonation = extract_phonation_frames(wav, config, f0=features["f0"], vuv=features["vuv"])
+        for name, values in phonation.items():
             features[name] = _fit_length(values, frames)
     return features

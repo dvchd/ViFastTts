@@ -1,8 +1,11 @@
-"""Đặc trưng phonation (HNR, spectral tilt, glottalization) cấp frame.
+"""Đặc trưng phonation cấp frame: `hnr` · `tilt` · `glottalization` · `jitter` · `aper` (D4C).
 
-Bổ sung cho f0/vuv/energy khi cần điều kiện hoá chất giọng (breathy/creaky,
-kiểu thanh hỏi–ngã) — xem docs/TTS_ARCHITECTURE_RESEARCH.md §9.7. Tất cả
-hàm chạy thuần torch, cùng độ dài frame với mel (`center=True`:
+Bổ sung cho f0/vuv/energy khi cần điều kiện hoá chất giọng (breathy/creaky, kiểu thanh
+hỏi–ngã) — xem docs/TTS_ARCHITECTURE_RESEARCH.md §9.7. Chọn kênh theo R6
+(docs/ACOUSTIC_V2.md §20): AUC ngã/nặng-vs-ngang — `hnr` 0,869 · `jitter` 0,864 ·
+`glottalization` 0,763 · `aper` 0,576 · `tilt` 0,521 → **cache v3 chỉ dùng 3 kênh đạt cổng**
+(`hnr`, `glottalization`, `jitter`); `tilt`/`aper` giữ trong code làm chẩn đoán.
+Tất cả hàm chạy torch/numpy, cùng độ dài frame với mel (`center=True`:
 
     frames = 1 + len(wav) // hop_length)
 """
@@ -100,26 +103,107 @@ def glottalization_ratio(
     return low / total
 
 
+def estimate_cycle_jitter(wav_f0: torch.Tensor, vuv: torch.Tensor) -> torch.Tensor:
+    """Độ bất ổn chu kỳ: |Δ log2 f0| giữa 2 frame kề nhau đều hữu thanh, [T] (R6 — §20).
+
+    `jitter[t] = |log2 f0[t+1] − log2 f0[t]|` khi `vuv[t] & vuv[t+1]`, ngược lại 0.
+    Dùng cho creak (ngã/nặng): AUC 0,864 trên tập probe R6 (mạnh nhất cùng `hnr`).
+    """
+    f0 = wav_f0.detach().to(torch.float64)
+    voiced = vuv.detach().to(torch.float64) > 0.5
+    output = torch.zeros(f0.size(0), dtype=torch.float32)
+    if f0.size(0) < 2:
+        return output
+    pair = voiced[:-1] & voiced[1:]
+    delta = (torch.log2(f0[1:].clamp_min(1e-6)) - torch.log2(f0[:-1].clamp_min(1e-6))).abs()
+    output[:-1] = torch.where(pair, delta, torch.zeros_like(delta)).float()
+    return output
+
+
+def estimate_aperiodicity(
+    wav: torch.Tensor,
+    sample_rate: int,
+    hop_length: int,
+    f0: torch.Tensor,
+    vuv: torch.Tensor,
+    *,
+    low_hz: float = 1000.0,
+    high_hz: float = 4000.0,
+) -> torch.Tensor:
+    """Aperiodicity D4C (pyworld `cheaptrick`) trung bình dải `[low, high]`, [T] (R6 — §20).
+
+    Dùng lại `f0`/`vuv` đã có (không harvest lần hai): f0 thô = f0·(vuv>0,5) — đúng vì
+    `estimate_f0_pyworld` chỉ nội suy chỗ vô thanh. Dải mặc định **1–4 kHz**: dưới 1 kHz
+    cheaptrick thoái hoá với tín hiệu ít hài (sine 150 Hz thuần: 0–1 kHz = 1,12 vs 1–4 kHz = 0,00)
+    — xem test `test_phonation_r6.py`. AUC 0,704 (R6); lưu cache v3 để dùng thêm như cổng
+    `f0_valid` khả dĩ.
+    """
+    import numpy as np
+    import pyworld
+
+    samples = np.ascontiguousarray(wav.detach().to(torch.float64).numpy())
+    raw = (f0.detach().to(torch.float64).numpy() * (vuv.detach().numpy() > 0.5)).astype(np.float64)
+    times = np.arange(raw.size, dtype=np.float64) * (hop_length / sample_rate)
+    aperiodicity = pyworld.cheaptrick(samples, raw, times, sample_rate)
+    bins = aperiodicity.shape[1]
+    freqs = np.arange(bins, dtype=np.float64) * (sample_rate / 2.0) / (bins - 1)
+    band = (freqs >= low_hz) & (freqs <= high_hz)
+    return torch.from_numpy(aperiodicity[:, band].mean(axis=1)).float()
+
+
 def extract_phonation_frames(
     wav: torch.Tensor,
     config: dict[str, Any],
+    *,
+    f0: torch.Tensor | None = None,
+    vuv: torch.Tensor | None = None,
 ) -> dict[str, torch.Tensor]:
-    """Ba kênh phonation cấp frame cho một waveform mono."""
+    """Các kênh phonation cấp frame cho một waveform mono.
+
+    Mặc định (config `phonation.channels`): `hnr`, `tilt`, `glottalization`; thêm `jitter`
+    và `aper` khi được yêu cầu (cần `f0`/`vuv` — `extract_features` truyền sẵn, không harvest lại).
+    """
     sample_rate = int(config.get("sample_rate", 24000))
     mel_config = config.get("mel", {})
     hop_length = int(mel_config.get("hop_length", 256))
     n_fft = int(mel_config.get("n_fft", 1024))
-    return {
-        "hnr": estimate_hnr(wav, sample_rate, hop_length, frame_length=max(n_fft, 512)),
-        "tilt": spectral_tilt(wav, sample_rate, hop_length, n_fft=n_fft),
-        "glottalization": glottalization_ratio(wav, sample_rate, hop_length, n_fft=n_fft),
-    }
+    channels = tuple(config.get("phonation", {}).get("channels")
+                     or ("hnr", "tilt", "glottalization"))
+    output: dict[str, torch.Tensor] = {}
+    if "hnr" in channels:
+        output["hnr"] = estimate_hnr(wav, sample_rate, hop_length, frame_length=max(n_fft, 512))
+    if "tilt" in channels:
+        output["tilt"] = spectral_tilt(wav, sample_rate, hop_length, n_fft=n_fft)
+    if "glottalization" in channels:
+        output["glottalization"] = glottalization_ratio(wav, sample_rate, hop_length, n_fft=n_fft)
+    if "jitter" in channels:
+        if f0 is None or vuv is None:
+            raise ValueError("kênh `jitter` cần f0/vuv truyền vào (xem extract_features)")
+        output["jitter"] = estimate_cycle_jitter(f0, vuv)
+    if "aper" in channels:
+        if f0 is None or vuv is None:
+            raise ValueError("kênh `aper` cần f0/vuv truyền vào (xem extract_features)")
+        output["aper"] = estimate_aperiodicity(wav, sample_rate, hop_length, f0, vuv)
+    return output
 
 
 def extract_phonation(wav_path: str | Path, config: dict[str, Any]) -> dict[str, torch.Tensor]:
-    """Đọc WAV rồi trích phonation; độ dài = `1 + len(wav)//hop` như mel."""
-    wav = load_wav(wav_path, int(config.get("sample_rate", 24000)))
-    return extract_phonation_frames(wav, config)
+    """Đọc WAV rồi trích phonation; độ dài = `1 + len(wav)//hop` như mel.
+
+    Kênh mặc định (học từ R6 — docs/ACOUSTIC_V2.md §20): `hnr`, `tilt`, `glottalization`;
+    cấu hình `phonation.channels` có thể thêm `jitter`, `aper` (tự tính f0/vuv ở đây).
+    """
+    from vifasttts.data.features import estimate_f0_pyworld
+
+    sample_rate = int(config.get("sample_rate", 24000))
+    hop_length = int(config.get("mel", {}).get("hop_length", 256))
+    f0_config = dict(config.get("f0", {}) or {})
+    wav = load_wav(wav_path, sample_rate)
+    f0, vuv = estimate_f0_pyworld(wav, sample_rate, hop_length,
+                                  f_min=float(f0_config.get("f_min", 70.0)),
+                                  f_max=float(f0_config.get("f_max", 400.0)),
+                                  interpolate=bool(f0_config.get("interpolate", True)))
+    return extract_phonation_frames(wav, config, f0=f0, vuv=vuv)
 
 
 def phonation_enabled(config: dict[str, Any]) -> bool:
