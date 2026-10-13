@@ -11,6 +11,13 @@
 - **2264 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - **Acoustic v2 (13/10/2026)**: thiết kế **đóng** (Plan + Addendum 1–5) → `docs/ACOUSTIC_V2.md`;
   preflight M6 **5/5 pass**; B0 (v1) đã train + đo xong → `docs/B0_BASELINE.md`; test mới mel-contract + punct (7 pass).
+- **Nhánh v2 đang thi hành (xem `docs/ACOUSTIC_V2.md` §17–§25)**: R2 weak label lai 98,3% · T2.1
+  `seg_durations` (0 lỗi bất biến) · R5a/R5b stats cấp segment + `f0_stats_v2.json` · Addendum 6
+  (mask F0 theo lớp onset — `vuv` không đủ tin cho O) · R6 phonation (hnr/jitter/glottalization đạt cổng) ·
+  R4 `models/slot_ops.py` đóng băng · cache v3 verify 100% · **task 5**: model `v2_slot5`, dataset v2,
+  loss v2 (11 thành phần), export/runtime rẽ nhánh `arch`, trainer `train-v2` (warm-start B0 + giai đoạn A/B)
+  → **đang train 20k bước** (`runs/acoustic_v2_slot5`); 2 bug kernel MPS đã vá/tránh (§25).
+  **2392 test pass** (số hiện tại, cập nhật 13/10/2026).
 - **Kết luận chuyên gia (rev.4)** đã chốt toàn bộ A–F và lịch chạy — xem `docs/REVISION_PLAN_V2.md`.
   Đã code xong: mel log-magnitude + chuẩn hoá toàn cục, F0 pyworld, vocoder **MPD đầy đủ + MRD +
   MR-STFT + generator Vocos** (đo 0,659 s/bước MPS), **postnet** (small → 7,38M), VAD nới biên clip (B3),
