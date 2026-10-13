@@ -1169,3 +1169,45 @@ trọng số 0,5) — cần điều tra vì sao model vẫn hụt (target? slot 
 1. **Nhịp nghỉ** (42.2) — naturalness lớn, loss đã có sẵn. 2. **Câu hỏi** (42.3) — lỗi rõ, sửa nhỏ.
 3. Extension 40k→60k (đang chạy). 4. E4 tone_disc+K=6 · 5. E2 Laplacian-mixture (texture) · 6. E5 adversarial.
 ⚠️ Các số 42.1–42.3 là **lần đo đầu** (chưa có mốc cũ) — dùng làm mốc cho các checkpoint sau.
+
+## 43. Chẩn đoán 2 lỗi §42: nhịp nghỉ (3 nguyên nhân) + §42.3 SAI (tự đính chính)
+
+### 43.1 Nhịp nghỉ — nguyên nhân (đo trên base 40k, tf 80 row val ngoài mẫu)
+
+| Nguyên nhân | Bằng chứng số | Chốt |
+|---|---|---|
+| **Gate không phát hiện được pause** | Σpred/Σtrue = **72,9%**; gate trung bình trên vị trí pause thật (≥3 frame) = **0,476** vs 0,134 trên gap=0; phân rã 4.367 frame hụt = FN 7.026 (161%) + hụt cỡ 608 (14%) − FP thêm 3.307 | ✅ chính |
+| **Trọng số loss quá nhỏ** | pause = **1,26%** loss train (f0_delta chiếm 44%); BCE in-sample 0,057 vs ngoài mẫu **1,148 (×20)** ⇒ học thuộc | ✅ chính |
+| **LỖI MANIFEST (cấu trúc)** | `cut_segments.py:105` ghi `gaps[start:end-1]` + `lead_frames: 0` ⇒ **46,5% khối lượng pause (311,8 frame/clip) không có nhãn**; `v2_targets.py:95` bỏ `index ≥ N−1` ⇒ vị trí cuối row: gate 0,611 + **21,4 frame pause "bịa"** ở 64% row | ✅ lỗi thật #2 |
+| Hụt kích thước khi đã phát hiện | 608/4.367 = 14% (đầu size thô 16,6 vs 9,73 frame) | 🟡 phụ |
+| Target nhiễu / slot G bỏ | gap 1–2 frame = 0,29% khối lượng; G không qua `distribute_slots` (row N=2 chỉ 277/9.763) | ❌ bác bỏ |
+
+- **Chỉnh ngưỡng gate KHÔNG chữa được**: quét 250 row → trần F1 = **0,564** (thr 0,2) vs 0,535 (0,5).
+- **Sửa đề xuất**:
+  - **A1 (rẻ, không sinh lại cache)**: `v2_losses.py:157-161` BCE + `pos_weight≈3,0` + trọng số khối lượng cho
+    dương tính; `pause_gate/pause_gap` 0,5 → **2,0**. Kỳ vọng: recall 0,47→0,58–0,70 · F1 0,53→**0,60–0,66**
+    · Σgap 63%→78–88% · `length_ratio`→0,94–0,98. Cổng: `pause_f1 ≥ 0,60` ∧ `gap_sum_mae ≤ 85` ∧
+    `length_ratio 1,0±0,05` ∧ `mel_gap` không tăng. ~10 dòng.
+  - **A2 (sửa manifest)**: `cut_segments.py:105` giữ `gaps[start:end]` + `v2_targets.py:95` bỏ `index≥N−1`
+    ⇒ 46,5% khối lượng pause thành nhãn; sinh lại manifest (~15–40 ph, **không** `cache-features`).
+    Cổng: `pause_f1_all` · `gap_sum_mae_all_frames` · CER holdout.
+
+### 43.2 §42.3 SAI — tự đính chính lần 2 (thước trộn `?` giữa câu)
+
+| Tập (ghép cặp) | n | THẬT | MODEL | Δ (CI 95%) |
+|---|---|---|---|---|
+| val300 như §42.3 | **16** | +33,6 | −340,7 | −116 [−624, −27] — **12/16 cửa sổ là câu hỏi GIỮA CÂU** (lỗi thước) |
+| val, mọi `?` | 115 | −78 | −284 | −29 [−101, +23] **n.s.** |
+| val, row kết thúc `?` | 28 | +2,0 | −75,8 | −78 **n.s.** |
+| train in-sample, row kết thúc `?` | 590 | −148 | −96 | **+44** ⇒ model ngã **ít hơn** thật |
+| val, câu hỏi kết thúc **NGANG** | 71 | +113,7 | −124,7 | −61 [−345, +12] chưa ý nghĩa (sd(Δ)=1.047 ⇒ cần n=149–859) |
+
+- **Lỗi thước**: `tools/eval_acoustic.py:503-510` cộng cửa sổ cho `?` ở **bất kỳ** vị trí ⇒ phải sửa **B1**
+  (chỉ tính khi `?` ở âm tiết cuối; giữ bản cũ dưới `..._any`; thêm Δ ghép cặp + CI bootstrap; nhóm
+  `punctuation:tone`) — **trước khi** động vào model.
+- Kết nối dấu câu **không** phải lỗi (`components.py:18-22` nối cả 7 bảng → `variance_mlp`); bằng chứng
+  in-sample Δ=+44. ⇒ **Chưa có bằng chứng model làm sai ngữ điệu câu hỏi**; chỉ còn 1 nghi vấn (NGANG-cuối-câu)
+  cần n≥149 mới kết luận. Nếu xác nhận: `v2_slot5.py` thêm `tables[5..6]` vào `segment_in` (zero-init) hoặc
+  `question_boost` trên `f0_mask` — **không** dựng prior theo dấu câu (chỉ 178 row train kết thúc `?`).
+
+### 43.3 Thứ tự cập nhật: **B1 (sửa thước) → A1 (loss pause) → A2 (manifest) → E4 tone → E2 texture → E5 adv**
