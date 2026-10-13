@@ -919,3 +919,34 @@ Tương quan log-F0 harvest ↔ tham chiếu (cùng frame hữu thanh), per cử
   thanh đông lạnh** (differentiable: đầu vào đúng là các đầu ra của model) ⇒ mô hình được thưởng vì
   contour+chất giọng+độ dài *phân biệt được*, không chỉ vì "gần prior".
 - **T6.3**: mask frame creak khi tạo target F0 (giảm nhiễu nhãn) + xét K=6.
+
+## 35. Đo lại 3 đường bằng thước MỚI: thanh mất ở model acoustic (14/10/2026)
+
+Bộ chấm: `tone_ruler` (0,762 trên audio thật) — 60 row đầu val, model `runs/acoustic_v2_b8/best.pt`.
+**Paired A∩B∩C (n=1.234):**
+
+| Đường | Accuracy | Δ so đường trước |
+|---|---|---|
+| A — audio THẬT | 0,7974 | (mốc) |
+| B — copy-synth (mel thật → Vocos) | 0,7901 | **−0,007 (trong nhiễu)** |
+| C — free-run (text → acoustic → Vocos) | **0,7382** | **−0,052** |
+
+- **Vocos không mất thanh** (B−A ≈ −0,7 điểm, trong nhiễu) — khớp §33.5/§34.1.
+- **Model acoustic làm mất ~5,2 điểm** so với copy-synth ⇒ **toàn bộ phần mất nằm ở acoustic**.
+- Thước CŨ cùng tập: A 0,454 · B 0,452 · C 0,467 ⇒ **không phân biệt nổi 3 đường** (bị trần ~0,46 chặn);
+  thước mới tách C rõ ⇒ công cụ đã đủ độ phân giải để *xác nhận* cải tiến sau này.
+- **Per-thanh của C**: điểm rơi tập trung ở **NGANG 0,544** (audio thật 0,758) — contour thanh ngang của
+  model bị "trôi" (nhầm SAC 100 + NGA 49 lần). Các thanh khác ≈ hoặc > A/B.
+- Phụ: free-run còn sai **độ dài** (length_ratio median 0,90; **25/60 row ngoài [0,8; 1,25]**, min 0,34 ·
+  max 6,35) — nhịp co giãn mạnh có thể làm mờ dấu thêm.
+
+### 35.1 Diễn giải + việc tiếp theo
+- Chẩn đoán đã *chốt*: **dấu phải sửa ở acoustic** (target/loss/ngang-drift), Vocos chỉ còn vai trò *cảm nhận
+  texture* (GTA — tai user xác nhận `sh25`).
+- Trần thật còn ~0,80 (A) ⇒ dư địa ~6 điểm trên thước; phần khó nhất (ca ngắn/kết thúc tắc ~14%) **thước
+  không chấm được** — kết luận phải kèm cảnh báo này.
+- Việc tiếp: (1) **GTA Vocos** (texture, rẻ); (2) **T6.2** loss phân biệt thanh bằng `tone_ruler` (cần
+  viết lại `featurize` bằng torch cho gradient); (3) điều tra **ngang-drift** (nghi phạm: trôi cao độ
+  toàn câu/declination trong target z-score tuyệt đối — cần test riêng); (4) dữ liệu dấu hiếm.
+- Cảnh báo đọc số: 60 row đầu dễ hơn trung bình val (A 0,7955 vs 0,7623 toàn val) ⇒ **lấy 0,7974 là trần
+  sẽ lạc quan**; C cũng có tập chấm khác (bỏ 2,8% so A/B 14,4%) nên chỉ số **paired** mới công bằng.
