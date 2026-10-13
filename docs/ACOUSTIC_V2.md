@@ -950,3 +950,60 @@ Bộ chấm: `tone_ruler` (0,762 trên audio thật) — 60 row đầu val, mode
   toàn câu/declination trong target z-score tuyệt đối — cần test riêng); (4) dữ liệu dấu hiếm.
 - Cảnh báo đọc số: 60 row đầu dễ hơn trung bình val (A 0,7955 vs 0,7623 toàn val) ⇒ **lấy 0,7974 là trần
   sẽ lạc quan**; C cũng có tập chấm khác (bỏ 2,8% so A/B 14,4%) nên chỉ số **paired** mới công bằng.
+
+## 36. BASE xong (40k): thắng small toàn diện + ĐÓNG KHOẢNG CÁCH THANH (14/10/2026)
+
+### 36.1 Bảng so (300 val clip; free CER = holdout 20)
+
+| Model | mel_z mean | mel_z med | dB hữu thanh | vuv | dur MAE | free CER |
+|---|---|---|---|---|---|---|
+| B0 | 1,2758 | 0,8636 | 9,79 | 0,9918 | 4,79 | 0,939* |
+| small b8 best | 1,1603 | 0,7934 | 8,64 | 0,9823 | **4,75** | **0,1977** |
+| **BASE best (18k)** | **1,1411** | 0,7849 | **8,51** | 0,9823 | 4,84 | 0,2168 |
+| BASE last (40k) | 1,1599 | 0,8372 | 8,95 | 0,9821 | 4,99 | – |
+
+*bản B0 free khác lần chạy trước (0,939 vs 0,964) — cùng thang.
+
+- **mel: base −1,7%** so small (1,1411 vs 1,1603), −10,6% so B0; dB cũng tốt nhất.
+- CER (20 clip) base 0,2168 vs small 0,1977 — **trong nhiễu của 20 clip**, không kết luận.
+- Dur MAE: base hơi kém (4,84 vs 4,75) — nhỏ nhưng thật.
+
+### 36.2 F0 trung vị theo thanh (cent) — base sửa đúng chỗ khó nhất
+
+| | NGANG | HUYEN | SAC | HOI | **NGA** | NANG |
+|---|---|---|---|---|---|---|
+| B0 | 135 | 129 | 163 | 223 | 197 | 154 |
+| small b8 best | 128 | 111 | 165 | 152 | 197 | 154 |
+| **BASE best (18k)** | **126** | 113 | **162** | 156 | **177** | 154 |
+
+⇒ base cải thiện **NGÃ 197→177 (−20 cent)**, NGANG/SAC nhích; HUYỀN/HỎI/NẶNG đi ngang.
+
+### 36.3 Thước thanh `tone_ruler` — BASE ĐÓNG KHOẢNG CÁCH (paired, 60 row đầu val)
+
+| | A (audio thật) | B (mel thật→Vocos) | C (free-run) | Δ(C−A) |
+|---|---|---|---|---|
+| small b8 (46k) | 0,7974 | 0,7901 | **0,7382** | **−0,059** |
+| **BASE (18k)** | 0,799 | 0,7933 | **0,7982** | **−0,0008** |
+| **BASE (40k)** | 0,8012 | 0,797 | **0,8045** | **+0,0033** |
+
+Per-thanh C (unpaired): NGANG **0,54 (small) → 0,69 (base)** · HUYEN 0,80→0,84 · SAC 0,73→0,75 ·
+HOI 0,92–0,94 · NGA 0,93→0,88 · NANG 0,87→0,77 (n nhỏ, đừng đọc chênh ±2 điểm là thật).
+
+### 36.4 TỰ ĐÍNH CHÍNH §34.3 — "dung lượng không phải chốt của dấu" là SAI
+
+- Kết luận đó dựa trên **thước cũ** (model 0,741 "vượt trần thật" 0,433) — nhưng thước cũ *thưởng cho
+  sự mượt/điển hình*, không đo đúng dấu ⇒ suy luận bị lệch.
+- Đo bằng **thước mới**: small mất 5,9 điểm, **base mất ~0 điểm** ⇒ **dung lượng LÀ đòn chính của dấu**
+  (đúng chỗ khó nhất: NGÃ −20 cent; NGANG-drift 0,54→0,69).
+- Bài học ghi lại: **trần của thước quyết định kết luận**; phải kiểm thước bằng dữ liệu thật trước khi
+  dùng nó để quyết định hướng (đúng quy tắc vàng: *không nâng cấp gì trước khi có thước đo*).
+
+### 36.5 Việc tiếp (cập nhật theo kết quả này)
+
+1. **Tai người kiểm**: `v2base_*` + `v2base_sh25_*` (release `demo-audio-20261013`) — nhất là
+   `v2base_sau_thanh.wav` (6 thanh) xem đã phân biệt dấu chưa.
+2. **GTA Vocos** (texture) — đòn cảm nhận đã được xác nhận; chạy sau khi chốt checkpoint (18k vs 40k).
+3. **T4.1 adversarial @b8** (làm gồ ghề mel *bên trong* model) — xếp sau GTA.
+4. **Dữ liệu**: điểm mù của thước (ca ngắn/kết thúc tắc) + độ đa dạng nói chung.
+5. Tone-loss bằng `tone_ruler` (T6.2): hạ ưu tiên vì base đã đóng khoảng cách — chỉ làm nếu tai người
+   vẫn thấy dấu nhoè (thước không chấm được nhóm ca khó nhất).
