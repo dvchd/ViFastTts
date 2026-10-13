@@ -1039,3 +1039,31 @@ HOI 0,92–0,94 · NGA 0,93→0,88 · NANG 0,87→0,77 (n nhỏ, đừng đọc 
   cùng lúc; trần thật vẫn là 17,1h dữ liệu + dung lượng model.
 - Song song: **GTA fine-tune Vocos** (học nghịch đảo độ mờ trên mel model) — đòn cảm nhận trực tiếp,
   ưu tiên trước vì rẻ (~2h cả sinh mel + train).
+
+## 38. "Rè" ở ngã/nặng: model tự sinh độ rung/ồn — thước thứ 3 (14/10/2026)
+
+### 38.1 Đo (base 40k, 25 clip val có ngã/nặng; pool kênh phonation trên nucleus)
+
+| Thanh | Nguồn | hnr | glottal | jitter | n |
+|---|---|---|---|---|---|
+| NGANG (đối chứng) | THẬT | −0,39 | 0,0125 | 0,0523 | 172 |
+| | synth | 1,75 | 0,0026 | 0,0508 | 172 |
+| | **Δ** | **+2,15** (sạch hơn) | | −0,0015 | |
+| **NGÃ** | THẬT | 0,71 | 0,0071 | 0,0638 | 32 |
+| | synth | −2,03 | 0,0094 | 0,1010 | 32 |
+| | **Δ** | **−2,75** | | **+0,0372 (+58%)** | |
+| **NẶNG** | THẬT | 0,11 | 0,0079 | 0,0718 | 62 |
+| | synth | −0,96 | 0,0116 | 0,0920 | 62 |
+| | **Δ** | **−1,07** | | **+0,0201 (+28%)** | |
+
+### 38.2 Kết luận
+- **"Rè" = model render ngã/nặng ồn/rung hơn THẬT** (HNR −2,75/glottal↑/jitter +58%) — không phải
+  Vocos, không phải thiếu `sh25`; **`sh25` là lọc tăng cường tần số cao nên *khuếch đại* độ rè** (khớp
+  tai user: "last+sh25 tốt nhất nhưng chữ *sẽ* [ngã] vẫn hơi rè").
+- Ngược lại, **NGANG thì synth *sạch hơn* thật (+2,15)** ⇒ không phải vấn đề chung của vocoder; đúng
+  nhóm **creak (ngã/nặng)**.
+- Hệ quả kế hoạch: **GTA Vocos có cơ sở chống rè** (đích học là audio THẬT — vốn *ít* rung hơn bản synth)
+  ⇒ kỳ vọng kéo HNR/jitter về mức thật; phải **đo lại bằng chính `tools/eval_creak.py`** sau GTA.
+- Còn **nguồn gốc phía acoustic** chưa chốt: cần so `seg_phonation` **dự đoán vs target** theo thanh
+  (nếu model đoán hnr thấp hơn target ⇒ nó *chủ động* vẽ thêm rung) — việc tiếp theo sau GTA.
+- **Thước thứ 3 chính thức**: `tools/eval_creak.py` (JSON + bảng Δ) — dùng cho mọi checkpoint/run sau.
