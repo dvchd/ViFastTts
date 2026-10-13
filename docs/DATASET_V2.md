@@ -180,6 +180,11 @@ Kết quả (finalize 13/10 09:5x, `finalize_vn2.log`):
   energy −4,58/4,67 (giờ chỉ tính frame hữu thanh).
 - Loại: C4 score 10% + `phone >0,5 s` (~10%) + thiếu TextGrid (8 clip) — không còn loại vì pause.
 
+**QC chéo Whisper toàn cục (200 clip ngẫu nhiên, seed 13 — `qc_whisper_vn_200.json`):**
+coverage median **0,647** · sát sàn **0,0** · median|Δstart| **0,04 s** · từ lệch <0,3 s **90,6%** ·
+duration ratio **0,929** · match rate 0,645. (Baseline v2b cũ: coverage 0,448 · <0,3 s 81% ·
+ratio 0,693 · sát sàn 0,205.)
+
 **Pipeline alignment chốt (13/10):**
 
 1. Corpus `mfa_v2c` (labs/wavs) — giữ nguyên; không còn dùng lexicon/phone custom để align.
