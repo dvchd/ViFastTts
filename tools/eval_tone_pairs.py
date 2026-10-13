@@ -173,6 +173,33 @@ def target_frame_window(slot_durations: list[int], target_index: int,
     return start, int(slot_durations[base + 2])  # span = N
 
 
+def _robust_f0(segment, sample_rate: int, hop: int):
+    """F0 "chắc tay" cho audio tổng hợp: harvest → **dio** → autocorr, chọn bộ nhiều frame
+    hữu thanh nhất (đo thật: ảnh Vocos làm harvest rụng hữu thanh ở nhiều cửa sổ đích)."""
+    import numpy as np
+    import pyworld
+    import torch
+
+    from vifasttts.data.features import estimate_f0, estimate_f0_pyworld
+
+    candidates = []
+    f0, vuv = estimate_f0_pyworld(segment, sample_rate, hop, f_min=70, f_max=400, interpolate=False)
+    candidates.append((f0, vuv))
+    samples = np.ascontiguousarray(segment.numpy().astype(np.float64))
+    frame_period = 1000.0 * hop / sample_rate
+    raw, dio_times = pyworld.dio(samples, sample_rate, f0_floor=70, f0_ceil=400,
+                                 frame_period=frame_period)
+    raw = pyworld.stonemask(samples, raw, dio_times, sample_rate)
+    target = 1 + int(samples.shape[0]) // hop
+    if raw.shape[0] != target and raw.shape[0] > 0:
+        raw = np.interp(np.linspace(0.0, raw.shape[0] - 1.0, target), np.arange(raw.shape[0]), raw)
+    f0_dio = torch.from_numpy(np.ascontiguousarray(raw)).float()
+    candidates.append((f0_dio, (f0_dio > 0).float()))
+    f0_auto, _ = estimate_f0(segment, sample_rate, hop, f_min=70, f_max=400)
+    candidates.append((f0_auto, (f0_auto > 0).float()))
+    return max(candidates, key=lambda pair: int((pair[1] > 0.5).sum()))
+
+
 def wav_bytes_mono(wav: np.ndarray, sample_rate: int) -> bytes:
     """Waveform float → WAV PCM 16-bit mono (để nhúng base64 vào trang nghe)."""
     pcm = (np.clip(np.asarray(wav, dtype=np.float64), -1.0, 1.0) * 32767.0).round().astype("<i2")
@@ -232,7 +259,6 @@ def score_pair(engine, pair: dict, stats: dict, priors: np.ndarray, *,
     """Tổng hợp một pair, align âm tiết đích, trích F0 thật và phân loại thanh."""
     import torch
 
-    from vifasttts.data.features import estimate_f0_pyworld
     from vifasttts.frontend.normalizer import NormalizerOptions
 
     text = frame_sentence(pair["syl"], template)
@@ -262,7 +288,7 @@ def score_pair(engine, pair: dict, stats: dict, priors: np.ndarray, *,
         result.update({"tone_pred": None, "correct": False, "note": "cửa sổ đích rỗng"})
         return result
     segment = torch.from_numpy(wav[start_sample:end_sample])
-    f0, vuv = estimate_f0_pyworld(segment, sample_rate, hop)
+    f0, vuv = _robust_f0(segment, sample_rate, hop)
     voiced = (vuv > 0.5).numpy()
     result["n_voiced"] = int(voiced.sum())
     if int(voiced.sum()) < 2:
