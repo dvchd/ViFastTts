@@ -6,12 +6,16 @@
 ## 1. Tài liệu nguồn (đọc theo thứ tự)
 
 1. `docs/ACOUSTIC_V2.md` — **thiết kế chốt + số đo thực thi** acoustic v2 (§0–§14 thiết kế;
-   §15 preflight; §17–§22 kết quả R2/T2.1/R5b/Addendum 6/R6/R4/T2.2). Mâu thuẫn → addendum mới hơn thắng.
-2. `docs/B0_BASELINE.md` — baseline B0 (mốc so mọi thứ): `runs/small_codelung_v2/best.pt` (8k bước)
-   + `last.pt` (20k); speech mel ~9,6–9,8 dB; free CER 0,54; 82% loss val là f0.
-3. `PROJECT_STATUS.md` — trạng thái tổng; `docs/DATASET_V2.md` + `docs/TTS_ARCHITECTURE_RESEARCH.md` — nền.
+   §15 preflight; §17–§29 các R/T; **§30–§39: chọn epoch/val theo số đo · b8 (small đạt ngưỡng) ·
+   base 40k (thắng small, đóng khoảng cách thanh) · L1≠tai người · rè ngã/nặng**).
+   Mâu thuẫn → mục mới hơn thắng (đọc §33.5/§36.4 để thấy 1 lần tự đính chính).
+2. **`docs/EVAL_TOOLS.md` — danh mục MỌI thước đo** (trong train + offline), lệnh chạy, bộ số mốc để so,
+   quy trình "chấm một checkpoint" + **bẫy thống kê/điểm mù**. Đọc trước khi kết luận bất cứ điều gì.
+3. `docs/B0_BASELINE.md` — baseline B0 (mốc cũ): mel hữu thanh ~9,6–9,8 dB; free CER 0,54.
+4. `docs/PROJECT_STATUS.md` — trạng thái tổng; `docs/DATASET_V2.md` + `docs/TTS_ARCHITECTURE_RESEARCH.md` — nền.
 
-**Nguyên tắc vàng: không nâng cấp gì trước khi có thước đo; mọi đề xuất phải kèm số đo + cổng.**
+**Nguyên tắc vàng: không nâng cấp gì trước khi có thước đo (và phải kiểm thước trên dữ liệu THẬT
+trước khi dùng nó để quyết định — bài học §34.3→§36.4); mọi đề xuất phải kèm số đo + cổng.**
 
 ## 2. Môi trường & lệnh
 
@@ -85,18 +89,22 @@
 - Quy trình 3 vai: Agent 0 (kiến trúc, ra addendum khi số đo khác kỳ vọng) · Agent 1 (soát code) ·
   Agent 2 (chạy trên M6). Sub-agent khi được giao việc **không tự commit** — trả file + cách chạy cho phiên chính.
 
-## 7. Hiện trạng (13/10/2026, sau commit `09ff10d`)
+## 7. Hiện trạng (14/10/2026 sáng)
 
-- **Xong**: R2 (weak label lai 98,3%) · **T2.1** (`seg_durations`, 0 lỗi bất biến trên 299.370 âm tiết) ·
-  **R5a/R5b** (stats cấp segment, `data/codelung/f0_stats_v2.json`) · **Addendum 6** (mask F0 theo lớp onset;
-  `vuv` không đủ tin cho O) · **R6** (phonation: hnr 0,869 · jitter 0,864 · glottalization 0,763 —
-  tilt/aper rớt) · **R4** (`models/slot_ops.py` đóng băng + 1e5 bất biến + parity ONNX) ·
-  **T2.2 nền tảng** (`data/v2_targets.py`) · **cache v3** (đã build + verify 100%, `tools/verify_cache_v3.py`) ·
-  **task 5 đợt 1** (`models/v2_slot5.py` + `models/factory.py` + 8 test gồm ONNX parity) ·
-  **đợt 2** (dataset v2 + loss v2 + export/runtime rẽ nhánh `arch`; sửa bug lệch tên output v1 postnet) ·
-  **đợt 3** (`train_v2.py` + CLI `train-v2` + 2 bug kernel MPS đã vá/tránh — §25).
-- **Đang chạy**: train v2 (`runs/v2_slot5`, warm-start B0, 20k bước ≈ 1,5 h) → cổng §11 (mel hữu thanh
-  giai đoạn A không tệ hơn B0 quá 20%).
-- **Song song**: eval v2 (`tf_seg`/`tf_syl`/`free` + mask Addendum 6 + F0 theo thanh) — subagent.
+- **Xong (v2)**: R2/T2.1/R5a/R5b/Addendum 6/R6/R4/T2.2 · cache v3 (verify 100%) · **task 5** (model
+  `v2_slot5` + dataset/loss/trainer/export/runtime) · **eval v2** (§24–§29) · **small đạt ngưỡng**:
+  `runs/acoustic_v2_b8` (batch 8, 60k; best @46k; mel_z 1,1603 · CER 0,198) · **BASE 40k**
+  `runs/acoustic_v2_base` (best 18k/val · **last 40k = bản chính theo tai user**: mel_z 1,1411 ·
+  dB 8,51 · F0 NGÃ 177 · **thanh C 0,798 ≈ thật 0,799** · 6 thanh phân biệt được) · **4 thước đo**
+  (§`docs/EVAL_TOOLS.md`): L1 + **độ nét `val_rough`** + **thanh `tone_ruler` (0,762 trần thật)** +
+  **rè `eval_creak`** (+ CER holdout). Code thêm: `train_v2` early-stop + `val_rough`; loss
+  **`tone_disc`** (CE phân biệt thanh, mặc định tắt); tool `tone_ruler`/`eval_creak`/`eval_tone_paths`.
+- **Đang chạy**: extension acoustic **40k→60k** (`runs/acoustic_v2_base_60k`, cosine mới tới 60k,
+  đo `val_rough` từng mốc) · **GTA Vocos** (sub-agent; §39: GTA nhắm phần *jitter* của rè).
+- **Chốt kỹ thuật mới**: chọn checkpoint cuối = **L1 + độ nét + thanh + rè + CER + tai**, KHÔNG chỉ L1
+  (§37); patience **0** cho lịch cosine dài (§32.1); batch 8 bắt buộc + `SameNBatchSampler`.
 - **Bẫy MPS đã gặp (đừng quên)**: SDPA+dropout cần grad; `ConvPredictor` backward N=1 abort → lọc
-  `min_syllables=2` khi train; mọi test N=1-backward **không** được chạy trên MPS (giết tiến trình pytest).
+  `min_syllables=2` khi train; mọi test N=1-backward **không** được chạy trên MPS (giết tiến trình pytest);
+  watchdog phải đặt **cả** HIGH+**LOW** watermark; `torch.onnx.export` v2 cần `no_grad` + submodule wrapper.
+- **Bẫy quy trình**: upload demo phải **test tải**; đo bằng **hàm chuẩn của repo** (tự chế transform từng
+  sai chuẩn hoá — §33.2); thước yếu che mất kết luận (§34.3 → §36.4).

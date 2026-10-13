@@ -11,6 +11,12 @@
 
 ### 1.1 Cần bao nhiêu audio?
 
+> ⚠️ **CHỈ THAM KHẢO (từ 14/10/2026)**: các con số "quy tắc ngón tay" (<5h → small; 5–30h → base;
+> ≥40h → large) là *heuristic nội bộ*, **không** suy từ dữ liệu của dự án và không liên quan ngôn ngữ.
+> Từ §30/§37 của `docs/ACOUSTIC_V2.md`, **số đo thực tế là trọng tài**: 17,1h đã chạy được **base 16,4M**
+> tới 40k bước; chọn checkpoint theo **L1 + độ nét + thanh + rè + CER + tai** (xem `docs/EVAL_TOOLS.md`).
+
+
 | Mục tiêu | Dữ liệu (một người nói) | Kỳ vọng |
 | --- | --- | --- |
 | Chạy thử / demo kỹ thuật | **1–3 giờ** | Nghe rõ từ nhưng đều đều, dễ méo thanh điệu hiếm |
