@@ -598,3 +598,43 @@ trọng số prior / dùng phonation cho creak).
 đo lại bằng harness này) → **chỉ fine-tune Vocos khi** khoảng cách model-mel↔mel-thật vẫn lớn *kèm*
 recall/CER kém đi (fine-tune 2 bước: mel thật → GTA mel sinh). Không train lại vocoder nhỏ từ đầu
 (lite kém ~20×, cần nhiều ngày M6; RTF hiện đã tốt 0,007 khi cần bản nhẹ sẽ tính sau).
+
+## 28. T4.1 + điều tra "vì sao chưa rõ" (13/10/2026)
+
+### 28.1 Run làm nét mel (5d) — làm được gì, không được gì
+
+Loss `mel_sharp` = khớp **chênh lệch liền kề** (thời gian + tần số) fake↔real — thay cho adversarial
+(đã thử: phân kỳ ở batch 1 kể cả sau spectral norm/BCE/ramp; **giữ trong code nhưng tắt**).
+11k bước (27k→38k), best val mel hữu thanh **0,6368** (5c: 0,6397):
+
+| | 5c | 5d | mốc |
+|---|---|---|---|
+| Gồ ghề (fake/thật) | 0,354 | **0,331** | 1,0 |
+| mel_l1 ↔ mel thật | 1,334 | 1,336 | — |
+| Voiced recall (mel model → Vocos) | 0,825 | **0,853** | 0,935 |
+
+→ **Loss phía acoustic gần hết dư địa cho độ nét** (giảm 6,5% so với khoảng cách 67%).
+
+### 28.2 Tai người (user) vs số đo — khớp nhau
+
+| Clip demo | CER (Whisper) | Nhận xét |
+|---|---|---|
+| Hội thoại | **0,051** | chữ gần đúng hết; "mang máng" là do **timbre đục** |
+| Câu dài | 0,180 | đa số đúng chữ |
+| **6 thanh "ma…mạ"** | **0,865** | **không ngữ cảnh** ⇒ đo trực tiếp **độ rõ dấu** (điểm yếu đã biết) |
+
+### 28.3 Điều tra giả thuyết (user: "từ hay gặp thì rõ hơn")
+
+- Tần suất 2.567 âm tiết train: "cái" 9.050 · "là" 9.049 · **"mình" 8.737** (top 3) …
+- Lỗi mel tf_seg trên 2.460 âm tiết val: hiếm (<p25) **0,617** · vừa 0,590 · hay gặp (>p75) **0,563**;
+  Spearman(log-freq, lỗi) = **−0,148** → **có thật nhưng yếu** (hiếm lỗi hơn ~9,6%).
+- **Không overfit**: loss train (~0,5–0,7) ≈ val (0,64); val còn giảm nhẹ tới cuối run ⇒ thiếu **bước**
+  và/hoặc **dung lượng**, không phải học vẹt.
+- Ảnh hưởng ưu tiên: **bước (chắc chắn)** · **dung lượng (cần thử)** · **đa dạng dữ liệu (nhỏ, cần thêm nguồn)**.
+
+### 28.4 Kế hoạch acoustic-only (user chốt: **không fine-tune Vocos**)
+
+1. **Kéo dài 38k → 60k** (`runs/acoustic_v2_slot5e`, cosine mới) — trả lời "chưa đủ bước".
+2. **Medium (hidden 256, `configs/small_codelung_v2_medium.yaml`)**: đo s/bước rồi probe 1–2k bước để so
+   đường loss khởi đầu với small → nếu khả quan mới chạy dài (2–3× chậm).
+3. **Dữ liệu** (tuỳ chọn, cần nguồn từ user): `youtube-fetch` để tăng độ phủ; giữ gate metric như cũ.
