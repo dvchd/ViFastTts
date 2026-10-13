@@ -391,13 +391,18 @@ def evaluate_tf_v2(model, dataset, config: dict, *, use_seg: bool,
 
 
 def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
-                     limit: int | None = None, speed: float = 1.0) -> dict:
+                     limit: int | None = None, speed: float = 1.0,
+                     wav_dir: str | Path | None = None) -> dict:
     """Free-run v2 thuần: model tự dự đoán durations/slot (không cho gì ngoài features).
 
-    Mel/F0 đo trên vùng overlap với target thật + `length_ratio`; CER = None
-    (`Synthesizer` chỉ hỗ trợ v1 nên không có waveform để Whisper chấm).
+    Mel/F0 đo trên vùng overlap với target thật + `length_ratio`; CER chấm qua
+    waveform (tổng hợp text bằng chính model + vocoder dựng từ config — cùng cơ
+    chế `Synthesizer.synthesize`/`_transcribe`/`_char_cer` của free v1).
+    `cer=None` + `cer_note` khi thiếu `text` trong manifest, row không parse được,
+    hoặc thiếu faster-whisper (không crash). RTF chỉ tính forward acoustic.
     """
     import resource
+    import tempfile
     import time
 
     import torch
@@ -486,7 +491,7 @@ def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
         })
 
     rss_gib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**30  # macOS: bytes
-    return {
+    summary: dict = {
         "mode": "free", "arch": "v2_slot5", "speed": float(speed),
         "clips": len(per_clip), "clip_ids": [entry["id"] for entry in per_clip],
         "device": device, "rtf_backend": "pytorch-cpu",
@@ -502,12 +507,51 @@ def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
         "energy_mae": round(float(np.mean(energy_errors)), 4) if energy_errors else None,
         "energy_note": V2_ENERGY_NOTE,
         "duration_mae_frames": _quantiles(duration_errors),
-        "cer": None,
-        "cer_note": "bỏ qua CER: Synthesizer/vocoder chỉ hỗ trợ v1 (không có waveform)",
         "rtf": round(total_time / max(total_audio, 1e-9), 4),
         "ram_peak_gib": round(rss_gib, 2),
         "per_clip": per_clip,
     }
+
+    # ── CER qua waveform (sau vòng đo acoustic để không lẫn vào RTF) ──────────
+    by_id = {entry["id"]: entry for entry in per_clip}
+    text_rows = [dataset.rows[index] for index in range(count)
+                 if str(dataset.rows[index].get("text") or "").strip()]
+    if not text_rows:
+        summary["cer"] = None
+        summary["cer_note"] = "bỏ qua CER: manifest thiếu `text`"
+    else:
+        whisper = _load_whisper()
+        if whisper is None:
+            summary["cer"] = None
+            summary["cer_note"] = "bỏ qua CER: thiếu faster-whisper"
+        else:
+            if wav_dir is None:
+                tmp = tempfile.TemporaryDirectory(prefix="v2_free_wavs_")
+                directory = Path(tmp.name)
+            else:
+                tmp = None
+                directory = Path(wav_dir)
+            try:
+                wav_paths = _synthesize_free_v2_wavs(model, config, text_rows, directory,
+                                                     device, speed)
+                scored: list[float] = []
+                for row, path in zip(text_rows, wav_paths):
+                    if path is None:
+                        continue  # text không parse ra âm tiết nào
+                    cer_value, whisper_text = _score_transcript(
+                        row["text"], _transcribe(whisper, path))
+                    by_id[row["id"]]["cer"] = cer_value
+                    by_id[row["id"]]["whisper"] = whisper_text
+                    scored.append(cer_value)
+            finally:
+                if tmp is not None:
+                    tmp.cleanup()
+            if scored:
+                summary["cer"] = _quantiles(scored)
+            else:
+                summary["cer"] = None
+                summary["cer_note"] = "bỏ qua CER: không có row nào parse ra âm tiết"
+    return summary
 
 
 def run_tf_v2(args, config: dict, *, use_seg: bool) -> dict:
@@ -525,14 +569,15 @@ def run_tf_v2(args, config: dict, *, use_seg: bool) -> dict:
 
 
 def run_free_v2(args, config: dict) -> dict:
-    """Dựng `SlotDataset` + model v2 rồi chạy `evaluate_free_v2` (acoustic, không CER)."""
+    """Dựng `SlotDataset` + model v2 rồi chạy `evaluate_free_v2` (acoustic + CER qua waveform)."""
     from vifasttts.data.dataset_v2 import SlotDataset
 
     f0_stats = resolve_f0_stats(args.checkpoint, config, getattr(args, "f0_stats", None))
     dataset = SlotDataset(args.manifest, config, f0_stats, cache_dir=args.cache_dir)
     model, _ = load_eval_model(args.checkpoint, config, f0_stats=f0_stats)
     summary = evaluate_free_v2(model, dataset, config, device=args.device,
-                               limit=args.clips, speed=getattr(args, "speed", 1.0))
+                               limit=args.clips, speed=getattr(args, "speed", 1.0),
+                               wav_dir=Path(args.out).parent / "free_wavs")
     summary["checkpoint"] = args.checkpoint
     summary["manifest"] = args.manifest
     return summary
@@ -560,6 +605,51 @@ def _transcribe(whisper, path: Path) -> str:
     return " ".join(segment.text for segment in segments).strip()
 
 
+def _score_transcript(reference: str, hypothesis: str) -> tuple[float, str]:
+    """CER + hypothesis rút gọn cho một clip (dùng chung free v1/v2 — cùng công thức)."""
+    return round(_char_cer(reference, hypothesis), 4), hypothesis[:200]
+
+
+def _synthesize_free_v2_wavs(model, config: dict, rows: list[dict], wav_dir: Path,
+                             device: str, speed: float) -> list[Path]:
+    """Text → WAV bằng model v2 đã nạp + vocoder dựng từ config (cơ chế như `Synthesizer`).
+
+    Mỗi row cần `text` parse được (row không có âm tiết nào thì bỏ qua, giữ thứ tự
+    bằng `None`). Model chạy một forward có `speed` trong graph (khớp `_render` v2).
+    """
+    import torch
+
+    from vifasttts.frontend.pipeline import parse_text
+    from vifasttts.frontend.vocab import ComponentVocabs
+    from vifasttts.infer import write_wav
+    from vifasttts.models.istftnet import build_generator
+
+    vocabs = ComponentVocabs.default()
+    device_t = torch.device(device)
+    vocoder = build_generator(config.get("vocoder_training", {}), config["mel"])
+    vocoder.to(device_t)
+    vocoder.eval()
+    model.eval()
+    speed_t = torch.tensor([float(speed)], dtype=torch.float32, device=device_t)
+    wav_dir.mkdir(parents=True, exist_ok=True)
+    paths: list[Path] = []
+    with torch.no_grad():
+        for row in rows:
+            items = parse_text(row["text"])
+            if not items:
+                paths.append(None)  # type: ignore[arg-type]
+                continue
+            features = torch.tensor([[vocabs.encode(item) for item in items]],
+                                    dtype=torch.long, device=device_t)
+            mel = model(features, speed=speed_t)["mel"][0]
+            waveform = vocoder(mel.unsqueeze(0))[0]
+            target = wav_dir / f"{row.get('id', 'clip')}.wav"
+            write_wav(target, waveform.detach().cpu(),
+                      int(config.get("sample_rate", 24000)))
+            paths.append(target)
+    return paths
+
+
 def run_free(args, config: dict) -> dict:
     """Free-run: text → acoustic → vocoder; đo CER (Whisper), RTF, RAM (PyTorch CPU)."""
     import resource
@@ -584,11 +674,12 @@ def run_free(args, config: dict) -> dict:
         total_audio += audio_seconds
         total_time += elapsed
         hypothesis = _transcribe(whisper, target) if whisper is not None else ""
+        cer, whisper_text = _score_transcript(row["text"], hypothesis)
         per_clip.append({
             "id": row["id"], "audio_seconds": round(audio_seconds, 3),
             "synth_seconds": round(elapsed, 3),
-            "cer": round(_char_cer(row["text"], hypothesis), 4),
-            "whisper": hypothesis[:200],
+            "cer": cer,
+            "whisper": whisper_text,
         })
         print(f"  [free] {row['id']} · {audio_seconds:.1f}s · CER {per_clip[-1]['cer']:.3f}")
 
@@ -653,7 +744,9 @@ def main() -> None:
         if summary.get("arch") == "v2_slot5":
             print(f"  {summary['clips']} clip · mel {summary['mel_mae_db']['mean']:.1f} dB "
                   f"· length_ratio {summary['length_ratio']['mean']:.3f} "
-                  f"· CER bỏ qua ({summary['cer_note']})")
+                  + (f"· CER TB {summary['cer']['mean']:.3f}"
+                     if summary.get("cer") is not None
+                     else f"· CER bỏ qua ({summary['cer_note']})"))
             print(f"  VUV acc {summary['vuv_accuracy']:.3f} "
                   f"· duration MAE {summary['duration_mae_frames']['mean']:.1f} frame "
                   f"· RTF acoustic {summary['rtf']:.3f} · RAM đỉnh {summary['ram_peak_gib']:.2f} GiB")

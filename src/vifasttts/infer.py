@@ -34,11 +34,32 @@ def write_wav(path: str | Path, waveform, sample_rate: int = 24000) -> None:
         fh.writeframes(pcm.tobytes())
 
 
+#: f0_stats mặc định của repo khi checkpoint v2 thiếu (khớp `tools/eval_acoustic.py`).
+V2_DEFAULT_F0_STATS = "data/codelung/f0_stats_v2.json"
+
+
+def _v2_f0_stats_fallback(config: dict) -> dict | None:
+    """f0_stats cho v2 khi checkpoint thiếu: `config f0_stats_path` → mặc định repo."""
+    import json
+
+    for candidate in (config.get("f0_stats_path"), V2_DEFAULT_F0_STATS):
+        if candidate and Path(candidate).exists():
+            return json.loads(Path(candidate).read_text(encoding="utf-8"))
+    return None
+
+
 class Synthesizer:
     """Giữ model + vocoder đã nạp để tổng hợp nhiều câu (batch/server/streaming).
 
-    `iter_synthesize` yield từng đoạn waveform numpy (kèm khoảng nghỉ giữa câu)
-    — dùng cho streaming hoặc server; `synthesize` ghép lại + hậu xử lý + ghi WAV.
+    Hỗ trợ cả hai `arch` (đọc từ checkpoint bằng `arch_of_checkpoint`):
+    - v1 (`v1_syl`, checkpoint thiếu `arch`): `_render` giữ hành vi cũ — 2 forward
+      khi speed≠1 (forward 1 lấy durations, scale rồi forward 2).
+    - v2 (`v2_slot5`): `_render` chỉ **một** forward `model(features, speed=[speed])`
+      (speed float32 `[1]` nằm trong graph, model tự scale d_syl + gap —
+      docs/ACOUSTIC_V2.md §5; mel ra đã gồm khoảng nghỉ G trong câu).
+
+    `iter_synthesize`/`synthesize` giữ nguyên API nên CLI `synthesize`,
+    `synthesize-batch`, `serve` (đi qua `Synthesizer`) tự có v2.
     """
 
     def __init__(
@@ -58,8 +79,8 @@ class Synthesizer:
         from vifasttts.data.features import canonical_mel_config, verify_mel_hash
         from vifasttts.device import resolve_device
         from vifasttts.frontend.vocab import ComponentVocabs
+        from vifasttts.models.factory import ARCH_V2, arch_of_checkpoint, build_model
         from vifasttts.models.istftnet import build_generator, load_generator_state
-        from vifasttts.models.vifasttts import ViFastTtsModel
 
         validate_config(config, "acoustic")
         self.config = config
@@ -69,10 +90,25 @@ class Synthesizer:
         sizes = [len(self.vocabs.onset), len(self.vocabs.medial), len(self.vocabs.nucleus),
                  len(self.vocabs.coda), len(self.vocabs.tone), len(self.vocabs.boundary),
                  len(self.vocabs.punctuation)]
-        self.model = ViFastTtsModel(config, sizes)
         state = torch.load(checkpoint, map_location="cpu")
         verify_mel_hash(state, canonical_mel_config(config), str(checkpoint))
+        self.arch = arch_of_checkpoint(state if isinstance(state, dict) else {})
+        self.model = build_model(config, sizes, arch=self.arch)
         self.model.load_state_dict(state.get("model", state))
+        if self.arch == ARCH_V2 and hasattr(self.model, "load_f0_stats"):
+            stats = state.get("f0_stats") if isinstance(state, dict) else None
+            if stats is None:
+                stats = _v2_f0_stats_fallback(config)
+            if stats is not None:
+                self.model.load_f0_stats(dict(stats))
+            else:
+                warnings.warn(
+                    "Checkpoint v2 thiếu f0_stats và không tìm thấy "
+                    f"`f0_stats_path`/`{V2_DEFAULT_F0_STATS}` — dùng hằng số mặc định "
+                    "của model (cao độ có thể lệch).",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
         self.model.to(self.device)
         self.model.eval()
 
@@ -99,8 +135,14 @@ class Synthesizer:
         self.vocoder.eval()
 
     def _render(self, text: str, dialect: str, speed: float, options) -> np.ndarray | None:
-        """Tổng hợp một đoạn: parse → model → vocoder; None nếu đoạn không có âm tiết."""
+        """Tổng hợp một đoạn: parse → model → vocoder; None nếu đoạn không có âm tiết.
+
+        v2 (`v2_slot5`): **một** forward `model(features, speed=[speed])` — speed
+        nằm trong graph (§5); v1: giữ hành vi cũ (2 forward khi speed≠1).
+        """
         import torch
+
+        from vifasttts.models.factory import ARCH_V2
 
         items = parse_text(text, dialect=dialect, options=options)
         if not items:
@@ -109,11 +151,15 @@ class Synthesizer:
             [[self.vocabs.encode(item) for item in items]], dtype=torch.long, device=self.device,
         )
         with torch.no_grad():
-            outputs = self.model(features)
-            if speed != 1.0:
-                durations = torch.round(outputs["durations"].float() / max(speed, 1e-3)).clamp_min(1).long()
-                outputs = self.model(features, durations=durations)
-            mel = outputs["mel"][0]
+            if self.arch == ARCH_V2:
+                speed_t = torch.tensor([float(speed)], dtype=torch.float32, device=self.device)
+                mel = self.model(features, speed=speed_t)["mel"][0]
+            else:
+                outputs = self.model(features)
+                if speed != 1.0:
+                    durations = torch.round(outputs["durations"].float() / max(speed, 1e-3)).clamp_min(1).long()
+                    outputs = self.model(features, durations=durations)
+                mel = outputs["mel"][0]
             waveform = self.vocoder(mel.unsqueeze(0))[0]
         return np.asarray(waveform.cpu().numpy(), dtype=np.float32)
 
