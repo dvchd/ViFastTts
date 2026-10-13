@@ -761,3 +761,42 @@ Loss `mel_sharp` = khớp **chênh lệch liền kề** (thời gian + tần s�
   → **40.000 bước ≈ 33 epoch**, cosine 40k, val 300 clip (SE ±0,0046), `early_stop_patience: 5`, tự resume khi crash.
 - Giả thuyết cần đo: base giảm val **> nhiễu** so small 0,6267 ⇒ dung lượng là nút thắt → cân nhắc large;
   base **overfit nhanh** (gap phình) ⇒ **dữ liệu là nút thắt** → xin thêm nguồn (17,1h hiện tại có trần).
+
+## 32. Chẩn đoán "dùng thực tế được chưa" + dư địa cải tiến (14/10/2026, đang chạy base)
+
+### 32.1 Base đang thắng small rõ (giữa lịch trình)
+
+| Mốc base | val mel hữu thanh |
+|---|---|
+| 17k | 0,6067 |
+| **18k** | **0,5777** (best) |
+| 19k–25k | 0,5833–0,5968 (đi ngang/nhích nhẹ) |
+
+- So small best **0,6267** → base **−7,8%** ⇒ **dung lượng 6,1M đúng là nút thắt macro**.
+- **Bài học early-stop (§30.1) — bản sửa**: val "chững" ở 18k nhưng **LR lúc đó còn 1,2e-4**
+  (45% schedule). Với lịch cosine, chững *trước* khi LR anneal xong **không** phải hội tụ ⇒
+  `early_stop_patience` phải **TẮT (0)** cho run cosine dài; chỉ dùng khi LR đã cạn.
+  (Đã sửa: config base patience 0; watchdog **tôn trọng `early_stop.json`** — trước đó vòng
+  watchdog × patience gây "resume 1k bước/lần".)
+
+### 32.2 ĐO độ "gồ ghề" mel: dung lượng KHÔNG sửa được texture (12 clip val, CPU)
+
+| Nguồn mel | \|Δ_t\| (% thật) | \|Δ_f\| (% thật) |
+|---|---|---|
+| Thật | 0,3897 | 0,3483 |
+| small b8 (6,1M) | 39,6% (mượt hơn 60%) | 31,6% (mượt hơn 68%) |
+| **base 16,4M @18k** | **39,8%** (mượt hơn 60%) | **34,5%** (mượt hơn 65%) |
+
+⇒ **Base cải thiện macro** (val −7,8%) **nhưng texture gần như không đổi**. Nghĩa là:
+- "Nghe mượt/thiếu thật" **không phải** do model nhỏ; do **hàm mục tiêu** (L1 log-mel → lấy trung bình
+  có điều kiện = làm mượt) + **dữ liệu** (17,1h nhiều nguồn → trung bình càng mờ), không do dung lượng.
+- ⇒ Thang dư địa (đo được, không đoán):
+  1. **GTA fine-tune Vocos** (2–5k bước ≈ 30–55 phút): học *đảo* độ mượt hệ thống — **đòn rẻ nhất
+     trúng texture** (Vocos với mel thật chỉ 0,107/recall 93,5% ⇒ nó không phải nút thắt, nhưng
+     *fine-tune trên mel model* thì bù được méo hệ thống). Cổng: fidelity harness + CER + thanh + tai.
+  2. **Adversarial ở batch 8**: buộc mel *tự* có texture (batch 1 đã phân kỳ; batch 8 ổn định hơn).
+  3. **Dữ liệu**: texture + dấu hiếm — nút thắt dài hạn (17,1h là ít cho TTS).
+  4. **large 32M**: thêm macro/phủ, ít tác dụng texture (theo bảng trên).
+  5. Tăng trọng số `mel_sharp` (knob rẻ, kỳ vọng nhỏ: 0,354→0,331 trước đây).
+- Ghi chú dùng thực tế: CER free 0,198 (holdout) = đọc *hiểu được nhưng đục*; muốn "dùng được"
+  cho một giọng cụ thể → **fine-tune 1 speaker** (vài giờ dữ liệu sạch) là đòn lớn nhất/giờ công.

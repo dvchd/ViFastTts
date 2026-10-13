@@ -74,7 +74,8 @@ training:
   log_every: 50
   validate_every: 1000
   validate_batches: 300  # val 300 clip → SE chọn best ≈ ±0,0046 (40 clip: ±0,0126 — nhiễu che mất cải thiện)
-  early_stop_patience: 5 # dừng khi val không cải thiện 5 mốc (5k bước)
+  early_stop_patience: 0 # TẮT cho lịch cosine dài: val chững ở 45% schedule (LR còn 1,2e-4) là
+                         # BÌNH THƯỜNG, phải để cosine chạy hết mới biết best (bài học §32)
   save_every: 1000
   num_workers: 0         # batch 1 + cache đọc trực tiếp; nhiều worker dễ trùng đọc cache
   mixed_precision: false

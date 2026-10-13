@@ -24,6 +24,11 @@ for attempt in $(seq 1 60); do
     echo "[watch $(date '+%H:%M')] đạt $STEP >= $MAX — kết thúc" >> "$LOG"
     break
   fi
+  # Trainer đã tự quyết dừng sớm (patience) → TÔN TRỌNG, không resume lại (nếu không sẽ lặp 1k bước/lần).
+  if [ -f "$OUT/early_stop.json" ]; then
+    echo "[watch $(date '+%H:%M')] có early_stop.json — trainer đã dừng sớm, kết thúc" >> "$LOG"
+    break
+  fi
   echo "[watch $(date '+%H:%M')] lần $attempt: resume từ $STEP → $MAX" >> "$LOG"
   if [ "$STEP" -gt 0 ]; then
     .venv/bin/vifasttts train-v2 --config "$CONFIG" --train-manifest "$TRAIN" \
