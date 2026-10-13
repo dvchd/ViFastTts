@@ -368,3 +368,25 @@ Tool: `tools/r6_phonation.py` · 100 clip (seed 42) · dương = ngã+nặng (44
   chung thư mục `cache/codelung_v2`).
 - Ghi chú vận hành: `jitter` tái dùng `f0/vuv` sẵn có (không harvest lần hai); `extract_features`
   truyền f0/vuv vào `extract_phonation_frames` — xem `tests/test_phonation_r6.py` (6 test).
+
+## 21. R4 — đóng băng `models/slot_ops.py` (13/10/2026)
+
+Interface ba hàm, thuần torch (ONNX-export được, không vòng lặp động / không argsort):
+
+| Hàm | Chữ ký | Nội dung |
+|---|---|---|
+| `distribute_slots` | `([B,N] long, [B,N,4] float, [B,N,4]) → [B,N,4] long` | B2: k=min(d_syl,n_act) frame cho slot active ưu tiên **N,O,C,M**; dư chia theo ratio (floor + largest remainder); hòa phá theo chỉ số role (O,M,N,C) |
+| `slot_positions` | `([B,S] long, gap_mask?, max_frames?) → [B,T] float` | `(t+0,5)/n` trong từng slot; slot G = 0 |
+| `build_f0_contour` | `([B,S,4], [B,S] long, [B,T]) → [B,T]` | §6: `f = s0 + √2 Σ s_k cos(πk·pos)` |
+
+- Xếp hạng bằng **ma trận so sánh 4×4 + sum** (đúng yêu cầu B2) — không TopK/argsort động.
+- **Test** (`tests/test_slot_ops.py`, 9 test): bất biến trên **1e5 mẫu ngẫu nhiên** (Σ == d_syl ·
+  inactive = 0 · active ≥ 1 khi đủ frame · thứ tự ưu tiên khi thiếu frame · hòa phá tất định ·
+  ratio chưa softmax vẫn bất biến); `slot_positions`/`build_f0_contour` khớp `idct4_frames` và
+  `s0 == mean`; **parity Torch == ONNX** (opset 18, `dynamo=False`, chạy 2 lần byte-identical).
+- `frontend/segments.py:distribute_frames` cập nhật **cùng thứ tự ưu tiên B2** (N,O,C,M) —
+  test `test_distribute_frames_frontend_cung_uu_tien_b2`.
+- Bug đã bắt khi test 1e5: mask `active` ở trục sai trong ma trận so sánh (che nhầm trục j) —
+  sửa `unsqueeze(-2)`; nếu chỉ chạy vài ca nhỏ đã có thể lọt.
+- Runtime speed (§5): `d_syl' = max(1, round(d_syl/speed))` rồi gọi lại `distribute_slots`
+  với **cùng ratio** — không cần lưu d_seg.

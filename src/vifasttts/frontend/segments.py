@@ -35,6 +35,9 @@ ROLE_NUCLEUS = "nucleus"
 ROLE_CODA = "coda"
 ROLE_TONE = "tone"
 
+# Ưu tiên cấp frame khi thiếu (B2 — khớp `models/slot_ops.PRIORITY`): N > O > C > M.
+ROLE_PRIORITY = {ROLE_NUCLEUS: 0, ROLE_ONSET: 1, ROLE_CODA: 2, ROLE_MEDIAL: 3}
+
 # Trọng số thời lượng tương đối theo role — prior khởi điểm, hiệu chỉnh
 # bằng forced alignment khi có. Tone không chiếm frame riêng (0.0).
 WEIGHT_ONSET = 0.4
@@ -156,11 +159,12 @@ def expand_text(
 
 
 def distribute_frames(frames: int, segments: Sequence[Segment]) -> list[int]:
-    """Chia `frames` cho segment theo trọng số (phương pháp largest remainder).
+    """Chia `frames` cho segment theo trọng số — **cùng thuật toán B2** với `models/slot_ops`.
 
     - Segment weight 0 (tone) luôn nhận 0 frame.
+    - Thiếu frame: cấp 1 frame cho segment ưu tiên cao nhất theo thứ tự **N, O, C, M** (B2).
     - Nếu đủ frame, mỗi segment dương nhận tối thiểu 1 frame.
-    - Tổng kết quả đúng bằng `frames`; tất định với mọi thứ tự.
+    - Tổng kết quả đúng bằng `frames`; lớn nhất còn dư làm tròn xuống, hòa phá theo vị trí.
     """
     result = [0] * len(segments)
     positives = [index for index, segment in enumerate(segments) if segment.weight > 0]
@@ -168,7 +172,8 @@ def distribute_frames(frames: int, segments: Sequence[Segment]) -> list[int]:
         return result
     count = len(positives)
     if frames < count:
-        for index in positives[:frames]:
+        ordered = sorted(positives, key=lambda i: (ROLE_PRIORITY.get(segments[i].role, 9), i))
+        for index in ordered[:frames]:
             result[index] = 1
         return result
 
