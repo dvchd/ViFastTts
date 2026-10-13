@@ -113,21 +113,23 @@ class ViFastTtsModelV2(nn.Module):
 
     def load_f0_stats(self, stats: dict) -> None:
         """Nạp hằng số từ `f0_stats_v2.json` (§6: hai pass trên s_k, chuẩn hoá theo nucleus)."""
+        device = self.shape_mean.device  # model có thể đã .to(mps) trước khi nạp stats (resume)
         with torch.no_grad():
-            self.shape_mean.copy_(torch.tensor(stats["shape_mean"], dtype=torch.float32))
-            self.shape_std.copy_(torch.tensor(stats["shape_std"], dtype=torch.float32).clamp_min(1e-6))
-            self.f0_log_mean.copy_(torch.tensor(float(stats["f0_log_mean"]), dtype=torch.float32))
-            self.f0_log_std.copy_(torch.tensor(float(stats["f0_log_std"]), dtype=torch.float32).clamp_min(1e-6))
-            self.energy_mean.copy_(torch.tensor(float(stats["energy_mean"]), dtype=torch.float32))
-            self.energy_std.copy_(torch.tensor(float(stats["energy_std"]), dtype=torch.float32).clamp_min(1e-6))
+            to_device = lambda value: torch.tensor(value, dtype=torch.float32, device=device)
+            self.shape_mean.copy_(to_device(stats["shape_mean"]))
+            self.shape_std.copy_(to_device(stats["shape_std"]).clamp_min(1e-6))
+            self.f0_log_mean.copy_(to_device(float(stats["f0_log_mean"])))
+            self.f0_log_std.copy_(to_device(float(stats["f0_log_std"])).clamp_min(1e-6))
+            self.energy_mean.copy_(to_device(float(stats["energy_mean"])))
+            self.energy_std.copy_(to_device(float(stats["energy_std"])).clamp_min(1e-6))
             # prior theo thanh: cùng thang z với head để loss prior so trực tiếp (T3.2)
-            table = torch.zeros(6, 4)
+            table = torch.zeros(6, 4, device=device)
             prior = stats.get("shape_tone_prior") or {}
             for index, tone in enumerate(("NGANG", "HUYEN", "SAC", "HOI", "NGA", "NANG")):
                 entry = prior.get(tone) or {}
                 mean = entry.get("mean") or []
                 if len(mean) == 4:
-                    table[index] = (torch.tensor(mean, dtype=torch.float32) - self.shape_mean) / self.shape_std
+                    table[index] = (to_device(mean) - self.shape_mean) / self.shape_std
             self.tone_prior_z.copy_(table)
 
     # ── tiện ích tensor ────────────────────────────────────────────────────────
