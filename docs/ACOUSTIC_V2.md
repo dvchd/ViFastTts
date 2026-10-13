@@ -854,3 +854,23 @@ NẶNG (154) · HỎI (152)** kém nhất. Small chỉ hơn B0 ở HỎI (−71)
 4. **K=6** cho contour (stats + đầu f0) — kỳ vọng ~30 cent cho NGÃ.
 5. **GTA fine-tune Vocos** (tai user xác nhận `sh15/sh25` tốt hơn rõ) — texture mel giữ dấu tốt hơn.
 6. **Dữ liệu dấu hiếm**: NGÃ chỉ 304 âm tiết val (~5,4k train, 6× ít hơn NGANG) — nút thắt dài hạn.
+
+### 33.5 Bổ sung (sub-agent): độ bám contour — khâu mờ là **mel của model**, không phải Vocos
+
+Tương quan log-F0 harvest ↔ tham chiếu (cùng frame hữu thanh), per cửa sổ / toàn segment:
+
+| Đường | Tương quan cửa sổ | Toàn segment |
+|---|---|---|
+| A: audio thật ↔ f0 thật | **0,888** | **0,977** |
+| B: Vocos(mel thật) ↔ f0 thật | 0,781 | 0,804 |
+| C: free-run ↔ f0 head của model | **0,432** | 0,714 |
+
+- Vocos **bám contour tốt khi mel là mel thật** (0,78–0,80) nhưng bản free-run chỉ bám chính f0 head
+  của model 0,43–0,71 ⇒ **contour mờ đi ở mel do model sinh** (nhánh variance→mel/decoder).
+- **Đính chính số cũ**: "audio 0,19–0,22" là của **run 2 (slot5b)**; trên đúng **b8 = 0,389** (14/36)
+  cùng bộ minimal-pair (f0 head 0,611 = 22/36) ⇒ b8 đã tiến bộ nhưng còn cách head.
+- Cảnh báo: D (f0 head) là **thang thiên vị** (head sinh bằng đúng 4 hệ số DCT mà classifier dùng)
+  → coi là *trần*, không phải bằng chứng độc lập. Bỏ mẫu không đều (A/B bỏ 18%, chủ yếu nucleus cực
+  ngắn: span 3,3 frame khi bỏ vs 9,5 khi chấm) ⇒ so bằng bảng `paired` (n=1106).
+- **Hệ quả kế hoạch**: GTA Vocos = **đòn cảm nhận** (làm rõ cái mel đang có), *không tạo thêm thông tin
+  contour*; muốn dấu rõ phải sửa **từ mel** (loss phân biệt thanh §33.4.3 · K=6 §33.4.4 · dữ liệu §33.4.6).
