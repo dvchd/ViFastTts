@@ -10,7 +10,7 @@
   pipeline train/synthesize/export ONNX.
 - **2264 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
 - **Acoustic v2 (13/10/2026)**: thiết kế **đóng** (Plan + Addendum 1–5) → `docs/ACOUSTIC_V2.md`;
-  preflight M6 **5/5 pass**; B0 (v1) resume 9k→20k đang chạy; test mới mel-contract + punct (7 pass).
+  preflight M6 **5/5 pass**; B0 (v1) đã train + đo xong → `docs/B0_BASELINE.md`; test mới mel-contract + punct (7 pass).
 - **Kết luận chuyên gia (rev.4)** đã chốt toàn bộ A–F và lịch chạy — xem `docs/REVISION_PLAN_V2.md`.
   Đã code xong: mel log-magnitude + chuẩn hoá toàn cục, F0 pyworld, vocoder **MPD đầy đủ + MRD +
   MR-STFT + generator Vocos** (đo 0,659 s/bước MPS), **postnet** (small → 7,38M), VAD nới biên clip (B3),
@@ -221,8 +221,8 @@ d3f2558 Docs: khảo sát G2P/TTS, glossary thuật ngữ, hướng dẫn cấu 
   DCT hệ số hình dạng `s_k`, mask hữu thanh bằng `vuv`, adversarial train-only, warm-start từ B0).
 - **Preflight M6 5/5 pass**: forced 0% lỗi · F1 xác nhận (gap mang vector âm tiết) · LengthRegulator 3/3 ·
   DCT 7/7 (≤4,4e-16) · holdout lead 533/842 (63,3%).
-- **B0 (v1) resume 9k→20k** đang chạy: `runs/small_codelung_v2`, watchdog `tools/watch_train_v2.sh`,
-  log `artifacts/small_codelung/train_v2_full2.log` — mốc so sánh trước khi code v2.
+- **B0 (v1) đã train xong (20k) và đo xong** → `docs/B0_BASELINE.md` (best 8k / last 20k;
+  free CER 0,54 last vs sàn 0,49; phát hiện **f0 chiếm 82% loss** → khuyến nghị log-F0 sớm).
 - **Test mới**: `tests/test_vocos_mel_contract.py` (hợp đồng mel với Vocos — bank ≤6,6e-6, mel ≤1,2e-4,
   round-trip 0,145–0,154) + `tests/test_punct_attachment.py` (4 ca dấu câu) — 7 pass.
 - **Tool mới**: `tools/check_v2_preflight.py` (5 kiểm tra bắt buộc trước khi code tính năng).
