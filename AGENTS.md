@@ -81,8 +81,11 @@
   `vuv` không đủ tin cho O) · **R6** (phonation: hnr 0,869 · jitter 0,864 · glottalization 0,763 —
   tilt/aper rớt) · **R4** (`models/slot_ops.py` đóng băng + 1e5 bất biến + parity ONNX) ·
   **T2.2 nền tảng** (`data/v2_targets.py`) · **cache v3** (đã build + verify 100%, `tools/verify_cache_v3.py`) ·
-  **task 5 đợt 1** (`models/v2_slot5.py` + `models/factory.py` + 8 test gồm ONNX parity).
-- **Tiếp theo (task 5 đợt 2)**: dataset v2 (nối `v2_targets` vào collate) → loss v2 + train (raise khi
-  thiếu `seg_durations`) → `export.py`/runtime rẽ nhánh `arch` + `speed` → eval `tf_seg`/`tf_syl` v2 →
-  warm-start từ B0 (§11) → cổng: mel hữu thanh `tf_syl` không tệ hơn B0 quá 20% rồi so B0 đầy đủ + free CER.
-- **Song song**: `docs/V2_INTEGRATION_CHECKLIST.md` (kiểm kê vị trí cần nhánh v2 + hợp đồng interface cũ).
+  **task 5 đợt 1** (`models/v2_slot5.py` + `models/factory.py` + 8 test gồm ONNX parity) ·
+  **đợt 2** (dataset v2 + loss v2 + export/runtime rẽ nhánh `arch`; sửa bug lệch tên output v1 postnet) ·
+  **đợt 3** (`train_v2.py` + CLI `train-v2` + 2 bug kernel MPS đã vá/tránh — §25).
+- **Đang chạy**: train v2 (`runs/v2_slot5`, warm-start B0, 20k bước ≈ 1,5 h) → cổng §11 (mel hữu thanh
+  giai đoạn A không tệ hơn B0 quá 20%).
+- **Song song**: eval v2 (`tf_seg`/`tf_syl`/`free` + mask Addendum 6 + F0 theo thanh) — subagent.
+- **Bẫy MPS đã gặp (đừng quên)**: SDPA+dropout cần grad; `ConvPredictor` backward N=1 abort → lọc
+  `min_syllables=2` khi train; mọi test N=1-backward **không** được chạy trên MPS (giết tiến trình pytest).

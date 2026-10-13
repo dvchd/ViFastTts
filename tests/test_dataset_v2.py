@@ -156,6 +156,24 @@ def test_getitem_full_clip_khong_frame_range(tmp_path):
     assert item["f0"].shape == (15,) and item["vuv"].shape == (15,)
 
 
+def test_min_syllables_loc_row_n_1(tmp_path):
+    """`min_syllables=2` (train v2): lọc row 1 âm tiết — MPS abort conv backward với N=1."""
+    one_syllable = {**ROW1, "id": "clip__s99", "audio_path": "/khong/ton/tai_n1.wav",
+                    "durations": [5], "gaps": [], "seg_durations": [[2, 0, 2, 1]],
+                    "frame_range": [0, 5], "syllables": ROW1["syllables"][:1]}
+    manifest = tmp_path / "loc.jsonl"
+    manifest.write_text("\n".join(json.dumps(row, ensure_ascii=False)
+                                  for row in (ROW1, ROW2, one_syllable)), encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    for row in (ROW1, ROW2, one_syllable):
+        _write_cache(cache_dir, row)
+    full = SlotDataset(manifest, CONFIG, F0_STATS, cache_dir=cache_dir)
+    filtered = SlotDataset(manifest, CONFIG, F0_STATS, cache_dir=cache_dir, min_syllables=2)
+    assert len(full) == 3 and len(filtered) == 2
+    assert all(len(item["durations"]) >= 2 for item in (filtered[0], filtered[1]))
+
+
 def test_collate_pad_frame_stack_syllable(dataset):
     batch = collate_slot_batch([dataset[0], dataset[1]])
     assert batch["id"] == ["clip__s00", "clip__s01"]

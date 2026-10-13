@@ -42,9 +42,16 @@ class SlotDataset(Dataset):
         config: dict[str, Any],
         f0_stats: dict[str, Any],
         cache_dir: str | Path | None = None,
+        *,
+        min_syllables: int = 1,
     ) -> None:
-        """Nạp manifest + config feature + stats F0; `cache_dir` bật đọc cache."""
-        self.rows = ManifestDataset(manifest).rows
+        """Nạp manifest + config feature + stats F0; `cache_dir` bật đọc cache.
+
+        `min_syllables=2` lọc row 1 âm tiết — MPS abort ở conv backward khi N=1
+        (xem `docs/ACOUSTIC_V2.md` §25); val/eval để mặc định vì chỉ forward.
+        """
+        self.rows = [row for row in ManifestDataset(manifest).rows
+                     if len(row.get("durations") or []) >= min_syllables]
         self.config = config
         self.f0_stats = f0_stats
         self.vocabs = ComponentVocabs.default()

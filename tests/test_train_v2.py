@@ -1,0 +1,126 @@
+"""Test `train_v2.train_slot_v2` — smoke 3 bước (cache giả, CPU) + metadata + freeze giai đoạn A."""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+torch = pytest.importorskip("torch")
+
+from vifasttts.data.cache import feature_cache_key
+from vifasttts.frontend.vocab import ComponentVocabs
+from vifasttts.models.vifasttts import ViFastTtsModel
+from vifasttts.train_v2 import train_slot_v2
+
+MODEL = {
+    "component_dim": 8, "hidden_size": 16, "encoder_layers": 1, "decoder_layers": 1,
+    "attention_heads": 2, "ffn_size": 32, "conv_kernel_size": 3, "dropout": 0.0,
+    "duration_layers": 1, "variance_layers": 1, "use_phonation": True, "use_postnet": True,
+    "role_dim": 4, "segment_mlp_layers": 2,
+}
+CONFIG = {
+    "seed": 0,
+    "sample_rate": 24000,
+    "mel": {"n_fft": 256, "win_length": 256, "hop_length": 64, "n_mels": 20, "f_min": 0, "f_max": 12000},
+    "f0": {"method": "pyworld"},
+    "phonation": {"enabled": True, "channels": ["hnr", "glottalization", "jitter"]},
+    "model": MODEL,
+    "loss_weights": {"mel": 1.0, "mel_pre": 0.2, "duration": 1.0, "ratio": 1.0, "f0": 1.0,
+                     "vuv": 0.5, "energy": 0.5, "phonation": 0.5, "tone": 0.1,
+                     "pause_gate": 0.5, "pause_gap": 0.5},
+    "training": {
+        "batch_size": 1, "learning_rate": 2e-3, "weight_decay": 0.0, "max_steps": 3,
+        "phase_a_steps": 5, "phase_a_lr_scale": 0.25, "phase_b_warmup_steps": 1,
+        "grad_clip": 1.0, "log_every": 1, "validate_every": 2, "validate_batches": 1,
+        "save_every": 1, "num_workers": 0, "device": "cpu",
+    },
+}
+F0_STATS = {
+    "f0_log_mean": 4.8, "f0_log_std": 0.2,
+    "shape_mean": [0.0, 0.0, 0.0, 0.0], "shape_std": [1.0, 1.0, 1.0, 1.0],
+    "energy_mean": 0.0, "energy_std": 1.0,
+}
+
+SYLLABLES = [
+    {"raw": "các", "normalized": "các",
+     "orthography": {"onset": "c", "medial": None, "nucleus": "a", "coda": "c", "tone_location": "a"},
+     "abstract": {"onset": "K", "medial": "NONE", "nucleus": "A", "coda": "C", "tone": "SAC"},
+     "boundaries": {"word_end": True, "phrase_end": False, "sentence_end": False},
+     "status": "VALID", "confidence": 1.0, "punctuation": None},
+    {"raw": "ma", "normalized": "ma",
+     "orthography": {"onset": "m", "medial": None, "nucleus": "a", "coda": None, "tone_location": "a"},
+     "abstract": {"onset": "M", "medial": "NONE", "nucleus": "A", "coda": "N", "tone": "NGANG"},
+     "boundaries": {"word_end": True, "phrase_end": False, "sentence_end": True},
+     "status": "VALID", "confidence": 1.0, "punctuation": None},
+]
+
+
+def _row(row_id: str, start: int, durations: list[int], gaps: list[int],
+         seg: list[list[int]]) -> dict:
+    return {
+        "id": row_id, "audio_path": f"/khong/ton/tai_{row_id}.wav",
+        "frame_range": [start, start + sum(durations) + sum(gaps)],
+        "durations": durations, "gaps": gaps, "seg_durations": seg, "lead_frames": 0,
+        "seg_method": "hybrid", "seg_method_version": "t2.1-hybrid-v1", "seg_weights_hash": "abc",
+        "syllables": SYLLABLES,
+    }
+
+
+def _write_cache(cache_dir, row: dict, config: dict) -> None:
+    start = row["frame_range"][0]
+    frames = row["frame_range"][1] - start
+    length = start + frames
+    torch.manual_seed(0)
+    torch.save({
+        "mel": torch.randn(length, 20),
+        "energy": torch.full((length,), 2.5),
+        "f0": torch.full((length,), 150.0),
+        "vuv": torch.ones(length),
+        "hnr": torch.zeros(length),
+        "glottalization": torch.full((length,), 0.1),
+        "jitter": torch.zeros(length),
+    }, cache_dir / f"{feature_cache_key(row, config)}.pt")
+
+
+def test_train_v2_smoke_va_metadata(tmp_path):
+    rows = [_row("clip__s00", 5, [5, 6], [2], [[2, 0, 2, 1], [2, 0, 2, 2]]),
+            _row("clip__s01", 0, [4, 5], [3], [[1, 0, 2, 1], [2, 0, 1, 2]])]
+    manifest = tmp_path / "train_slot4.jsonl"
+    manifest.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows),
+                        encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    for row in rows:
+        _write_cache(cache_dir, row, CONFIG)
+    stats_path = tmp_path / "f0_stats_v2.json"
+    stats_path.write_text(json.dumps(F0_STATS), encoding="utf-8")
+
+    config = {**CONFIG, "f0_stats_path": str(stats_path),
+              "training": {**CONFIG["training"], "cache_dir": str(cache_dir)}}
+
+    vocabs = ComponentVocabs.default()
+    sizes = [len(vocabs.onset), len(vocabs.medial), len(vocabs.nucleus), len(vocabs.coda),
+             len(vocabs.tone), len(vocabs.boundary), len(vocabs.punctuation)]
+    torch.manual_seed(1)
+    model_v1 = ViFastTtsModel({**config, "model": {**MODEL, "use_phonation": False}}, sizes)
+    warm_path = tmp_path / "b0.pt"
+    torch.save({"model": model_v1.state_dict(), "arch": "v1_syl"}, str(warm_path))
+
+    run_dir = tmp_path / "run"
+    train_slot_v2(config, str(manifest), str(manifest), str(run_dir),
+                  warm_start=str(warm_path), max_steps=3, device="cpu")
+
+    state = torch.load(run_dir / "last.pt", map_location="cpu", weights_only=False)
+    assert state["arch"] == "v2_slot5"
+    assert state["seg_method"] == "hybrid" and state["seg_method_version"] == "t2.1-hybrid-v1"
+    assert state["seg_weights_hash"] == "abc"
+    assert state["f0_stats_hash"] and state["f0_stats"] == F0_STATS
+    assert state["warm_start_from"]  # hash B0
+    assert "optimizer" in state and int(state["step"]) == 3
+    assert (run_dir / "best.pt").exists() and (run_dir / "history.csv").exists()
+    # Giai đoạn A (phase_a_steps=5 > 3 bước): embedding phải giữ nguyên từ warm-start
+    reference = model_v1.state_dict()
+    assert torch.equal(state["model"]["embedding.proj.weight"], reference["embedding.proj.weight"])
+    # module mới của v2 có trọng số khác 0 (đã khởi tạo, không copy từ v1)
+    assert float(state["model"]["role_emb.weight"].abs().sum()) > 0

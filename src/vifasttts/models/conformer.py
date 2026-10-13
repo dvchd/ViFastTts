@@ -9,7 +9,6 @@ from __future__ import annotations
 import math
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 MAX_POSITIONS = 4096
@@ -66,11 +65,20 @@ class SelfAttention(nn.Module):
         if padding_mask is not None:
             neg = torch.zeros(batch, 1, 1, frames, dtype=x.dtype, device=x.device)
             bias = neg.masked_fill((~padding_mask)[:, None, None, :], torch.finfo(x.dtype).min)
-        attended = F.scaled_dot_product_attention(
-            query, key, value,
-            attn_mask=bias,
-            dropout_p=self.dropout if self.training else 0.0,
-        )
+        # MPS: SDPA không hỗ trợ dropout khi đầu vào không requires_grad (đúng ca giai đoạn A
+        # đóng băng embedding/encoder của v2 — đã đo thật) → dùng attention viết tay khi train.
+        if self.training and self.dropout > 0 and query.device.type == "mps":
+            scores = torch.matmul(query * (1.0 / math.sqrt(self.head_dim)), key.transpose(-2, -1))
+            if bias is not None:
+                scores = scores + bias
+            weights = torch.softmax(scores, dim=-1)
+            attended = torch.matmul(torch.nn.functional.dropout(weights, p=self.dropout, training=True), value)
+        else:
+            attended = torch.nn.functional.scaled_dot_product_attention(
+                query, key, value,
+                attn_mask=bias,
+                dropout_p=self.dropout if self.training else 0.0,
+            )
         attended = attended.transpose(1, 2).reshape(batch, frames, self.hidden)
         result: torch.Tensor = self.out(attended)
         return result

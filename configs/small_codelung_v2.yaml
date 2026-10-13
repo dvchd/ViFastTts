@@ -57,13 +57,14 @@ model:
   use_postnet: true   # F2: 5 lớp conv residual làm nét mel (+1,24M tham số); loss dùng cả mel trước
 
 training:
-  batch_size: 16
+  batch_size: 1           # v2: collate yêu cầu **cùng N** trong batch (xem dataset_v2) → batch 1
   learning_rate: 0.0002
   weight_decay: 0.0001
   max_steps: 60000
-  warmup_steps: 6000
-  # val chững từ ~5k bước (LR hằng số) → giảm cos từ warmup tới 5% base_lr ở bước cuối.
-  # Lưu ý: áp dụng từ lần restart chunk kế tiếp (không ảnh hưởng phần đã train).
+  phase_a_steps: 2000        # §11: đóng băng embedding/encoder/duration, LR 0.25×
+  phase_a_lr_scale: 0.25
+  phase_b_warmup_steps: 2000 # §11: mở khóa → warm-up LR lên base rồi cosine
+  warmup_steps: 6000         # (v1) — train-v2 không dùng
   lr_schedule: cosine
   min_lr_ratio: 0.05
   lr_decay_steps: 60000   # mốc cuối TOÀN CỤC cho cosine (không phải mốc cuối mỗi khối)
@@ -73,11 +74,13 @@ training:
   validate_every: 1000
   validate_batches: 40   # MPS: validation dài làm phình bộ nhớ Metal → lấy 40 batch
   save_every: 1000
-  num_workers: 6
-  mixed_precision: true
+  num_workers: 0         # batch 1 + cache đọc trực tiếp; nhiều worker dễ trùng đọc cache
+  mixed_precision: false
   device: auto
   cache_features: false
-  cache_dir: cache/codelung_v2   # dựng lại theo mel v2 (Vocos) + loudness-normalized audio_v2
+  cache_dir: cache/codelung_v2   # cache v3 (phonation) — cùng thư mục, khoá theo config
+
+f0_stats_path: data/codelung/f0_stats_v2.json  # ngoài block `f0` — tránh đổi khoá cache v3
 
 phonation:
   # R6 (docs/ACOUSTIC_V2.md §20): 3/5 ứng viên đạt cổng AUC ≥ 0,7 → bật cho cache v3 + train v2.

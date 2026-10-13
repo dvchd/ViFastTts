@@ -474,3 +474,33 @@ z-score, mask Addendum 6 × `f0_k_mask`) · `vuv` (BCE theo segment) · `energy`
   **tên khớp giá trị** cho cả `use_postnet` True/False.
 - (Đã ghi ở §21) v2 export cần `torch.no_grad()` + wrapper là **submodule** — nếu không, slice/index
   Parameter bị bake thành constant.
+
+## 25. Task 5 (đợt 3) — trainer v2 + 2 bug kernel MPS (13/10/2026)
+
+### 25.1 `train_v2.py` + CLI `train-v2`
+
+`train_slot_v2(config, train, val, out, warm_start=…, max_steps=…, resume=…)` (§11):
+- **Giai đoạn A** (`phase_a_steps`, mặc định 2000): đóng băng `embedding/encoder/duration`,
+  LR = base × 0,25, grad clip 1.0; log mel **tách G vs hữu thanh** (`_gap_frame_mask`).
+- **Giai đoạn B**: mở khóa toàn bộ → warm-up LR lên base trong `phase_b_warmup_steps` rồi cosine.
+- Val `tf_seg` (d_syl/seg/gaps/lead thật); `best.pt` chọn theo **mel hữu thanh**; checkpoint ghi
+  `arch`, `seg_method/version/hash` (từ manifest), `f0_stats` + hash 16 ký tự, `warm_start_from`.
+- Data: `SlotDataset` + `collate_slot_batch` (batch 1); **lọc row 1 âm tiết khi train** (lý do 25.2).
+- Warm-start B0: copy **193 tensor** tường minh, hash `41153e59a9b53ef9` (khớp B0_BASELINE) ✓.
+- Smoke thật trên M6: 60 bước giai đoạn A — loss 12,56 → 5,33 · mel 3,16 → 0,98 ·
+  mel hữu thanh 1,69 → 0,80 · **0,14 s/bước** (batch 1, ~0,2 s/bước kể cả đọc cache → 20k bước ≈ 1,5 h).
+
+### 25.2 Hai bug kernel MPS đã bắt (torch 2.14.1, M6) + cách xử lý
+
+1. **SDPA + dropout trên MPS lỗi khi q/k/v không `requires_grad`** — đúng ca giai đoạn A đóng băng
+   (encoder chết grad): `scaled_dot_product_attention for MPS does not support dropout`.
+   Cách đo: cùng tensor với `requires_grad=True` → chạy; không grad → lỗi.
+   **Sửa**: `SelfAttention` dùng nhánh attention viết tay khi `training ∧ dropout>0 ∧ device=mps`
+   (eval/export vẫn SDPA với dropout 0 → ONNX không đổi).
+2. **`ConvPredictor` backward với N = 1 abort tiến trình** (Metal:
+   `MPSNDArrayConvolution… channel mismatch`) — head `pause` của v2 + row 1 âm tiết. Đã thử
+   zero-pad tường minh **cả từng lớp conv** → vẫn abort ⇒ **tránh ca đó**: `SlotDataset(min_syllables=2)`
+   lọc 89 row N=1 (0,9% train); val/eval/holdout chỉ forward nên **không** ảnh hưởng.
+3. Regression test: `tests/test_mps_kernel_fallbacks.py` (attention, chạy khi có MPS) +
+   `test_dataset_v2.py::test_min_syllables_loc_row_n_1`. **Không** đặt ca N=1-backward vào test
+   (abort giết cả tiến trình pytest) — chỉ ghi nhận trong docstring.

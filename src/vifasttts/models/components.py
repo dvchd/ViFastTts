@@ -38,7 +38,12 @@ class ConvPredictor(nn.Module):
         self.out = nn.Linear(hidden_size, out_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """x [B, N, H] → [B, N, out_size] (giữ nguyên trục thời gian)."""
+        """x [B, N, H] → [B, N, out_size] (giữ nguyên trục thời gian).
+
+        Lưu ý MPS: backward với N = 1 lỗi Metal kernel (đo thật — xem
+        `tests/test_mps_kernel_fallbacks.py`); train v2 lọc row N = 1 ở `SlotDataset`
+        (`min_syllables=2`), eval/infer chỉ forward nên không ảnh hưởng.
+        """
         for layer in self.layers:
             if isinstance(layer, nn.Conv1d):
                 x = layer(x.transpose(1, 2)).transpose(1, 2)

@@ -179,6 +179,24 @@ def train(
                     max_steps=max_steps, resume=resume)
 
 
+@app.command("train-v2")
+def train_v2(
+    config: str = typer.Option(..., help="File YAML cấu hình (v2: phonation + loss_weights v2)"),
+    train_manifest: str = typer.Option(..., help="Manifest train `_slot4` (JSONL)"),
+    val_manifest: str = typer.Option(..., help="Manifest validation `_slot4` (JSONL)"),
+    output: str = typer.Option(..., help="Thư mục run"),
+    warm_start: str | None = typer.Option(None, help="Checkpoint v1 (B0) để warm-start (§11)"),
+    max_steps: int | None = typer.Option(None, help="Ghi đè số bước tối đa (chạy thử nhanh)"),
+    resume: str | None = typer.Option(None, help="Checkpoint v2 .pt để tiếp tục (resume)"),
+    device: str | None = typer.Option(None, help="Ghi đè device (auto|cpu|mps|cuda)"),
+) -> None:
+    """Huấn luyện acoustic v2 (`v2_slot5`) — warm-start từ B0, giai đoạn A/B (docs/ACOUSTIC_V2.md §11)."""
+    from vifasttts.train_v2 import train_slot_v2
+
+    train_slot_v2(load_config(config), train_manifest, val_manifest, output,
+                  warm_start=warm_start, max_steps=max_steps, resume=resume, device=device)
+
+
 @app.command("export-onnx")
 def export_onnx_cmd(
     config: str = typer.Option(..., help="File YAML cấu hình"),
