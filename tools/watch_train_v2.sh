@@ -1,40 +1,37 @@
 #!/usr/bin/env bash
-# Watchdog cho train acoustic v2: chạy train_chunked (tự resume), nếu runner chết thì
-# khởi động lại (tối đa 40 lần); dừng khi đủ bước hoặc early-stop.
+# Watchdog cho `train-v2`: tự chạy lại kèm `--resume` cho tới khi đạt `max_steps`
+# (chống crash/NaN khi chạy dài qua đêm). Đặt đủ env watermark MPS (bài học §29.3).
 #
-#   nohup caffeinate -is bash tools/watch_train_v2.sh >/dev/null 2>&1 &
-#
-# Log: artifacts/small_codelung/train_v2_full2.log
-set -uo pipefail
+# Dùng: tools/watch_train_v2.sh <out_dir> <log_file> <max_steps> <config> <train_manifest> <val_manifest>
+set -u
+OUT=$1; LOG=$2; MAX=$3; CONFIG=$4; TRAIN=$5; VAL=$6
+export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.8
+export PYTORCH_MPS_LOW_WATERMARK_RATIO=0.7
+export PYTHONUNBUFFERED=1
 cd "$(dirname "$0")/.."
 
-LOG=artifacts/small_codelung/train_v2_full2.log
-mkdir -p artifacts/small_codelung runs
-TOTAL="${TOTAL:-60000}"
-OUT=runs/small_codelung_v2
-
-log() { echo "[watchdog $(date '+%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
-current_step() {
-    .venv/bin/python - <<'PY'
-import torch
-from pathlib import Path
-p = Path('runs/small_codelung_v2/last.pt')
-print(int(torch.load(p, map_location='cpu', weights_only=False).get('step', 0)) if p.exists() else 0)
-PY
+step_of() {
+  if [ -f "$OUT/last.pt" ]; then
+    .venv/bin/python -c "import torch; s=torch.load('$OUT/last.pt', map_location='cpu', weights_only=False); print(int(s.get('step', 0)))" 2>/dev/null || echo 0
+  else
+    echo 0
+  fi
 }
 
-log "bắt đầu watchdog (total=$TOTAL)"
-for i in $(seq 1 40); do
-    if [ -f "$OUT/early_stop.json" ]; then log "early-stop — dừng"; break; fi
-    step=$(current_step)
-    if [ "$step" -ge "$TOTAL" ]; then log "đủ bước ($step) — dừng"; break; fi
-    log "lần $i: chạy từ bước $step"
-    caffeinate -is .venv/bin/python tools/train_chunked.py \
-        --config configs/small_codelung.yaml \
-        --train-manifest data/codelung/train_clean_v2_dur_seg.jsonl \
-        --val-manifest data/codelung/val_clean_v2_dur_seg.jsonl \
-        --output "$OUT" --total-steps "$TOTAL" --chunk 5000 >> "$LOG" 2>&1
-    log "runner thoát rc=$? · hiện ở bước $(current_step)"
-    sleep 30
+for attempt in $(seq 1 60); do
+  STEP=$(step_of)
+  if [ "$STEP" -ge "$MAX" ]; then
+    echo "[watch $(date '+%H:%M')] đạt $STEP >= $MAX — kết thúc" >> "$LOG"
+    break
+  fi
+  echo "[watch $(date '+%H:%M')] lần $attempt: resume từ $STEP → $MAX" >> "$LOG"
+  if [ "$STEP" -gt 0 ]; then
+    .venv/bin/vifasttts train-v2 --config "$CONFIG" --train-manifest "$TRAIN" \
+      --val-manifest "$VAL" --output "$OUT" --resume "$OUT/last.pt" --max-steps "$MAX" >> "$LOG" 2>&1
+  else
+    .venv/bin/vifasttts train-v2 --config "$CONFIG" --train-manifest "$TRAIN" \
+      --val-manifest "$VAL" --output "$OUT" --max-steps "$MAX" >> "$LOG" 2>&1
+  fi
+  sleep 5
 done
-log "watchdog kết thúc"
+echo "[watch $(date '+%H:%M')] dừng (bước cuối $(step_of))" >> "$LOG"
