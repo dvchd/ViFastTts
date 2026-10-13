@@ -76,6 +76,11 @@
 - **Demo audio**: *không* commit vào lịch sử repo; khi user cần nghe từ xa → đẩy bằng
   **GitHub Release asset** (vd `gh release create demo-audio-<ngày> artifacts/demo/*.wav`),
   xoá sạch về sau bằng `gh release delete <tag> --yes` (không cần force-push).
+  **Upload xong PHẢI kiểm chứng** (đã từng "nói upload" mà quên chạy): `gh release view <tag>
+  --json assets` + tải thử `curl -sL -o /dev/null -w '%{http_code} %{size_download}' <url>`.
+  Link tải trực tiếp cho user: `https://github.com/dvchd/ViFastTts/releases/download/<tag>/<file>`.
+  Nhãn file ghi rõ model + biến thể (`v2b8_sh15_*` = model b8, làm nét α=1,5) + cập nhật phần
+  **notes** của release thành mục lục mỗi khi thêm bản mới.
 - Báo cáo trung thực: nêu cả trường hợp trượt cổng + cảnh báo rõ.
 - Quy trình 3 vai: Agent 0 (kiến trúc, ra addendum khi số đo khác kỳ vọng) · Agent 1 (soát code) ·
   Agent 2 (chạy trên M6). Sub-agent khi được giao việc **không tự commit** — trả file + cách chạy cho phiên chính.
