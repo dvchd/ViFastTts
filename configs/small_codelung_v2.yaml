@@ -84,9 +84,9 @@ f0_stats_path: data/codelung/f0_stats_v2.json  # ngoài block `f0` — tránh đ
 
 adversarial:              # T4.1 — mel discriminator đa thang, TRAIN-ONLY (D tách khỏi checkpoint/ONNX)
   enabled: false          # bật bằng `--adversarial` (resume sau khi L1 hội tụ)
-  start_step: 0           # bước bắt đầu chấm adversarial
+  start_step: 0           # TƯƠNG ĐỐI so với bước lúc resume (0 = bật ngay, có warm-up D)
   d_warmup_steps: 1000    # chỉ train D trong ngần này bước đầu (pattern warm-up D)
-  mode: lsgan
+  mode: bce             # BCE (gradient bão hoà) — lsgan đã gây phân kỳ vì logits D phình to
   d_learning_rate: 0.0001    # hạ từ 2e-4 sau lần phân kỳ đầu (D thắng quá nhanh)
   ramp_steps: 2000           # trọng số adversarial 0→1 tuyến tính sau warm-up D
   spectral_norm: true        # chuẩn hoá phổ conv của D (chặn Jacobian → grad G không nổ)

@@ -252,8 +252,10 @@ def train_slot_v2(
             print(f"Nạp discriminator từ {d_path}")
         print(f"T4.1 adversarial: {sum(p.numel() for p in discriminator.parameters()) / 1e6:.2f}M tham số "
               f"(start_step {adversarial.get('start_step', 0)}, warm-up D {adversarial.get('d_warmup_steps', 1000)})")
-    adv_mode = str(adversarial.get("mode", "lsgan"))
-    adv_start = int(adversarial.get("start_step", 0))
+    adv_mode = str(adversarial.get("mode", "bce"))
+    # `start_step` trong config là mốc **tương đối**: 0 (mặc định) = bắt đầu ngay tại bước
+    # resume hiện tại; nếu > 0 thì hiểu là "chờ thêm từng ấy bước rồi mới bật".
+    adv_start = start_step + int(adversarial.get("start_step", 0))
     adv_d_warmup = int(adversarial.get("d_warmup_steps", 1000))
     adv_weight = float(adversarial.get("mel_adv_weight", 1.0))
     adv_ramp = max(1, int(adversarial.get("ramp_steps", 2000)))
