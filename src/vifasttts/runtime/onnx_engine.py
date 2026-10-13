@@ -104,9 +104,12 @@ class OnnxAcousticModel:
         """`provider`: auto|cpu|cuda|coreml|tensorrt (xem `resolve_providers`)."""
         self.path = str(path)
         self.session = _ort_session(path, provider)
-        self.input_name = self.session.get_inputs()[0].name
+        self.input_names = [item.name for item in self.session.get_inputs()]
+        self.input_name = self.input_names[0]
+        self.speed_input_name = self.input_names[1] if len(self.input_names) > 1 else None
         self.output_names = [output.name for output in self.session.get_outputs()]
         self.metadata = dict(self.session.get_modelmeta().custom_metadata_map or {})
+        self.is_v2 = self.metadata.get("arch") == "v2_slot5" or self.speed_input_name is not None
 
     def features_from_text(
         self,
@@ -122,9 +125,16 @@ class OnnxAcousticModel:
         vocabs = ComponentVocabs.default()
         return np.array([[vocabs.encode(item) for item in items]], dtype=np.int64)
 
-    def run(self, features: np.ndarray) -> dict[str, np.ndarray]:
-        """Chạy session; trả dict {tên output: mảng numpy}."""
-        outputs = self.session.run(None, {self.input_name: features.astype(np.int64)})
+    def run(self, features: np.ndarray, *, speed: float = 1.0) -> dict[str, np.ndarray]:
+        """Chạy session; v2 (`arch == "v2_slot5"`) truyền thêm input `speed`, v1 giữ 1 input."""
+        if self.is_v2 and self.speed_input_name is not None:
+            feeds = {
+                self.input_name: features.astype(np.int64),
+                self.speed_input_name: np.array([speed], dtype=np.float32),
+            }
+            outputs = self.session.run(None, feeds)
+        else:
+            outputs = self.session.run(None, {self.input_name: features.astype(np.int64)})
         return dict(zip(self.output_names, outputs))
 
 
@@ -234,9 +244,10 @@ def iter_synthesize_onnx(
     rendered_any = False
     for index, chunk in enumerate(chunks):
         features = acoustic.features_from_text(chunk, dialect=dialect, options=options)
-        outputs = acoustic.run(features)
+        is_v2 = acoustic.metadata.get("arch") == "v2_slot5"
+        outputs = acoustic.run(features, speed=speed) if is_v2 else acoustic.run(features)
         mel = np.asarray(outputs["mel"])
-        if speed != 1.0:
+        if speed != 1.0 and not is_v2:
             mel = _stretch_mel(mel, speed)
         yield vocoder.waveform(mel), rate
         rendered_any = True

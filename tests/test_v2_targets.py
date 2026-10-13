@@ -76,7 +76,7 @@ def test_f0_targets_s0_va_mask_addendum6():
     row = _row()
     f0 = torch.full((13,), 150.0)
     vuv = torch.ones(13)
-    shape, weight, ratio = f0_targets(row, f0, vuv, f0_mean=4.8, f0_std=0.2)
+    shape, weight, ratio, k_mask = f0_targets(row, f0, vuv, f0_mean=4.8, f0_std=0.2)
     z_constant = (math.log(150.0) - 4.8) / 0.2
     assert abs(float(shape[0, 2, 0]) - z_constant) < 1e-5  # N: s0 == mean z
     assert abs(float(shape[0, 2, 1])) < 1e-6
@@ -85,6 +85,9 @@ def test_f0_targets_s0_va_mask_addendum6():
     # "ma": O (onset M hữu thanh) = 1; N = ratio; C 2 frame đủ → 1
     assert weight[1].tolist() == [1.0, 0.0, 1.0, 1.0]
     assert torch.allclose(ratio[0, 2], torch.tensor(1.0))
+    # k_mask: N "các" 2 frame → 2 hệ số; C 1 frame → không đủ tính s_k
+    assert k_mask[0, 2].tolist() == [True, True, False, False]
+    assert not k_mask[0, 3].any()
 
 
 def test_f0_targets_vuv_loc_bo_segment():
@@ -92,7 +95,7 @@ def test_f0_targets_vuv_loc_bo_segment():
     f0 = torch.full((13,), 150.0)
     vuv = torch.ones(13)
     vuv[11:13] = 0.0  # C của "ma" vô thanh
-    _, weight, ratio = f0_targets(row, f0, vuv, f0_mean=4.8, f0_std=0.2)
+    _, weight, ratio, _ = f0_targets(row, f0, vuv, f0_mean=4.8, f0_std=0.2)
     assert weight[1, 3] == 0.0 and ratio[1, 3] == 0.0
 
 
@@ -110,8 +113,11 @@ def test_segment_targets_gop_day_du():
     features = {"f0": torch.full((13,), 150.0), "vuv": torch.ones(13), "energy": torch.full((13,), 2.5)}
     stats = {"f0_log_mean": 4.8, "f0_log_std": 0.2}
     targets = segment_targets(row, features, stats)
-    assert set(targets) == {"seg_ratio", "seg_ratio_mask", "f0_shape", "f0_weight", "seg_energy",
-                            "seg_vuv", "pause_gate", "pause_log_gap", "pause_mask"}
+    assert set(targets) == {"seg_ratio", "seg_ratio_mask", "f0_shape", "f0_weight", "f0_k_mask",
+                            "seg_energy", "seg_vuv", "seg_phonation", "seg_phonation_mask",
+                            "pause_gate", "pause_log_gap", "pause_mask"}
+    assert targets["seg_phonation"].shape == (2, 4, 3)  # features test không có kênh → zeros
+    assert not targets["seg_phonation_mask"].any()
     assert targets["seg_ratio"].shape == (2, 4)
     assert targets["f0_shape"].shape == (2, 4, 4)
     assert targets["pause_mask"].tolist() == [True, False]

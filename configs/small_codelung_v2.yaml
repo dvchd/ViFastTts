@@ -123,7 +123,11 @@ loss_weights:
   mel: 1.0
   mel_pre: 0.2    # F2: loss phụ trên mel trước postnet
   duration: 1.0
-  f0: 1.0
+  ratio: 1.0      # v2: CE phân bố slot (mask inactive + d_syl < 3 — B5)
+  f0: 1.0         # v2: L1 hệ số hình dạng s_k (z-score, mask Addendum 6 × k_mask)
   vuv: 0.5
   energy: 0.5
+  phonation: 0.5  # v2: L1 trên segment hữu thanh (cache v3, R6)
   tone: 0.1       # F3: hạ từ 0.25 (aux nhẹ; mask bỏ SIL khi có SIL ở bước 4)
+  pause_gate: 0.5     # v2: BCE gate (gap ≥ 3 frame)
+  pause_gap: 0.5      # v2: MSE log1p(gap) chỉ khi gate = 1

@@ -282,6 +282,8 @@ class ViFastTtsModelV2(nn.Module):
             "lengths": lengths,
             "slot_durations": slot_durations,
             "pause_gate": gate_prob,
+            "pause_logits": pause_heads[..., 0],
+            "pause_log_gap": log_gap,
             "seg_ratio": ratio,
             "seg_ratio_logits": ratio_logits,
             "seg_shape": shape_z,

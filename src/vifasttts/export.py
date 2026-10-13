@@ -50,6 +50,31 @@ def _write_metadata(path: str, props: dict[str, object]) -> None:
     onnx.save(model, str(path))
 
 
+def _select_outputs_module(model, names: tuple[str, ...]):
+    """Module con chọn đúng bộ output theo hợp đồng ONNX (loại `mel_pre` và key phụ khỏi graph).
+
+    Bắt buộc khi `use_postnet=True`: dict output của model có `mel_pre` → exporter TorchScript
+    gán tên theo vị trí làm **lệch tên 1 slot** (`tone_logits`←mel_pre, `lengths`←tone_logits,
+    `lengths` thật bị đặt tên tự động) — đã đo thực tế trên torch 2.14.
+    Hàm factory (không class module-level) để giữ `import torch` lazily như phần còn lại.
+    """
+    import torch
+
+    class _Wrapper(torch.nn.Module):
+        """Bọc model (submodule — không dùng closure kẻo tham số bị bake thành constant)."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.model = model
+            self.names = tuple(names)
+
+        def forward(self, features):  # type: ignore[no-untyped-def]
+            outputs = self.model(features)
+            return tuple(outputs[name] for name in self.names)
+
+    return _Wrapper().eval()
+
+
 def _export_fp32(config: dict, checkpoint: str, output: str, opset_version: int) -> None:
     """Xuất acoustic ONNX fp32, kèm metadata; danh sách output đổi theo `use_phonation`."""
     import torch
@@ -71,8 +96,9 @@ def _export_fp32(config: dict, checkpoint: str, output: str, opset_version: int)
     if getattr(model, "use_phonation", False):
         # Khớp thứ tự dict output: chèn sau "energy", trước "tone_logits".
         output_names.insert(6, "phonation")
+    wrapper = _select_outputs_module(model, tuple(output_names))
     _export_torch(
-        model, dummy, output,
+        wrapper, dummy, output,
         input_names=["features"], output_names=output_names,
         dynamic_axes={"features": {0: "batch", 1: "syllables"}},
         opset_version=opset_version,
@@ -83,6 +109,87 @@ def _export_fp32(config: dict, checkpoint: str, output: str, opset_version: int)
         "n_mels": int(config["mel"]["n_mels"]),
         "use_phonation": bool(getattr(model, "use_phonation", False)),
     })
+
+
+def _export_v2_fp32(config: dict, checkpoint: str, output: str, opset_version: int) -> None:
+    """Xuất acoustic v2 (`arch="v2_slot5"`) fp32: input `features` + `speed`, kèm metadata `arch`.
+
+    Đường v1 (`_export_fp32`) giữ nguyên tuyệt đối — không đổi tên/thứ tự output hay metadata v1.
+    """
+    import torch
+
+    from vifasttts.frontend.vocab import ComponentVocabs
+    from vifasttts.models.factory import ARCH_V2, build_model
+
+    vocabs = ComponentVocabs.default()
+    sizes = [len(vocabs.onset), len(vocabs.medial), len(vocabs.nucleus), len(vocabs.coda), len(vocabs.tone), len(vocabs.boundary), len(vocabs.punctuation)]
+    model = build_model(config, sizes, arch=ARCH_V2)
+    ckpt = torch.load(checkpoint, map_location="cpu")
+    model.load_state_dict(ckpt.get("model", ckpt))
+    f0_stats = ckpt.get("f0_stats")
+    if isinstance(f0_stats, dict):
+        model.load_f0_stats(f0_stats)
+    model.eval()
+
+    output_names = [
+        "mel", "log_duration", "durations", "f0",
+        "vuv_logits", "energy", "tone_logits", "lengths",
+        "slot_durations", "pause_gate",
+    ]
+    if getattr(model, "use_phonation", False):
+        # Khớp thứ tự dict output v1: chèn sau "energy", trước "tone_logits".
+        output_names.insert(6, "phonation")
+
+    class _V2ExportWrapper(torch.nn.Module):
+        """Bọc v2 để export đúng thứ tự output (model là submodule — closure bake tham số thành constant)."""
+
+        def __init__(self, module) -> None:
+            """Nhận model v2 đã nạp trọng số + eval."""
+            super().__init__()
+            self.model = module
+
+        def forward(self, features: torch.Tensor, speed: torch.Tensor) -> tuple[torch.Tensor, ...]:
+            """features [B,N,7] long + speed float32 [1] → tuple output theo `output_names`."""
+            outputs = self.model(features, speed=speed)
+            return tuple(outputs[name] for name in output_names)
+
+    wrapper = _V2ExportWrapper(model).eval()
+    dummy_features = torch.zeros((1, 8, 7), dtype=torch.long)
+    dummy_speed = torch.tensor([1.0], dtype=torch.float32)
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+    with torch.no_grad():  # bắt buộc: v2 slice/index Parameter trong forward (baked thành constant)
+        if "dynamo" in inspect.signature(torch.onnx.export).parameters:
+            torch.onnx.export(
+                wrapper, (dummy_features, dummy_speed), output,
+                input_names=["features", "speed"], output_names=output_names,
+                dynamic_axes={"features": {0: "batch", 1: "syllables"}},
+                opset_version=opset_version, dynamo=False,
+            )
+        else:  # torch cũ không có tham số dynamo
+            torch.onnx.export(
+                wrapper, (dummy_features, dummy_speed), output,
+                input_names=["features", "speed"], output_names=output_names,
+                dynamic_axes={"features": {0: "batch", 1: "syllables"}},
+                opset_version=opset_version,
+            )
+    props: dict[str, object] = {
+        "vifasttts.model": "acoustic",
+        "sample_rate": int(config.get("sample_rate", 24000)),
+        "n_mels": int(config["mel"]["n_mels"]),
+        "use_phonation": bool(getattr(model, "use_phonation", False)),
+        "arch": ARCH_V2,
+    }
+    for key in ("seg_method", "seg_method_version", "seg_weights_hash", "f0_stats_hash"):
+        if key in ckpt:
+            props[key] = ckpt[key]
+    if isinstance(f0_stats, dict):
+        for key in ("f0_log_mean", "f0_log_std"):
+            if key in f0_stats:
+                props[key] = float(f0_stats[key])
+    for key in ("f0_log_mean", "f0_log_std"):  # checkpoint cũng có thể ghi trực tiếp ở top-level
+        if key in ckpt:
+            props[key] = float(ckpt[key])
+    _write_metadata(output, props)
 
 
 def _build_vocoder(config: dict, checkpoint: str):
@@ -139,6 +246,18 @@ def export_onnx(
     if precision not in PRECISIONS:
         raise ValueError(f"precision không hợp lệ: {precision!r} (dùng {', '.join(PRECISIONS)})")
     validate_config(config, "acoustic")
+    import torch
+
+    from vifasttts.models.factory import ARCH_V2, arch_of_checkpoint
+
+    ckpt_peek = torch.load(checkpoint, map_location="cpu")
+    if arch_of_checkpoint(ckpt_peek if isinstance(ckpt_peek, dict) else {}) == ARCH_V2:
+        if precision != "fp32":
+            raise NotImplementedError(
+                f"precision={precision!r} cho arch v2_slot5 chưa hỗ trợ (mới chỉ có fp32)"
+            )
+        _export_v2_fp32(config, checkpoint, output, opset_version)
+        return
     target = Path(output)
     if precision == "fp32":
         _export_fp32(config, checkpoint, output, opset_version)

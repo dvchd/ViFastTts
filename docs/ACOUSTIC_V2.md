@@ -437,3 +437,40 @@ Build: `.venv/bin/vifasttts cache-features --config configs/small_codelung_v2.ya
   loss v2, `export.py`/runtime rẽ nhánh `arch` (+ speed), eval `tf_seg`/`tf_syl` v2, warm-start
   train từ B0 → cổng so B0.
 - Checklist tích hợp chi tiết: `docs/V2_INTEGRATION_CHECKLIST.md` (sub-agent, 127 dòng).
+
+## 24. Task 5 (đợt 2) — dataset v2 + loss v2 + export/runtime rẽ nhánh (13/10/2026)
+
+### 24.1 Dataset v2 — `data/dataset_v2.py` (sub-agent + siết lại)
+
+`SlotDataset` (manifest `_slot4` + cache): cắt feature theo row, `features [N,7]`, `durations/gaps/lead`,
+`seg_durations [N,4]`, targets từ `v2_targets` (12 key); **raise** khi thiếu `seg_durations`/
+`frame_range`-quá-ngắn (không fallback im lặng — F3); row clip đầy đủ (không `frame_range`, holdout)
+dùng trọn tensor. `collate_slot_batch` yêu cầu cùng N (raise nếu khác), pad trục frame + `frame_lengths`.
+Cache **chỉ đọc** (miss → `extract_features`, không ghi — tránh race nhiều worker).
+
+### 24.2 `v2_targets` bổ sung: `f0_k_mask` + phonation
+
+- `f0_k_mask [N,4,4]`: hệ số `s_k` nào có thật (`k < n`) — loss phải mask phần thiếu (B1).
+- `seg_phonation [N,4,3]` + mask (voiced ≥ 2 frame ∧ ratio ≥ 0,5): pool `hnr/glottalization/jitter`
+  (cache v3) theo segment — thiếu kênh thì trả 0/mask rỗng (dataset cũ vẫn chạy).
+
+### 24.3 Loss v2 — `models/v2_losses.py` (+7 test)
+
+11 thành phần: `mel` (L1 mask frame, chia bin) · `mel_pre` · `duration` (MSE log1p) · **`ratio`**
+(CE, mask inactive **trước softmax** + `d_syl < 3`, gộp theo âm tiết) · **`f0`** (L1 hệ số hình dạng
+z-score, mask Addendum 6 × `f0_k_mask`) · `vuv` (BCE theo segment) · `energy` · `phonation` ·
+`tone` · **`pause_gate`** (BCE) + **`pause_gap`** (MSE, chỉ khi gate = 1). Trọng số mặc định ở
+`DEFAULT_WEIGHTS`, config `small_codelung_v2.yaml` ghi rõ 11 key.
+
+### 24.4 Export/runtime rẽ nhánh `arch` (sub-agent) + **bug v1 postnet đã sửa**
+
+- v2: `_export_v2_fp32` (2 input `features`+`speed`, 10 output, metadata `arch` + `seg_*`/`f0_*`),
+  precision ≠ fp32 → raise (chưa hỗ trợ); runtime `run(features, speed=...)` (chỉ gửi input thứ hai
+  khi arch v2) + `synthesize_onnx` bỏ `_stretch_mel` khi v2. Test: `tests/test_export_v2.py` (6 test).
+- **Bug tiềm ẩn v1 phát hiện qua test**: `export_onnx` v1 với `use_postnet=True` (đúng ca B0) sinh
+  **9 output, lệch tên 1 slot** (`tone_logits`←mel_pre, `lengths`←tone_logits, `lengths` thật bị đặt
+  tên tự động `onnx::ReduceMax_*`) do dict output có `mel_pre`. Đã sửa bằng wrapper
+  `_select_outputs_module` (loại `mel_pre` khỏi graph, giữ nguyên 8 tên/thứ tự) + test khoá
+  **tên khớp giá trị** cho cả `use_postnet` True/False.
+- (Đã ghi ở §21) v2 export cần `torch.no_grad()` + wrapper là **submodule** — nếu không, slice/index
+  Parameter bị bake thành constant.

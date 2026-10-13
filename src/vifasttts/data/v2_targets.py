@@ -127,10 +127,11 @@ def segment_pools(row: dict, energy: torch.Tensor, vuv: torch.Tensor) -> tuple[t
 
 
 def f0_targets(row: dict, f0: torch.Tensor, vuv: torch.Tensor, *, f0_mean: float, f0_std: float,
-               keep: int = 4) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """(s_k [N,4,keep], weight [N,4], voiced_ratio [N,4]) — mask Addendum 6 + F4.
+               keep: int = 4) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """(s_k [N,4,keep], weight [N,4], voiced_ratio [N,4], k_mask [N,4,keep] bool) — mask Addendum 6 + F4.
 
     - `s_k = c_k/√n` trên frame hữu thanh (`vuv > 0,5` và `f0 > 0`), `n ≥ 2`;
+    - `k_mask`: hệ số nào **có thật** (k < n) — loss phải mask phần thiếu (B1);
     - trọng số: N = tỷ lệ hữu thanh (luôn); O = 1 nếu onset ∈ `F0_VOICED_ONSETS` ∧ ratio ≥ 0,5;
       M/C = 1 nếu ratio ≥ 0,5; còn lại 0 (không tính loss).
     """
@@ -138,6 +139,7 @@ def f0_targets(row: dict, f0: torch.Tensor, vuv: torch.Tensor, *, f0_mean: float
     shape = torch.zeros(count, 4, keep, dtype=torch.float32)
     weight = torch.zeros(count, 4, dtype=torch.float32)
     voiced_ratio = torch.zeros(count, 4, dtype=torch.float32)
+    k_mask = torch.zeros(count, 4, keep, dtype=torch.bool)
     for index, windows in enumerate(segment_windows(row, relative=True)):
         syllable = row["syllables"][index]
         onset = syllable["abstract"]["onset"]
@@ -157,6 +159,7 @@ def f0_targets(row: dict, f0: torch.Tensor, vuv: torch.Tensor, *, f0_mean: float
             z = (torch.log(window_f0[voiced]) - f0_mean) / max(f0_std, 1e-6)
             coefficients = dct4_frames(z, keep=keep) / math.sqrt(voiced_count)
             shape[index, column, :coefficients.numel()] = coefficients.float()
+            k_mask[index, column, :coefficients.numel()] = True
             if role == "N":
                 weight[index, column] = ratio
             elif role == "M":
@@ -165,24 +168,65 @@ def f0_targets(row: dict, f0: torch.Tensor, vuv: torch.Tensor, *, f0_mean: float
                 weight[index, column] = 1.0 if (onset in F0_VOICED_ONSETS and ratio >= 0.5) else 0.0
             else:  # C — §6 giữ nguyên, coda tắc không bung hơi (Addendum 6)
                 weight[index, column] = 1.0 if ratio >= 0.5 else 0.0
-    return shape, weight, voiced_ratio
+    return shape, weight, voiced_ratio, k_mask
+
+
+PHONATION_CHANNELS = ("hnr", "glottalization", "jitter")
+
+
+def phonation_targets(row: dict, features: dict, vuv: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """(seg_phonation [N,4,3], mask [N,4]) — mean kênh phonation trên frame hữu thanh.
+
+    Mask = (≥ 2 frame hữu thanh) ∧ (tỷ lệ hữu thanh ≥ 0,5) — cùng triết lý mask F0 (§19.2).
+    Thiếu kênh trong `features` → trả zeros/mask 0 (dataset cũ không có phonation vẫn chạy).
+    """
+    count = len(row["durations"])
+    output = torch.zeros(count, 4, len(PHONATION_CHANNELS), dtype=torch.float32)
+    mask = torch.zeros(count, 4, dtype=torch.bool)
+    channels = [features.get(name) for name in PHONATION_CHANNELS]
+    if any(channel is None for channel in channels):
+        return output, mask
+    for index, windows in enumerate(segment_windows(row, relative=True)):
+        for role, low, high in windows:
+            low = max(low, 0)
+            high = min(high, vuv.size(0))
+            if high <= low:
+                continue
+            voiced = vuv[low:high].float() > 0.5
+            voiced_count = int(voiced.sum())
+            if voiced_count < 2 or float(voiced.float().mean()) < 0.5:
+                continue
+            column = ROLE_INDEX[role]
+            for channel_index, channel in enumerate(channels):
+                output[index, column, channel_index] = channel[low:high][voiced].float().mean()
+            mask[index, column] = True
+    return output, mask
 
 
 def segment_targets(row: dict, features: dict, f0_stats: dict) -> dict[str, torch.Tensor]:
-    """Gộp mọi target cấp segment của một row (feature đã cắt theo row)."""
+    """Gộp mọi target cấp segment của một row (feature đã cắt theo row).
+
+    Keys: `seg_ratio`/`seg_ratio_mask` · `f0_shape`/`f0_weight`/`f0_k_mask` ·
+    `seg_energy`/`seg_vuv` · `seg_phonation`/`seg_phonation_mask` (khi features có kênh) ·
+    `pause_gate`/`pause_log_gap`/`pause_mask`.
+    """
     ratio, ratio_mask = ratio_targets(row)
     gate, log_gap, pause_mask = pause_targets(row)
     energy, voiced_ratio = segment_pools(row, features["energy"], features["vuv"])
-    shape, f0_weight, _ = f0_targets(row, features["f0"], features["vuv"],
-                                     f0_mean=float(f0_stats["f0_log_mean"]),
-                                     f0_std=float(f0_stats["f0_log_std"]))
+    shape, f0_weight, _, k_mask = f0_targets(row, features["f0"], features["vuv"],
+                                             f0_mean=float(f0_stats["f0_log_mean"]),
+                                             f0_std=float(f0_stats["f0_log_std"]))
+    phonation, phonation_mask = phonation_targets(row, features, features["vuv"])
     return {
         "seg_ratio": ratio,
         "seg_ratio_mask": ratio_mask,
         "f0_shape": shape,
         "f0_weight": f0_weight,
+        "f0_k_mask": k_mask,
         "seg_energy": energy,
         "seg_vuv": voiced_ratio,
+        "seg_phonation": phonation,
+        "seg_phonation_mask": phonation_mask,
         "pause_gate": gate,
         "pause_log_gap": log_gap,
         "pause_mask": pause_mask,
