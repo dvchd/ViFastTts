@@ -1091,3 +1091,32 @@ HOI 0,92–0,94 · NGA 0,93→0,88 · NANG 0,87→0,77 (n nhỏ, đừng đọc 
 - **Phonation dự đoán KHÔNG lệch** (pooled: ngã Δhnr −0,22, Δjitter −0,007; ngang Δ +0,09) ⇒ model *không chủ
   động* vẽ thêm rung ⇒ vấn đề nằm ở **cách mel thể hiện creak** (chi tiết hài nhiễu), không ở đầu phonation.
 - ⇒ Ưu tiên: **acoustic** (extension + dữ liệu) cho phần ồn; **GTA** cho phần rung. `sh25` chỉ khuếch đại cả hai.
+
+## 41. GTA fine-tune Vocos: TRƯỢT CỔNG — xếp lại (14/10/2026)
+
+### 41.1 Kết quả (vocoder GTA 3k bước, so Vocos pretrained, cùng mel base 40k)
+
+| Cổng | Gốc | GTA 3k | Kết |
+|---|---|---|---|
+| Fidelity **mel THẬT** (mel_l1 · recall · F0) | 0,1177 · 0,966 · 71,8¢ | **0,1470** · 0,952 · 83,5¢ | ❌ **+25%** (cổng: ≤ +10%) |
+| Fidelity mel model (so mel thật) | 1,3625 | 1,3581 | ❌ −0,3% (kỳ vọng giảm rõ) |
+| Fidelity mel model **so chính mel vào** | 0,1459 | **0,0514** | −65% ⇒ vocoder *bám input chặt hơn* (input mờ ⇒ output mờ theo) |
+| **Độ gồ ghề** (rough, so thật) | 0,56 | **0,47** | ❌ **mượt hơn**, ngược mục tiêu |
+| CER 20 holdout (beam5, paired) | 0,1927 | 0,1884 | ≈ (trong nhiễu) |
+| **Rè ngã**: jitter Δ · HNR Δ | +0,0370 · −2,42 dB | **+0,0128** ✅ · **−4,08** ❌ | jitter **về mức thật**, nhưng ồn **+1,7 dB** |
+| **Rè nặng**: jitter Δ · HNR Δ | +0,0192 · −1,17 dB | **−0,0104** ✅ · **−2,18** ❌ | như trên |
+| Âm lượng/proxy sáng | RMS 0,0280 · centroid 417 Hz | 0,0320 (**+16%**) · 414 Hz | chỉ to hơn, không sáng hơn |
+
+### 41.2 Vì sao (cơ chế) + quyết định
+- GTA học được **"sao chép input chính xác hơn"** (−65% L1 so mel vào) — nhưng vì mel vào **mờ sẵn**,
+  kết quả **không nét hơn**. Nó còn học **thống kê nền của audio thật** ⇒ **ồn + âm lượng tăng** —
+  đúng kịch bản "học cả nhiễu" mà user lo (đo được: HNR −1,7 dB, RMS +16%).
+- Ngược lại, **đúng phần jitter của creak (Vocos — §39) đã về mức thật** ⇒ giả thuyết §39 *đúng*, nhưng
+  cái giá (ồn) lớn hơn lợi.
+- Nhắc lý thuyết (nghiên cứu 14/10): **hop 256 ⇒ mel không chứa jitter mức chu kỳ** ⇒ GTA chỉ kéo
+  *thống kê*; muốn hơn phải đưa kênh **phonation/F0 vào vocoder** (HiFi-Glot/DSM/ARIS) — ngoài phạm vi.
+- **Quyết định: GTA xếp lại** (không vào đường chính). Giữ checkpoint `artifacts/vocoder_gta/gta_3k.pt`
+  + tool (`tools/build_gta_mel.py`, `tools/train_vocoder_gta.py`) để thí nghiệm sau; cổng + cảnh báo ghi ở đây.
+- ⚠️ **Bài học A/B demo**: bản `goc_*` do sub-agent sinh **khác text/đường** với bản đã upload
+  (câu dài 3,936 s vs **4,320 s**; tôi đã kiểm: file của tôi **tất định** — sinh lại sha256 trùng khít).
+  ⇒ Mọi cặp A/B **phải** sinh bằng cùng một script (hoặc verify sha256) — nếu không, so sánh bị confound.
