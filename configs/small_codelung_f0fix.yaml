@@ -1,0 +1,107 @@
+project: ViFastTts
+seed: 42
+language: vi
+sample_rate: 24000
+input:
+  unit: syllable
+  features:
+  - onset
+  - medial
+  - nucleus
+  - coda
+  - tone
+  - boundary
+  - punctuation
+  dialect_conditioning: false
+  speaker_conditioning: false
+  style_conditioning: false
+mel:
+  n_fft: 1024
+  win_length: 1024
+  hop_length: 256
+  n_mels: 100
+  f_min: 0
+  f_max: 12000
+  norm: none
+  log_magnitude: true
+  log_floor: 1e-7
+  log_floor_mode: clamp
+  normalize_path: data/codelung/mel_stats.json
+f0:
+  method: pyworld
+  f_min: 70
+  f_max: 400
+  interpolate: true
+model:
+  component_dim: 64
+  hidden_size: 192
+  encoder_layers: 4
+  decoder_layers: 2
+  attention_heads: 4
+  ffn_size: 768
+  conv_kernel_size: 15
+  dropout: 0.1
+  duration_layers: 3
+  variance_layers: 3
+  use_phonation: false
+  use_postnet: true
+training:
+  batch_size: 16
+  learning_rate: 0.0002
+  weight_decay: 0.0001
+  max_steps: 60000
+  warmup_steps: 6000
+  lr_schedule: cosine
+  min_lr_ratio: 0.05
+  lr_decay_steps: 60000
+  early_stop_patience: 25
+  grad_clip: 1.0
+  log_every: 50
+  validate_every: 1000
+  validate_batches: 40
+  save_every: 1000
+  num_workers: 6
+  mixed_precision: true
+  device: auto
+  cache_features: false
+  cache_dir: cache/codelung_v2
+phonation:
+  enabled: false
+vocoder_training:
+  batch_size: 8
+  learning_rate: 5.0e-05
+  discriminator_learning_rate: 0.0002
+  max_steps: 10000
+  warmup_steps: 0
+  lr_schedule: cosine
+  min_lr_ratio: 0.1
+  lr_decay_steps: 10000
+  d_warmup_steps: 1000
+  num_workers: 6
+  log_every: 100
+  save_every: 1000
+  crop_frames: 64
+  generator: vocos_pretrained
+  hidden: 512
+  intermediate_dim: 1536
+  generator_blocks: 8
+  pretrained_path: artifacts/pretrained/vocos-mel-24khz/pytorch_model.bin
+  pretrained_sha256: 97ec976ad1fd67a33ab2682d29c0ac7df85234fae875aefcc5fb215681a91b2a
+  discriminator: mpd_mrd
+  discriminator_channels: 16
+  device: auto
+  grad_clip: 5.0
+  adv_loss: lsgan
+  mrd_weight: 0.1
+  mel_weight: 45.0
+  feature_matching_weight: 1.0
+  adversarial_weight: 1.0
+  stft_weight: 0.0
+loss_weights:
+  mel: 2.0
+  mel_pre: 0.4
+  duration: 1.5
+  f0: 0.1
+  vuv: 0.5
+  energy: 0.5
+  tone: 0.1
