@@ -1067,3 +1067,27 @@ HOI 0,92–0,94 · NGA 0,93→0,88 · NANG 0,87→0,77 (n nhỏ, đừng đọc 
 - Còn **nguồn gốc phía acoustic** chưa chốt: cần so `seg_phonation` **dự đoán vs target** theo thanh
   (nếu model đoán hnr thấp hơn target ⇒ nó *chủ động* vẽ thêm rung) — việc tiếp theo sau GTA.
 - **Thước thứ 3 chính thức**: `tools/eval_creak.py` (JSON + bảng Δ) — dùng cho mọi checkpoint/run sau.
+
+## 39. Tách nguồn "rè" (A/B/C cho creak): jitter ở Vocos, ồn ở acoustic (14/10/2026)
+
+### 39.1Đo (53 clip val có ngã/nặng; pool nucleus; base 40k)
+
+| Thanh | Nguồn | hnr | glottal | jitter |
+|---|---|---|---|---|
+| NGANG | THẬT | 0,306 | 0,0094 | 0,0494 |
+| (đối chứng) | copy-synth | **3,738** (Vocos làm sạch) | 0,0036 | 0,0348 |
+| | free-run | 1,691 | 0,0031 | 0,0508 |
+| **NGÃ** | THẬT | −0,411 | 0,0093 | 0,0705 |
+| | **copy-synth** | −0,564 | 0,0055 | **0,0978 (+39%)** |
+| | free-run | **−1,427** | 0,0088 | 0,1092 (+55%) |
+| NẶNG | THẬT | 0,561 | 0,0075 | 0,0698 |
+| | copy-synth | 0,787 | 0,0053 | 0,0779 |
+| | free-run | −0,566 | 0,0098 | 0,0855 |
+
+### 39.2 Kết luận tách nguồn
+- **Jitter (rung)**: đã tăng **+39% ngay ở copy-synth** (mel *thật* → Vocos) ⇒ **phần lớn do Vocos** render
+  mel creak (ngược với ngang: Vocos *làm sạch*). ⇒ **GTA có cơ sở chữa** (đích học = audio thật, jitter thấp hơn).
+- **HNR (ồn)**: copy chỉ −0,15 nhưng free tụt −1,02 so thật ⇒ **phần lớn do acoustic** (mel model nhiễu ở creak).
+- **Phonation dự đoán KHÔNG lệch** (pooled: ngã Δhnr −0,22, Δjitter −0,007; ngang Δ +0,09) ⇒ model *không chủ
+  động* vẽ thêm rung ⇒ vấn đề nằm ở **cách mel thể hiện creak** (chi tiết hài nhiễu), không ở đầu phonation.
+- ⇒ Ưu tiên: **acoustic** (extension + dữ liệu) cho phần ồn; **GTA** cho phần rung. `sh25` chỉ khuếch đại cả hai.
