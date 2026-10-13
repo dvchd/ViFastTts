@@ -688,3 +688,38 @@ Loss `mel_sharp` = khớp **chênh lệch liền kề** (thời gian + tần s�
   (B0/v2c/v2d) — xoá bằng `gh release delete <tag> --yes`.
 - **Tai người + CER phải khớp nhau**: hội thoại CER 0,051 (nghe "mang máng" do timbre),
   clip 6 thanh CER 0,865 (không ngữ cảnh ⇒ đo trực tiếp độ rõ dấu) — dùng làm thước cho các lần sau.
+
+## 30. Chọn epoch/val theo SỐ ĐO (14/10/2026) — "5h" chỉ còn là tham khảo
+
+### 30.1 Nhiễu val & early stop (bài học trực tiếp từ run b8)
+
+- Đo nhiễu đúng thước chọn `best` (**mel hữu thanh**): std giữa clip **0,0794** →
+  **SE(40 clip) = ±0,0126** (95%: ±0,0246) · **SE(300 clip) = ±0,0046** (95%: ±0,0090).
+- Hệ quả đã thấy thật: val b8 nhảy `0,6267 (46k) → 0,6387 (50k) → 0,6277 (51k) → 0,6326 (53k)`
+  — **dao động trong nhiễu**, "best tại 46k" KHÔNG kết luận được nếu chỉ có 40 clip.
+- Đã bổ sung: `train_v2` có **early-stop patience** (lưu `no_improve` trong checkpoint; test riêng);
+  config base dùng **val 300 clip + patience 5** (5 mốc = 5k bước).
+
+### 30.2 Quy tắc ngón tay (<5h/5–30h/≥40h) = **tham khảo**, không phải luật
+
+- Con số 5h/30h/40h trong `TRAINING_ESTIMATES.md` là **heuristic nội bộ** (cân bằng overfit↔dung lượng),
+  **không** suy ra từ dữ liệu của mình và **không** liên quan ngôn ngữ. Từ 14/10/2026: **số đo thực tế
+  là trọng tài**; heuristic chỉ để chọn điểm khởi đầu.
+- Bộ số đo thay thế: gap theo epoch (1,2% → 5,7%), gồ ghề (0,33/1,0), âm tiết hiếm (+9,6%),
+  nhiễu val (§30.1), và độ dốc val cuối schedule.
+
+### 30.3 Cách chọn epoch (đo được, không đoán)
+
+- **1 epoch** trên train = 9.674 row ≈ 17,1h; với batch 8 ≈ **1.209 bước/epoch**.
+- Quyết định theo **epoch × val**: cứ chạy khối (cosine); val vượt nhiễu & không cải thiện `patience`
+  mốc → dừng/scale. **Không** dùng train loss làm tín hiệu (nó giảm cả khi overfit).
+- Bằng chứng cho small hiện tại: đạt plateau thực dụng quanh **~40–50 epoch** (gap +5,7% @38 epoch,
+  val đi ngang 0,626–0,638 từ 46k); base đặt **40.000 bước ≈ 33 epoch** + early stop để tự trả lời.
+
+### 30.4 Lọc dữ liệu (coverage ↔ độ sạch) — thiết kế ablation khi cần
+
+- Đổi 17h → 5h sạch + ×3,4 epoch: **bớt nhoè** (phân bố hẹp) nhưng **mất phủ** (âm tiết/dấu hiếm),
+  trần dung lượng vẫn giữ ⇒ dự đoán *hay hơn trên văn bản giống corpus, tệ hơn trên val đầy đủ*.
+- Cách dùng đúng: **cắt đuôi tệ nhất** (5–10% clip ồn/align kém), không bỏ 12h. Nếu chạy ablation:
+  chấm điểm sạch/clip (speech-frame, năng lượng vùng lặng, điểm alignment) → train bản lọc top-X%
+  → so **cùng val 300 clip + gồ ghề + CER**.
