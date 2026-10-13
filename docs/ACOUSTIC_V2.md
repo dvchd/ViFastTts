@@ -1120,3 +1120,52 @@ HOI 0,92–0,94 · NGA 0,93→0,88 · NANG 0,87→0,77 (n nhỏ, đừng đọc 
 - ⚠️ **Bài học A/B demo**: bản `goc_*` do sub-agent sinh **khác text/đường** với bản đã upload
   (câu dài 3,936 s vs **4,320 s**; tôi đã kiểm: file của tôi **tất định** — sinh lại sha256 trùng khít).
   ⇒ Mọi cặp A/B **phải** sinh bằng cùng một script (hoặc verify sha256) — nếu không, so sánh bị confound.
+
+## 42. Phủ điểm mù tiếng Việt: nhóm coda · nhịp nghỉ · ngữ điệu (14/10/2026)
+
+Bộ thước mới trong `tools/eval_acoustic.py`: `--group-by {coda,onset,nucleus,tone,punctuation,status}`
+(+ nhóm ghép `coda:tone`), free-run thêm **nhịp nghỉ** (`gap_sum_mae_frames`, `pause_f1`, `mel_gap`) và
+**ngữ điệu** (`slope_all[_ngang]`, `ngang_declination_cents`, `slope_final_question|period`); tf thêm
+`mel_gap_z`. Mặc định (không cờ) JSON y như cũ. Test: `tests/test_eval_acoustic_groups.py` (10 test).
+
+### 42.1 Coda tắc (−p/−t/−c/−ch): tệ hơn **~7%**, và phần tệ **tập trung ở SẮC**
+
+| Cấp âm tiết (tf_syl 300) | n | mel_z | mel_db | F0 med | vuv |
+|---|---|---|---|---|---|
+| tắc (P,T,C,CH) | 928 | **0,682** | 7,85 | 186¢ | 0,9810 |
+| khác | 6.290 | 0,635 | 7,28 | 165¢ | 0,9818 |
+| **Δ** | | **+0,047 (+7,4%)** | +0,57 dB | +22¢ | −0,001 |
+
+- Tách khỏi thanh (nhóm ghép `coda:tone`): **SẮC-tắc** n=617 **0,709 vs SẮC-khác 0,623 = +13,8%**
+  (+0,95 dB, **+45 cent**, ~4σ) — đúng nhóm mà `tone_ruler` mù. **NẶNG-tắc**: mel gần như không khác.
+- ⚠️ Trong **free-run** thước nhóm bị mù (Δ +0,001 ± 0,062) ⇒ **so nhóm phải dùng tf**.
+
+### 42.2 Nhịp nghỉ (free-run) — **lỗ hổng lớn nhất vừa đo được**
+
+| Số | Giá trị | Đọc |
+|---|---|---|
+| Σgap model / thật | **139,6 / 221,0 frame = 63%** | model **thiếu hơi nghỉ** ~0,87 s/clip (khớp length_ratio 0,899) |
+| `gap_sum_mae_frames` | 119,1 (≈1,27 s/clip) | lệch rất lớn theo từng clip |
+| `pause_f1` | **0,527** (P 0,606 · R 0,467) | bỏ sót ~53% pause thật; ~40% pause model đặt sai chỗ |
+| `mel_gap` (z, frame nghỉ thật) | **3,115** (tf: 1,949) | vùng lặng là vùng mel tệ nhất (toàn bài 1,160) |
+
+⇒ **Sửa nhịp nghỉ là đòn naturalness rẻ + lớn** hơn cả texture vi mô. Loss đã có (`pause_gate`/`pause_gap`
+trọng số 0,5) — cần điều tra vì sao model vẫn hụt (target? slot G? trọng số?).
+
+### 42.3 Ngữ điệu — **bác bỏ giả thuyết "NGANG-drift"**, tìm ra lỗi thật: **cuối câu HỎI**
+
+| Số (free-run, median) | THẬT | MODEL | Đọc |
+|---|---|---|---|
+| `slope_all_ngang` | −8,37 c/s | −7,33 c/s | gần trùng ⇒ NGANG **không** trôi quá đà |
+| `ngang_declination_cents` | +26,5¢ | +21,1¢ | model có declination ≈ 80% thật |
+| `slope_final_period` | +2,6 c/s | −0,04 c/s | cuối câu kể: khớp |
+| **`slope_final_question`** | **+33,6 c/s** | **−340,7 c/s** | ❌ model **ngã giọng** ở cuối câu hỏi (thật: đi lên) |
+
+- Xác nhận trên 600 clip (n=42): thật +1,6 vs model **−238,5 c/s** ⇒ lỗi thật, không phải mẫu nhỏ.
+- ⇒ Ngữ điệu câu hỏi là **đích sửa cụ thể** (rẻ): kiểm tra nhánh F0 có nhận `punctuation`/`boundary`
+  đủ mạnh không + xét trọng số/prior riêng cho âm tiết cuối câu hỏi.
+
+### 42.4 Thứ tự tối ưu acoustic cập nhật (theo số mới)
+1. **Nhịp nghỉ** (42.2) — naturalness lớn, loss đã có sẵn. 2. **Câu hỏi** (42.3) — lỗi rõ, sửa nhỏ.
+3. Extension 40k→60k (đang chạy). 4. E4 tone_disc+K=6 · 5. E2 Laplacian-mixture (texture) · 6. E5 adversarial.
+⚠️ Các số 42.1–42.3 là **lần đo đầu** (chưa có mốc cũ) — dùng làm mốc cho các checkpoint sau.
