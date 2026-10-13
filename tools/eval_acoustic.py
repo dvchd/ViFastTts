@@ -126,6 +126,11 @@ def run_tf_syl(args, config: dict) -> dict:
         raw_pred = pred_mel[:frames] * std + mean
         raw_target = target_mel[:frames] * std + mean
         l1_raw = float((raw_pred - raw_target).abs().mean())
+        # Mel trên frame "có tiếng" (mean log-magnitude > -8) — tránh bị chi phối bởi frame lặng/floor.
+        speech = raw_target.mean(dim=1) > -8.0
+        speech_frac = float(speech.float().mean())
+        speech_db = (float((raw_pred[speech] - raw_target[speech]).abs().mean() * 8.686)
+                     if bool(speech.any()) else None)
 
         predicted_duration = torch.round((torch.exp(outputs["log_duration"][0]) - 1).clamp_min(1))
         duration_errors.extend((predicted_duration - item["durations"]).abs().tolist())
@@ -157,6 +162,8 @@ def run_tf_syl(args, config: dict) -> dict:
             "id": row["id"], "frames": frames,
             "mel_l1_z": round(l1_z, 4), "mel_l1_raw": round(l1_raw, 4),
             "mel_mae_db": round(8.686 * l1_raw, 3),
+            "mel_mae_db_speech": round(speech_db, 3) if speech_db is not None else None,
+            "speech_frame_frac": round(speech_frac, 3),
             "duration_mae_frames": round(float((predicted_duration - item["durations"]).abs().mean()), 3),
         })
 
@@ -166,6 +173,10 @@ def run_tf_syl(args, config: dict) -> dict:
         "mel_l1_z": _quantiles([entry["mel_l1_z"] for entry in per_clip]),
         "mel_l1_raw": _quantiles([entry["mel_l1_raw"] for entry in per_clip]),
         "mel_mae_db": _quantiles([entry["mel_mae_db"] for entry in per_clip]),
+        "mel_mae_db_speech": _quantiles([entry["mel_mae_db_speech"] for entry in per_clip
+                                         if entry["mel_mae_db_speech"] is not None]),
+        "speech_frame_frac_mean": round(float(np.mean([entry["speech_frame_frac"]
+                                                       for entry in per_clip])), 3),
         "f0_rmse_cents_by_tone": {tone: _quantiles(values) for tone, values in tone_f0.items()},
         "vuv_accuracy": round(vuv_hits / max(vuv_total, 1), 4),
         "energy_mae": round(float(np.mean(energy_errors)), 4) if energy_errors else None,
@@ -267,7 +278,9 @@ def main() -> None:
     print(f"\nĐã ghi {out}")
     if args.mode == "tf_syl":
         print(f"  {summary['clips']} clip · mel L1 z {summary['mel_l1_z']['mean']:.3f} "
-              f"· raw {summary['mel_l1_raw']['mean']:.3f} · {summary['mel_mae_db']['mean']:.1f} dB")
+              f"· raw {summary['mel_l1_raw']['mean']:.3f} · {summary['mel_mae_db']['mean']:.1f} dB "
+              f"· speech {summary['mel_mae_db_speech'].get('mean', float('nan')):.1f} dB "
+              f"({summary['speech_frame_frac_mean']:.0%} frame)")
         print(f"  VUV acc {summary['vuv_accuracy']:.3f} · energy MAE {summary['energy_mae']:.3f} "
               f"· duration MAE {summary['duration_mae_ms']:.1f} ms")
         for tone, stats in summary["f0_rmse_cents_by_tone"].items():

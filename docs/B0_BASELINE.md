@@ -17,7 +17,8 @@
 |---|---|---|---|
 | mel L1 z | 1,276 | 1,220 | train mel ~0,8 |
 | mel L1 raw (log-magnitude) | 1,696 | 1,620 | copy-synthesis 0,15 |
-| mel MAE (dB) | 14,7 | 14,1 | copy 1,3 dB |
+| mel MAE (dB, mọi frame) | 14,7 | 14,1 | copy 1,3 dB |
+| mel MAE frame có tiếng (dB) | 9,8 | 9,6 | định nghĩa: mean log-magnitude > −8 |
 | VUV accuracy | 0,992 | 0,991 | — |
 | energy MAE | 0,714 | 0,726 | — |
 | duration MAE | 51,1 ms | 51,9 ms | ~32% âm tiết 160 ms |
@@ -51,10 +52,27 @@
 4. Free-run: CER trung bình ≈ sàn + 0,05 (last) nhưng nhiều clip lặp/từ giả; mel không tạo được vùng lặng
    (pred z-std 1,5 vs real 4,5 trên clip đầy đủ).
 5. **Khuyến nghị**: đưa **log-F0 z-score + mask `vuv`** (T3.2/F4) vào ngay lần train v2 đầu tiên thay vì
-   đợi Phase 3. Probe f0-fix đang chạy để định lượng (`configs/small_codelung_f0fix.yaml`, log
-   `artifacts/eval_acoustic/f0fix_probe.log`).
+   đợi Phase 3 — probe f0-fix (§4) cho thấy rebalance loss giúp free CER −19%; giữ mel weight ≥ 1.
 
-## 4. File kèm
+## 4. Probe f0-fix (13/10) — kiểm chứng "f0 chiếm 82% loss"
+
+Cấu hình `configs/small_codelung_f0fix.yaml` (f0 1,0→0,1 · mel 1,0→2,0 · duration 1,0→1,5);
+train tiếp `last.pt` 20k→23k (3k bước, cùng cache/dữ liệu). So trên **cùng tập**
+(100 clip tf_syl · 10 clip free):
+
+| Chỉ số | B0 last (20k) | probe (23k) | Δ |
+|---|---|---|---|
+| mel MAE frame có tiếng | 10,5 dB | 10,0 dB | −0,5 |
+| mel MAE mọi frame | 18,1 dB | 18,1 dB | ~0 (bị ~11% frame sát floor chi phối) |
+| duration MAE | 50,7 ms | 51,3 ms | +0,6 |
+| F0 median theo thanh | 129–220 cents | 126–224 cents | ~tương đương |
+| **free CER (10 clip)** | **0,473** | **0,385** | **−0,088 (−19%)** |
+
+- CER tốt hơn ở **9/10 clip** → rebalance loss có hiệu quả thật (dù mới 3k bước).
+- F0 gần như không giảm chất lượng dù bị hạ weight 10× → f0 head có thể đã bão hoà với target hiện tại (nhiễu).
+- Từ nay báo cáo kèm **mel speech-frame** (metric mới trong `eval_acoustic.py`) — nhạy hơn cho tiến độ v2.
+
+## 5. File kèm
 
 - `artifacts/eval_acoustic/b0_best_tf_syl.json` · `b0_last_tf_syl.json` · `b0_best_free.json` · `b0_last_free.json`
 - `artifacts/listen_b0/DIAGNOSTICS.md` + `artifacts/listen_b0/index.html` (nghe thử).
