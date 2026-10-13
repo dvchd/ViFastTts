@@ -58,18 +58,20 @@ def test_ratio_targets_va_mask_b5():
 
 
 def test_pause_targets_gate_va_mask_cuoi_row():
+    """A2 (§43.1): vị trí CUỐI row được gán nhãn khi manifest ghi đủ `gaps` (len == N)."""
     gate, log_gap, mask = pause_targets(_row())
     assert gate.tolist() == [0.0, 0.0]  # gap 2 < 3
     assert abs(float(log_gap[0]) - math.log1p(2)) < 1e-6
-    assert mask.tolist() == [True, False]  # âm tiết cuối row segment không có gap nội bộ
+    assert mask.tolist() == [True, False]  # row cũ: len(gaps) == N-1 ⇒ vị trí cuối không có nhãn
 
     loud = _row(gaps=[5])
     gate, log_gap, _ = pause_targets(loud)
     assert gate[0] == 1.0 and abs(float(log_gap[0]) - math.log1p(5)) < 1e-6
 
-    full = _row(gaps=[5, 30])  # clip đầy đủ: gap cuối là đuôi → mask
-    _, _, full_mask = pause_targets(full)
-    assert full_mask.tolist() == [True, False]
+    full = _row(gaps=[5, 30])  # manifest A2: gap cuối = pause đuôi ⇒ CÓ nhãn (trước đây bị mask)
+    full_gate, full_log_gap, full_mask = pause_targets(full)
+    assert full_mask.tolist() == [True, True]
+    assert full_gate.tolist() == [1.0, 1.0] and abs(float(full_log_gap[1]) - math.log1p(30)) < 1e-6
 
 
 def test_f0_targets_s0_va_mask_addendum6():

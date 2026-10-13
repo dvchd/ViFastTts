@@ -10,8 +10,10 @@ tensor target cấp segment cho một âm tiết:
   `f0_weight` [N,4] — đúng mask Addendum 6 (O cần onset hữu thanh ∧ ratio ≥ 0,5;
   M/C ratio ≥ 0,5; N luôn, trọng số = tỷ lệ hữu thanh) + `voiced_ratio` [N,4].
 - `seg_energy` [N,4] (mean cửa sổ), `seg_vuv` [N,4].
-- `pause_gate` [N], `pause_log_gap` [N], `pause_mask` [N] — gate = `gap ≥ 3` frame (§4),
-  mask gap cuối row (rìa đã cắt).
+- `pause_gate` [N], `pause_log_gap` [N], `pause_mask` [N] — gate = `gap ≥ 3` frame (§4).
+  A2 (§43.1): **giữ nhãn cho vị trí cuối row** — manifest mới ghi đủ `gaps` (gap sau âm tiết
+  cuối = pause ở mép cắt/lặng đuôi) và `frame_range` phủ các frame đó ⇒ bất biến
+  `T == Σdur + Σgap`; row cũ (`len(gaps) == N-1`) tự động rơi vào `index >= len(gaps)` như trước.
 
 Chạy trên CPU/long; chỉ dùng tensor op (đưa thẳng vào collate). Không phụ thuộc cache.
 """
@@ -85,15 +87,20 @@ def ratio_targets(row: dict, *, min_frames: int = 3) -> tuple[torch.Tensor, torc
 
 
 def pause_targets(row: dict) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """(gate [N], log_gap [N], mask [N]) — gap cuối row bị mask (§4)."""
+    """(gate [N], log_gap [N], mask [N]) — **mọi** vị trí có gap trong row đều có nhãn (A2/§43.1).
+
+    Trước đây bỏ `index ≥ count-1` (rìa row bị cắt) ⇒ 46,5% khối lượng pause không có nhãn.
+    Manifest A2 ghi đủ `gaps` + `frame_range` phủ pause đuôi (bất biến `T == Σdur + Σgap`)
+    nên vị trí cuối là nhãn **thật**; row cũ (`len(gaps) == N-1`) vẫn bị bỏ ở vị trí cuối.
+    """
     count = len(row["durations"])
     gaps = list(row.get("gaps") or [])
     gate = torch.zeros(count, dtype=torch.float32)
     log_gap = torch.zeros(count, dtype=torch.float32)
     mask = torch.zeros(count, dtype=torch.bool)
     for index in range(count):
-        if index >= len(gaps) or index >= count - 1:
-            continue  # không có gap nội bộ sau âm tiết này (row segment: gap cuối = 0; clip: đuôi cắt)
+        if index >= len(gaps):
+            continue  # row không ghi gap sau âm tiết này ⇒ không bịa nhãn
         gap = int(gaps[index])
         gate[index] = float(gap >= GATE_MIN_FRAMES)
         log_gap[index] = math.log1p(max(0, gap))

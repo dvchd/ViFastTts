@@ -3,7 +3,8 @@
 Thành phần: mel L1 (mask frame, chia số bin) · mel_pre (0.2) · duration MSE(log1p) ·
 **ratio CE** (soft target, mask inactive + `d_syl < 3` — B5) · **F0 hệ số hình dạng** L1 trong
 không gian z-score (mask Addendum 6 × `f0_k_mask` cho hệ số thiếu) · vuv BCE theo segment ·
-energy L1 · phonation L1 (mask voiced ≥ 0,5) · tone CE · **pause** gate BCE + log_gap MSE
+energy L1 · phonation L1 (mask voiced ≥ 0,5) · tone CE · **pause** gate BCE (A1/§43.1:
+`pos_weight` 3,0 + trọng số theo khối lượng gap cho dương tính) + log_gap MSE
 (chỉ khi gate target = 1).
 
 Trọng số mặc định ở `DEFAULT_WEIGHTS`, config `loss_weights` ghi đè từng key.
@@ -27,6 +28,16 @@ DEFAULT_WEIGHTS: dict[str, float] = {
 
 #: Nhiệt độ của CE phân biệt thanh (§33.4.3): logits = −d²/T với d = khoảng cách tới prior.
 TONE_DISC_TEMPERATURE = 1.0
+
+#: §43.1 (A1) — BCE gate pause: dương tính (gap ≥ 3 frame) chỉ chiếm **1,26%** loss train ⇒ model
+#: học thuộc rồi bỏ qua (BCE in-sample 0,057 vs ngoài mẫu 1,148). `pos_weight` ≈ (1−p)/p với tỷ lệ
+#: dương tính p ≈ 0,25–0,31 (đo trên manifest train). Ước lượng tác động là **dự đoán** (§43.1);
+#: nghiệm thu bằng run thật (`configs/small_codelung_v2_base_pause.yaml` + cổng §43.1).
+PAUSE_POS_WEIGHT = 1.0  # A1: mặc định 1,0 = hành vi CŨ (config `..._base_pause.yaml` đặt 3,0)
+#: Trọng số theo **khối lượng** cho mẫu dương: `w = 1 + clamp(gap_frame, 0, CLIP)/SCALE`.
+#: Đòn trúng đúng chỗ thâm hụt: FN trung bình 28 frame/vị trí, FP trung bình ~6,6 frame (§43.1).
+PAUSE_MASS_SCALE = 10.0  # chia khối lượng (0 = tắt phạt theo khối lượng)
+PAUSE_MASS_CLIP_FRAMES = 40.0
 
 #: Vị trí chuẩn hoá để đo "độ dốc" contour (độc lập độ dài — B1/§6).
 DELTA_POSITIONS = (0.25, 0.5, 0.75)
@@ -154,12 +165,26 @@ def slot_losses(
 
     losses["tone"] = F.cross_entropy(outputs["tone_logits"].transpose(1, 2), batch["features"][..., 4])
 
+    # A1/§43.1 — gate pause: `pos_weight` (chống "học thuộc" toàn âm tính) + trọng số **khối lượng**
+    # cho dương tính (`gap_frames = expm1(pause_log_gap)` vì target ghi `log1p(gap)` — v2_targets).
     pause_mask = batch["pause_mask"].to(torch.float32)
-    losses["pause_gate"] = (
-        F.binary_cross_entropy_with_logits(outputs["pause_logits"], batch["pause_gate"],
-                                           reduction="none") * pause_mask
-    ).sum() / pause_mask.sum().clamp_min(1)
-    gap_mask = pause_mask * (batch["pause_gate"] >= 0.5).to(torch.float32)
+    gate_target = batch["pause_gate"]
+    positive = (gate_target >= 0.5).to(torch.float32)
+    gate_bce = F.binary_cross_entropy_with_logits(
+        outputs["pause_logits"], gate_target, reduction="none",
+        pos_weight=torch.as_tensor(float(merged.get("pause_pos_weight", PAUSE_POS_WEIGHT)),
+                                dtype=torch.float32,
+                                   device=gate_target.device))
+    if "pause_log_gap" in batch:
+        gap_frames = torch.expm1(batch["pause_log_gap"].to(torch.float32).clamp_min(0.0))
+        mass_scale = float(merged.get("pause_mass_scale", PAUSE_MASS_SCALE))
+        mass = (1.0 + gap_frames.clamp(0.0, PAUSE_MASS_CLIP_FRAMES) / mass_scale
+                if mass_scale > 0 else torch.ones_like(gap_frames))
+        gate_weight = 1.0 + positive * (mass - 1.0)  # âm tính giữ trọng số 1
+    else:  # batch không có target gap (caller cũ) → không đổi hành vi
+        gate_weight = torch.ones_like(gate_bce)
+    losses["pause_gate"] = (gate_bce * gate_weight * pause_mask).sum() / pause_mask.sum().clamp_min(1)
+    gap_mask = pause_mask * positive
     losses["pause_gap"] = (
         (outputs["pause_log_gap"] - batch["pause_log_gap"]) ** 2 * gap_mask
     ).sum() / gap_mask.sum().clamp_min(1)

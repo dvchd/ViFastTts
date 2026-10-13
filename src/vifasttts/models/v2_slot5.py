@@ -12,7 +12,8 @@ Bất biến:
 
 Quy ước tham số (khớp dataset v2):
 - `durations` [B,N] = `d_syl` **hữu thanh** cấp âm tiết (khác v1 truyền spans);
-- `gaps` [B,N] = gap **sau** mỗi âm tiết, phần tử cuối = 0 cho row segment;
+- `gaps` [B,N] = gap **sau** mỗi âm tiết (A2/§43.1: phần tử cuối = pause đuôi của row, có nhãn;
+  manifest cũ chỉ ghi N-1 gap ⇒ phần tử cuối = 0);
 - `lead` [B] = frame lặng đầu clip (train segment: 0).
 """
 

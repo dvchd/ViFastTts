@@ -14,6 +14,11 @@ Mở rộng 14/10/2026 (kiểm toán "hiện tượng mù" — chỉ THÊM, mặ
     nhóm ghép `coda:tone` = tích hai nhóm (kiểm hiệu ứng coda có bị lẫn với thanh);
   `--no-cer` — bỏ CER ở free mode (khi chỉ cần nhịp nghỉ/ngữ điệu; CER vẫn là mặc định).
 
+B1 (§43.2 — sửa THƯỚC ngữ điệu câu hỏi): `slope_final_question|period` **chỉ** tính khi dấu ở
+  âm tiết **cuối** row (bản cũ = mọi vị trí, giữ dưới tên `*_any`); thêm **Δ ghép cặp** model−thật
+  (`intonation_paired`: median + CI 95% bootstrap 1000 lần) và **Δ theo âm tiết cuối row**
+  (`intonation_by_final` với nhóm `punctuation` / `tone` / `punctuation:tone` = `QUESTION|NGANG`).
+
 Mask vùng đo lấy từ manifest (Addendum 3 §2.1): mel trên [lead, T); F0/VUV chỉ
 frame hữu thanh của âm tiết (`durations`), bỏ gap + lead.
 
@@ -60,15 +65,32 @@ SLOPE_MIN_FRAMES = 8
 #: Như trên nhưng cho hồi quy trên 2 âm tiết cuối (cửa sổ ngắn ⇒ cần nhiều frame hơn).
 PAD_SLOPE_MIN_FRAMES = 12
 #: Các metric ngữ điệu trong khoá `intonation` của JSON free-run.
-_SLOPE_METRICS = ("slope_all", "slope_all_ngang", "slope_final_question",
-                  "slope_final_period", "ngang_declination_cents")
+#: `slope_final_*` chỉ tính khi dấu ở **âm tiết cuối row** (B1/§43.2); `*_any` = bản CŨ
+#: (dấu ở bất kỳ vị trí — trộn câu hỏi GIỮA câu ⇒ đọc sai hướng ngữ điệu).
+_SLOPE_METRICS = ("slope_all", "slope_all_ngang",
+                  "slope_final_question", "slope_final_question_any",
+                  "slope_final_period", "slope_final_period_any",
+                  "ngang_declination_cents")
+#: Nhóm để cắt Δ ghép cặp ngữ điệu theo **âm tiết cuối row** (B1) — cùng máy móc nhóm ghép
+#: như `coda:tone` (`_group_labels`); nhãn `punctuation:tone` = `"QUESTION|NGANG"`
+#: (nhãn là TÊN trong `ComponentVocabs`, không phải ký tự `?`).
+_SLOPE_FINAL_GROUPS = ("punctuation", "tone", "punctuation:tone")
+#: Bootstrap CI 95% cho Δ ghép cặp (median) + seed cố định ⇒ JSON tất định khi chạy lại.
+PAIRED_BOOTSTRAP_DRAWS = 1000
+PAIRED_BOOTSTRAP_SEED = 20261014
 _GROUP_NOTE = ("metric cấp âm tiết (mỗi âm tiết 1 giá trị; mel/F0 trên frame của chính âm tiết "
                "trong timeline target) — mean/median trên các âm tiết của nhóm")
 _GAP_NOTE = ("free-run: so theo vị trí frame (chưa align) ⇒ chỉ tin khi `length_ratio` ≈ 1; "
-             "bỏ vị trí gap cuối row (không có nhãn, khớp `pause_mask` của train)")
+             "`pause_f1`/`gap_sum_mae_frames` **bỏ vị trí gap cuối row** (row cũ chỉ ghi N-1 gap, "
+             "khớp `pause_mask` cũ) — manifest A2 ghi đủ gap ⇒ đọc `pause_f1_all`/`*_all_frames`")
 _SLOPE_NOTE = ("logF0 hồi quy theo vị trí frame, chỉ frame hữu thanh (≥ 8 frame; 2 âm tiết cuối "
                "≥ 12) — đơn vị cent/giây; đọc **median** (mean bị vài cửa sổ dốc đứng kéo lệch); "
-               "tag `true` = timeline thật, `model` = timeline model tự sinh")
+               "tag `true` = timeline thật, `model` = timeline model tự sinh. "
+               "**B1/§43.2**: `slope_final_question|period` chỉ tính khi dấu ở **âm tiết CUỐI row**; "
+               "bản cũ (mọi vị trí — trộn `?` giữa câu) giữ nguyên dưới tên `*_any`. "
+               "Đọc Δ ở `intonation_paired` (ghép cặp model−thật, median + CI 95% bootstrap "
+               "1000 lần) và `intonation_by_final` (Δ tách theo nhãn âm tiết cuối, gồm "
+               "`punctuation:tone` = `QUESTION|NGANG`) — **đừng** so median rời (n nhỏ, mất cặp).")
 
 
 def _read_rows(manifest: str | Path) -> list[dict]:
@@ -431,6 +453,62 @@ def _f1(hits: int, false: int, missed: int) -> float | None:
     return round(2 * hits / denominator, 4) if denominator else None
 
 
+def _paired_delta(true_values: list[float], model_values: list[float], *,
+                  draws: int = PAIRED_BOOTSTRAP_DRAWS,
+                  seed: int = PAIRED_BOOTSTRAP_SEED) -> dict | None:
+    """Δ **ghép cặp** (model − thật) của một metric: median + CI 95% bootstrap.
+
+    Ghép cặp = chỉ dùng các **cặp cùng cửa sổ** (một clip/metric một cặp) — bắt buộc khi so
+    thật vs model (B1/§43.2: so median rời nhau vừa lệch cỡ mẫu vừa trộn cửa sổ khác nhau ⇒ đọc
+    sai dấu của hiệu ứng). CI = percentile 2,5/97,5 của **median** Δ khi resample có hoàn lại
+    (`draws` lần, seed cố định ⇒ chạy lại ra cùng JSON). `None` khi không có cặp nào (không bịa số);
+    `ci95 = None` khi n = 1 (không bootstrap được).
+    """
+    true_array = np.asarray(true_values, dtype=np.float64)
+    model_array = np.asarray(model_values, dtype=np.float64)
+    if true_array.size == 0 or true_array.size != model_array.size:
+        return None
+    delta = model_array - true_array
+    entry: dict = {
+        "n": int(delta.size),
+        "median_true": round(float(np.median(true_array)), 3),
+        "median_model": round(float(np.median(model_array)), 3),
+        "delta_median": round(float(np.median(delta)), 3),
+        "delta_mean": round(float(delta.mean()), 3),
+        "frac_rising": round(float((delta > 0).mean()), 3),  # tỷ lệ cửa sổ model dốc LÊN hơn thật
+    }
+    if delta.size > 1 and int(draws) > 0:
+        rng = np.random.default_rng(seed)
+        index = rng.integers(0, delta.size, size=(int(draws), delta.size))
+        medians = np.median(delta[index], axis=1)
+        entry["ci95"] = [round(float(np.percentile(medians, 2.5)), 3),
+                         round(float(np.percentile(medians, 97.5)), 3)]
+    else:
+        entry["ci95"] = None
+    return entry
+
+
+def _paired_report(pairs: dict[str, list[list[float]]]) -> dict[str, dict]:
+    """{metric: `_paired_delta`} cho các cặp `[[true, model], …]` (bỏ metric không có cặp)."""
+    report: dict[str, dict] = {}
+    for metric, values in sorted(pairs.items()):
+        entry = _paired_delta([pair[0] for pair in values], [pair[1] for pair in values])
+        if entry is not None:
+            report[metric] = entry
+    return report
+
+
+def _paired_report_nested(pairs: dict[str, dict[str, dict[str, list[list[float]]]]]) -> dict:
+    """`{nhóm: {nhãn: {metric: Δ ghép cặp}}}` — bỏ nhãn/metric không có cặp (không bịa số)."""
+    report: dict = {}
+    for group, by_label in pairs.items():
+        labels = {label: _paired_report(metrics) for label, metrics in by_label.items()}
+        labels = {label: metrics for label, metrics in labels.items() if metrics}
+        if labels:
+            report[group] = labels
+    return report
+
+
 def _pred_gap_slots(slot_durations) -> np.ndarray:
     """Gap model tự dự đoán: `slot_durations [1+5N]` → [N] (slot G của từng âm tiết)."""
     return slot_durations[5::5].detach().cpu().numpy() if hasattr(slot_durations, "detach") \
@@ -478,7 +556,9 @@ def _slope_block(true_series: tuple[np.ndarray, np.ndarray],
     - `slope_all` — dốc logF0 toàn câu (cent/giây, chỉ frame hữu thanh);
     - `slope_all_ngang` — như trên nhưng chỉ frame thuộc âm tiết thanh NGANG;
     - `slope_final_question` / `slope_final_period` — dốc trên **2 âm tiết cuối** trước `?`/`.`
-      (nối frame của hai âm tiết trong timeline tương ứng);
+      (nối frame của hai âm tiết trong timeline tương ứng) — **chỉ khi dấu ở âm tiết CUỐI row**
+      (B1/§43.2: trước đây cộng cửa sổ của `?` ở bất kỳ vị trí ⇒ 12/16 cửa sổ val300 là câu hỏi
+      giữa câu, đọc sai hướng); bản cũ giữ ở `slope_final_*_any`;
     - `ngang_declination_cents` — chênh logF0 trung bình âm tiết NGANG nửa đầu − nửa cuối câu.
 
     `*_series` = `(vị trí frame, logF0)` chỉ frame **hữu thanh** của timeline tương ứng;
@@ -498,15 +578,21 @@ def _slope_block(true_series: tuple[np.ndarray, np.ndarray],
             positions_ngang, values_ngang, frame_rate)
         for mark in ("QUESTION", "PERIOD"):
             code = punct_codes.get(mark)
-            chosen: list[tuple[int, int]] = []
+            chosen: list[tuple[int, int]] = []      # B1: CHỈ dấu ở âm tiết cuối row
+            chosen_any: list[tuple[int, int]] = []  # bản cũ: mọi vị trí (giữ để so lịch sử)
             for index, punct in enumerate(punctuation_ids):
                 if punct != code or index >= len(windows):
                     continue
-                chosen.append(windows[max(index - 1, 0)])  # hai âm tiết cuối trước dấu câu
-                chosen.append(windows[index])
+                pair = [windows[max(index - 1, 0)], windows[index]]  # hai âm tiết cuối trước dấu
+                chosen_any.extend(pair)
+                if index == len(punctuation_ids) - 1:
+                    chosen.extend(pair)
             positions_mark, values_mark = _subset_series(series, chosen)
             metric_values[f"slope_final_{mark.lower()}"] = _log_f0_slope_cents_per_second(
                 positions_mark, values_mark, frame_rate, min_frames=PAD_SLOPE_MIN_FRAMES)
+            positions_any, values_any = _subset_series(series, chosen_any)
+            metric_values[f"slope_final_{mark.lower()}_any"] = _log_f0_slope_cents_per_second(
+                positions_any, values_any, frame_rate, min_frames=PAD_SLOPE_MIN_FRAMES)
         metric_values["ngang_declination_cents"] = _ngang_declination(series, windows, tones)
         for metric, value in metric_values.items():
             block.setdefault(metric, {})[tag] = value
@@ -762,6 +848,8 @@ def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
     so gap model tự sinh (`pause_gate`/`slot_durations`) với gap thật; **ngữ điệu** (`intonation`)
     — dốc logF0 toàn câu/2 âm tiết cuối + declination thanh NGANG, thật vs model;
     `group_by` → khoá `groups` (metric cấp âm tiết theo nhóm, xem `_group_report`).
+    **B1** (sửa thước `?`): `slope_final_*` chỉ khi dấu ở âm tiết cuối row + khoá ghép cặp
+    `intonation_paired` / `intonation_by_final` (Δ model−thật, median + CI 95% bootstrap).
     `skip_cer=True` bỏ hẳn phần CER (chạy nhanh; mặc định vẫn chấm).
     """
     import resource
@@ -808,6 +896,9 @@ def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
     pause_all = [0, 0, 0]     # gồm cả vị trí gap cuối row khi manifest có giá trị
     slopes: dict[str, dict[str, list[float]]] = {
         metric: {"true": [], "model": []} for metric in _SLOPE_METRICS}
+    # B1: cặp (thật, model) CÙNG cửa sổ cho Δ ngữ điệu — tổng thể + tách theo nhãn âm tiết cuối.
+    slope_pairs: dict[str, list[list[float]]] = {}
+    slope_final_pairs: dict[str, dict[str, dict[str, list[list[float]]]]] = {}
     count = len(dataset) if limit is None else min(limit, len(dataset))
 
     for index in range(count):
@@ -949,10 +1040,21 @@ def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
                              windows, pred_windows, tones,
                              [int(value) for value in item["features"][:, 6].tolist()],
                              punct_codes, frame_rate)
+        # B1: nhãn âm tiết CUỐI row (cùng máy móc nhóm ghép `coda:tone`) để cắt Δ ngữ điệu theo
+        # `punctuation` / `tone` / `punctuation:tone` — đúng tầng ghép cặp mà §43.2 cần.
+        final_labels, _ = _group_labels(row, item["features"], vocabs,
+                                        list(_SLOPE_FINAL_GROUPS))
+        final_labels = {group: values[-1] for group, values in final_labels.items() if values}
         for metric, pair in block.items():
             for tag, value in pair.items():
                 if value is not None:
                     slopes[metric][tag].append(float(value))
+            if pair.get("true") is None or pair.get("model") is None:
+                continue  # chỉ ghép cặp khi CÙNG clip/metric có cả thật lẫn model
+            slope_pairs.setdefault(metric, []).append([float(pair["true"]), float(pair["model"])])
+            for group, label in final_labels.items():
+                bucket = slope_final_pairs.setdefault(group, {}).setdefault(label, {})
+                bucket.setdefault(metric, []).append([float(pair["true"]), float(pair["model"])])
 
         per_clip.append({
             "id": row["id"], "frames": true_frames, "pred_frames": pred_frames,
@@ -997,9 +1099,12 @@ def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
         "pause_note": _GAP_NOTE,
         "mel_gap": _quantiles(mel_gaps),
         "mel_gap_note": "L1 mel (z) CHỈ trên frame gap/lead THẬT, so theo vị trí (chưa align)",
-        # ── ngữ điệu / declination (§35.1 NGANG-drift) ───────────────────────
+        # ── ngữ điệu / declination (§35.1 NGANG-drift; B1/§43.2 sửa thước `?`) ──
         "intonation": {metric: {tag: _quantiles(values) for tag, values in pair.items()}
                        for metric, pair in slopes.items()},
+        # B1 — Δ GHÉP CẶP (model − thật, median + CI 95% bootstrap): con số phải đọc để kết luận.
+        "intonation_paired": _paired_report(slope_pairs),
+        "intonation_by_final": _paired_report_nested(slope_final_pairs),
         "intonation_note": _SLOPE_NOTE,
         "per_clip": per_clip,
     }

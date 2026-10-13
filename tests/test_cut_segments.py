@@ -58,8 +58,9 @@ def test_cut_manifest_xuat_segment_co_frame_range(tmp_path: Path):
 
 def test_cut_manifest_tach_gaps_va_lead(tmp_path: Path):
     # durations [12,3,12] + gaps [4,10,5] + lead 7 → spans [(7,19),(23,26),(36,48)] (T=53).
-    # Segment (0,2): frame_range [7,26] (bỏ lead 7 và gap 10 sau âm tiết 1); gaps nội bộ [4].
-    # Segment (2,3): frame_range [36,48] (bỏ đuôi 5 frame cuối clip).
+    # A2 (§43.1): segment **gồm pause đuôi** ⇒ segment (0,2) frame_range [7,36] (bỏ lead 7 nhưng
+    # GIỮ gap 10 sau âm tiết 1 = pause ở đúng chỗ cắt) và gaps [4, 10]; segment (2,3) [36, 53]
+    # (giữ luôn 5 frame lặng đuôi clip). Bất biến: T == Σdur + Σgap cho MỌI row.
     row = {
         "id": "v1_0002", "audio_path": "/tmp/khong_can_audio.wav", "text": "a b c",
         "syllables": [{"raw": x} for x in ("a", "b", "c")],
@@ -70,15 +71,23 @@ def test_cut_manifest_tach_gaps_va_lead(tmp_path: Path):
     manifest.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
     cut_manifest(manifest, tmp_path / "m2_seg.jsonl", min_frames=10, max_frames=20, floor_frames=0)
     segments = [json.loads(line) for line in (tmp_path / "m2_seg.jsonl").read_text(encoding="utf-8").splitlines()]
-    assert segments[0]["frame_range"] == [7, 26]
-    assert segments[0]["durations"] == [12, 3] and segments[0]["gaps"] == [4]
-    assert segments[0]["lead_frames"] == 0
-    assert segments[1]["frame_range"] == [36, 48]
-    assert segments[1]["durations"] == [12] and segments[1]["gaps"] == []
-    # Bất biến: sum(durations) + sum(gaps) == span từng segment
+    assert segments[0]["frame_range"] == [7, 36]
+    assert segments[0]["durations"] == [12, 3] and segments[0]["gaps"] == [4, 10]
+    assert segments[0]["lead_frames"] == 0  # toạ độ row tính từ âm tiết đầu ⇒ lead tương đối = 0
+    assert segments[1]["frame_range"] == [36, 53]
+    assert segments[1]["durations"] == [12] and segments[1]["gaps"] == [5]
+    # Bất biến (A2): sum(durations) + sum(gaps) == span từng segment; len(gaps) == số âm tiết
     for segment in segments:
         span = segment["frame_range"][1] - segment["frame_range"][0]
         assert sum(segment["durations"]) + sum(segment["gaps"]) == span
+        assert len(segment["gaps"]) == len(segment["durations"])
+    # Hai segment liền kề khít nhau (không chồng, không hở): 36 = 36
+    assert segments[0]["frame_range"][1] == segments[1]["frame_range"][0]
+    # Sàn `floor_frames` áp trên **độ dài hữu thanh**: segment [36,53] dài 17 frame nhưng Σdur = 12
+    # < 13 ⇒ bị bỏ (gap đuôi dài KHÔNG "cứu" mảnh quá ít tiếng)
+    cut_manifest(manifest, tmp_path / "m3_seg.jsonl", min_frames=10, max_frames=20, floor_frames=13)
+    kept = [json.loads(line) for line in (tmp_path / "m3_seg.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert len(kept) == 1 and kept[0]["durations"] == [12, 3]  # đuôi vụn vẫn bị bỏ như trước
 
 
 def test_tts_dataset_slice_theo_frame_range(tmp_path: Path):

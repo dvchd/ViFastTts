@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-import torch
+import math
 
+import pytest
+import torch
+import torch.nn.functional as F
+
+from vifasttts.models import v2_losses
 from vifasttts.models.v2_losses import DEFAULT_WEIGHTS, slot_losses, structural_active
 
 B, N = 2, 3
@@ -173,6 +178,127 @@ def test_pause_gap_chi_khi_gate_1():
     _total, losses = slot_losses(outputs, batch, weights=_only("pause_gap"),
                                  shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)
     assert float(losses["pause_gap"]) > 1.0
+
+
+# ── A1 (§43.1): gate pause có pos_weight + trọng số theo khối lượng gap ─────────
+def _pause_fixture(*, gates, log_gaps, logits):
+    """Fixture CHỈ để soi `pause_gate`: 3 vị trí có nhãn như `_fixture` (B=2, N=3, row-major).
+
+    `gates`/`log_gaps`/`logits` = giá trị tại 3 vị trí mask theo thứ tự [(0,0), (0,2), (1,1)];
+    `log_gaps` theo thang `log1p(frame)` (đúng `v2_targets.pause_targets`).
+    """
+    outputs, batch = _fixture()
+    mask = batch["pause_mask"]
+    gate = torch.zeros_like(batch["pause_gate"])
+    log_gap = torch.zeros_like(batch["pause_log_gap"])
+    pause_logits = torch.zeros(B, N)
+    positions = list(zip(*[index.tolist() for index in mask.nonzero(as_tuple=True)]))
+    assert positions == [(0, 0), (0, 2), (1, 1)]  # thứ tự cố định ⇒ test tất định
+    for (row, column), g, lg, logit in zip(positions, gates, log_gaps, logits):
+        gate[row, column] = g
+        log_gap[row, column] = lg
+        pause_logits[row, column] = logit
+    batch["pause_gate"] = gate
+    batch["pause_log_gap"] = log_gap
+    outputs["pause_logits"] = pause_logits
+    return outputs, batch
+
+
+def _old_pause_gate_loss(outputs, batch) -> float:
+    """Công thức **CŨ** (trước A1): BCE thô, không pos_weight, không trọng số khối lượng."""
+    mask = batch["pause_mask"].to(torch.float32)
+    bce = F.binary_cross_entropy_with_logits(outputs["pause_logits"], batch["pause_gate"],
+                                             reduction="none")
+    return float((bce * mask).sum() / mask.sum().clamp_min(1))
+
+
+def _pause_gate_value(outputs, batch, *, pos_weight: float | None = None,
+                      mass_scale: float | None = None) -> float:
+    """Chỉ lấy loss `pause_gate`; A1 đọc 2 hệ số từ `loss_weights` (mặc định = hành vi cũ)."""
+    weights = _only("pause_gate")
+    if pos_weight is not None:
+        weights["pause_pos_weight"] = pos_weight
+    if mass_scale is not None:
+        weights["pause_mass_scale"] = mass_scale
+    _total, losses = slot_losses(outputs, batch, weights=weights,
+                                 shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)
+    return float(losses["pause_gate"])
+
+
+def test_pause_gate_khong_doi_khi_tat_2_he_so_moi(monkeypatch):
+    """A1 (a): tắt 2 hệ số mới (pos_weight = 1, khối lượng = 1) ⇒ loss ĐÚNG BẰNG công thức cũ.
+
+    Gồm cả trường hợp sát thực tế: batch **không có dương tính** (mọi gate = 0) — pos_weight
+    không được chạm vào điều gì ⇒ loss cũ giữ nguyên từng bit.
+    """
+    outputs, batch = _pause_fixture(gates=[0.0, 0.0, 0.0],
+                                    log_gaps=[math.log1p(0), math.log1p(1), math.log1p(2)],
+                                    logits=[-1.0, 0.5, 2.0])
+    assert _pause_gate_value(outputs, batch) == pytest.approx(_old_pause_gate_loss(outputs, batch),
+                                                              abs=1e-6)
+    # có dương tính: tắt hằng số mới ⇒ phải trùng công thức cũ (không lệch một bit nào)
+    outputs, batch = _pause_fixture(gates=[1.0, 1.0, 0.0],
+                                    log_gaps=[math.log1p(30), math.log1p(4), math.log1p(2)],
+                                    logits=[-1.0, 0.0, 0.5])
+    assert _pause_gate_value(outputs, batch, pos_weight=1.0, mass_scale=float("inf")) == \
+        pytest.approx(_old_pause_gate_loss(outputs, batch), abs=1e-6)
+    # bật A1 (3,0 / 10,0 — như config `..._base_pause.yaml`) ⇒ loss tăng ở vị trí dương tính
+    assert _pause_gate_value(outputs, batch, pos_weight=3.0, mass_scale=10.0) > \
+        _old_pause_gate_loss(outputs, batch)
+    # mặc định module = TRUNG TÍNH (1,0) để run đang chạy không đổi regime khi resume
+    assert v2_losses.PAUSE_POS_WEIGHT == 1.0
+
+
+def test_pause_gate_phat_nang_dau_duong_khoi_luong_lon():
+    """A1 (b): cùng dự đoán sai, dương tính gap **dài** bị phạt nặng hơn gap ngắn.
+
+    Đúng công thức: `Δloss = n_pos · pos_weight · BCE(logit, 1) · (mass_dài − mass_ngắn) / n_mask`
+    với `mass = 1 + clamp(gap, 0, 40)/10` (gap lấy từ `expm1(log_gap)`).
+    """
+    logits = [-2.0, -2.0, -2.0]
+    short_outputs, short_batch = _pause_fixture(
+        gates=[1.0, 1.0, 0.0], log_gaps=[math.log1p(2)] * 2 + [0.0], logits=logits)
+    long_outputs, long_batch = _pause_fixture(
+        gates=[1.0, 1.0, 0.0], log_gaps=[math.log1p(40)] * 2 + [0.0], logits=logits)
+    short = _pause_gate_value(short_outputs, short_batch)
+    long = _pause_gate_value(long_outputs, long_batch)
+    assert long > short
+    bce_positive = float(F.binary_cross_entropy_with_logits(torch.tensor(-2.0), torch.tensor(1.0)))
+    mass_short = 1.0 + 2.0 / 10.0            # gap = 2 frame
+    mass_long = 1.0 + 40.0 / 10.0            # gap = 40 frame (đúng ngưỡng clamp)
+    expected_delta = 2 * v2_losses.PAUSE_POS_WEIGHT * bce_positive * (mass_long - mass_short) / 3
+    assert long - short == pytest.approx(expected_delta, rel=1e-6)
+    # gap 60 frame > ngưỡng clamp 40 ⇒ KHÔNG phạt thêm nữa (tránh 1 pause siêu dài chi phối)
+    huge_outputs, huge_batch = _pause_fixture(
+        gates=[1.0, 1.0, 0.0], log_gaps=[math.log1p(60)] * 2 + [0.0], logits=logits)
+    assert _pause_gate_value(huge_outputs, huge_batch) == pytest.approx(long, rel=1e-6)
+
+
+def test_pause_gate_pos_weight_phat_du_doan_am_tinh_sai():
+    """A1 (c): `pos_weight` làm loss LỚN hơn khi model đoán âm tính sai + grad kéo logit LÊN."""
+    outputs, batch = _pause_fixture(gates=[1.0, 0.0, 0.0],
+                                    log_gaps=[math.log1p(30), 0.0, 0.0],
+                                    logits=[-3.0, 0.0, 0.0])
+    with_pos_weight = _pause_gate_value(outputs, batch, pos_weight=3.0, mass_scale=10.0)
+    without_pos_weight = _pause_gate_value(outputs, batch, pos_weight=1.0, mass_scale=10.0)
+    assert with_pos_weight > without_pos_weight
+    bce_positive = float(F.binary_cross_entropy_with_logits(torch.tensor(-3.0), torch.tensor(1.0)))
+    bce_negative = float(F.binary_cross_entropy_with_logits(torch.tensor(0.0), torch.tensor(0.0)))
+    mask_count = float(batch["pause_mask"].sum())
+    mass = 1.0 + 30.0 / 10.0  # gap 30 frame ⇒ mass = 4,0 (A1: pos_weight 3,0 · mass_scale 10,0)
+    expected = ((3.0 * bce_positive * mass) + bce_negative * 2) / mask_count
+    assert with_pos_weight == pytest.approx(expected, rel=1e-6)
+    # gradient: d(loss)/d(logit) âm ở vị trí pause ⇒ SGD kéo logit lên (dự đoán đúng chiều);
+    # vị trí KHÔNG có nhãn (không thuộc mask) không được nhận gradient.
+    logits = torch.nn.Parameter(outputs["pause_logits"].clone())
+    weights = {**_only("pause_gate"), "pause_pos_weight": 3.0, "pause_mass_scale": 10.0}
+    total, _ = slot_losses({**outputs, "pause_logits": logits}, batch, weights=weights,
+                           shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)
+    total.backward()
+    assert float(logits.grad[0, 0]) < 0.0
+    assert float(logits.grad[0, 1]) == pytest.approx(0.0, abs=1e-9)
+    assert float(logits.grad[1, 0]) == pytest.approx(0.0, abs=1e-9)
+
 
 
 def test_vuv_energy_phonation_bo_inactive():

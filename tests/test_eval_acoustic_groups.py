@@ -266,10 +266,103 @@ def test_ngang_declination_va_slope_block():
     punct_codes = {"QUESTION": 3, "PERIOD": 2}
     block = ev._slope_block(series, series, windows, windows, ["NGANG"] * 4,
                             [0, 2, 0, 0], punct_codes, 24000 / 256)
-    assert set(block) == {"slope_all", "slope_all_ngang", "slope_final_question",
-                          "slope_final_period", "ngang_declination_cents"}
-    assert block["slope_final_period"]["true"] is not None  # có `.` ở âm tiết 1
+    assert set(block) == set(ev._SLOPE_METRICS)
+    assert block["slope_final_period_any"]["true"] is not None  # có `.` ở âm tiết 1 (giữa câu)
+    assert block["slope_final_period"]["true"] is None    # `.` KHÔNG ở âm tiết cuối ⇒ bỏ (B1)
     assert block["slope_final_question"]["true"] is None    # không có `?` ⇒ bỏ qua, không bịa
+    assert block["slope_final_question_any"]["true"] is None
+
+
+# ── B1 (§43.2): sửa thước ngữ điệu câu hỏi + Δ ghép cặp ────────────────────────
+def test_slope_final_chi_khi_dau_o_am_tiet_cuoi_row():
+    """`?` giữa câu chỉ vào `slope_final_question_any`, KHÔNG vào `slope_final_question`."""
+    windows = [(0, 10), (10, 20), (20, 30), (30, 40)]
+    positions = np.arange(40)
+    # câu đầu đi XUỐNG, hai âm tiết cuối đi LÊN ⇒ dấu của độ dốc phân biệt được hai cửa sổ
+    values = np.where(positions < 20, 5.0 - 0.002 * positions, 4.9 + 0.003 * (positions - 20))
+    series = (positions, values)
+    punct_codes = {"QUESTION": 3, "PERIOD": 2}
+
+    mid = ev._slope_block(series, series, windows, windows, ["NGANG"] * 4,
+                          [0, 3, 0, 2], punct_codes, 24000 / 256)  # `?` ở âm tiết 1 (GIỮA), `.` cuối
+    assert mid["slope_final_question"]["true"] is None      # B1: không còn trộn `?` giữa câu
+    assert mid["slope_final_question_any"]["true"] < 0      # bản cũ: có số (và đi xuống)
+    assert mid["slope_final_period"]["true"] is not None    # `.` ở âm tiết cuối đúng chỗ
+
+    last = ev._slope_block(series, series, windows, windows, ["NGANG"] * 4,
+                           [0, 2, 0, 3], punct_codes, 24000 / 256)  # `?` ở âm tiết CUỐI
+    assert last["slope_final_question"]["true"] > 0         # 2 âm tiết cuối đi lên
+    assert last["slope_final_question"]["true"] == pytest.approx(
+        last["slope_final_question_any"]["true"])           # chỉ một cửa sổ ⇒ hai bản trùng
+    assert last["slope_final_period"]["true"] is None       # `.` ở âm tiết 1: không tính bản mới
+
+
+def test_paired_delta_cong_thuc_median_va_bootstrap():
+    """Δ ghép cặp = model − thật: median/mean + CI 95% bootstrap percentile (seed cố định)."""
+    true_values = [10.0, 20.0, 30.0, 40.0]
+    model_values = [12.0, 18.0, 45.0, 30.0]
+    delta = np.asarray(model_values) - np.asarray(true_values)
+    entry = ev._paired_delta(true_values, model_values)
+    assert entry["n"] == 4
+    assert entry["median_true"] == pytest.approx(float(np.median(true_values)))
+    assert entry["median_model"] == pytest.approx(float(np.median(model_values)))
+    assert entry["delta_median"] == pytest.approx(float(np.median(delta)))
+    assert entry["delta_mean"] == pytest.approx(float(delta.mean()))
+    assert entry["frac_rising"] == pytest.approx(float((delta > 0).mean()))
+    # CI 95% = percentile 2,5/97,5 của median khi resample có hoàn lại (đúng seed của module)
+    rng = np.random.default_rng(ev.PAIRED_BOOTSTRAP_SEED)
+    index = rng.integers(0, len(delta), size=(ev.PAIRED_BOOTSTRAP_DRAWS, len(delta)))
+    medians = np.median(delta[index], axis=1)
+    assert entry["ci95"] == [pytest.approx(float(np.percentile(medians, 2.5))),
+                             pytest.approx(float(np.percentile(medians, 97.5)))]
+    assert entry["ci95"][0] <= entry["delta_median"] <= entry["ci95"][1]
+    # ghép cặp là bắt buộc: đảo thứ tự model ⇒ Δ đổi dù "trung bình hai bên rời" không đổi
+    shuffled = ev._paired_delta(true_values, list(reversed(model_values)))
+    assert shuffled["delta_median"] != entry["delta_median"]
+    assert shuffled["median_true"] == entry["median_true"]
+    # không có cặp / thiếu cặp ⇒ None (không bịa số); n = 1 ⇒ không có CI
+    assert ev._paired_delta([], []) is None
+    assert ev._paired_delta([1.0, 2.0], [1.0]) is None
+    single = ev._paired_delta([5.0], [3.0])
+    assert single["n"] == 1 and single["delta_median"] == pytest.approx(-2.0)
+    assert single["ci95"] is None
+
+
+def test_delta_ghep_cap_cau_hoi_theo_nhom_punctuation_tone():
+    """Ghép cửa sổ `?` ở âm tiết cuối → Δ ghép cặp theo nhóm `punctuation:tone` (như §43.2).
+
+    Nhãn nhóm là TÊN trong `ComponentVocabs` (`QUESTION|NGANG`), không phải ký tự `?`.
+    """
+    windows = [(0, 10), (10, 20), (20, 30), (30, 40)]
+    positions = np.arange(40)
+    rising = np.where(positions < 20, 5.0 - 0.002 * positions, 4.9 + 0.003 * (positions - 20))
+    falling = np.where(positions < 20, 5.0 - 0.002 * positions, 4.9 - 0.003 * (positions - 20))
+    block = ev._slope_block((positions, rising), (positions, falling), windows, windows,
+                            ["NGANG"] * 4, [0, 0, 0, 3], {"QUESTION": 3, "PERIOD": 2},
+                            24000 / 256)
+    true_slope = block["slope_final_question"]["true"]
+    model_slope = block["slope_final_question"]["model"]
+    assert true_slope > 0 and model_slope < 0  # thật đi lên, model ngã giọng
+    pairs = {"punctuation:tone": {"QUESTION|NGANG":
+                                  {"slope_final_question": [[true_slope, model_slope]]}}}
+    report = ev._paired_report_nested(pairs)
+    delta = report["punctuation:tone"]["QUESTION|NGANG"]["slope_final_question"]
+    assert delta["n"] == 1 and delta["ci95"] is None
+    assert delta["delta_median"] == pytest.approx(model_slope - true_slope)
+    assert delta["delta_median"] < -100  # cent/giây: model ngã trong khi thật lên
+    # nhãn/nhóm không có cặp ⇒ bỏ hẳn, không bịa số 0
+    assert ev._paired_report_nested({"tone": {"NGANG": {}}}) == {}
+    assert ev._paired_report({}) == {}
+
+
+def test_paired_report_bo_metric_khong_co_cap():
+    """`_paired_report` chỉ xuất metric có cặp; median/max là của Δ (model − thật)."""
+    report = ev._paired_report({"slope_all": [[0.0, 100.0], [20.0, 80.0]],
+                                "slope_final_period": []})
+    assert set(report) == {"slope_all"}
+    assert report["slope_all"]["n"] == 2
+    assert report["slope_all"]["delta_median"] == pytest.approx(80.0)  # Δ = [100, 60] ⇒ median 80
+    assert report["slope_all"]["frac_rising"] == 1.0
 
 
 def test_evaluate_free_v2_them_nhip_nghi_va_ngu_dieu(setup):
@@ -286,7 +379,7 @@ def test_evaluate_free_v2_them_nhip_nghi_va_ngu_dieu(setup):
     assert report["pause_note"]
     mel_gap = report["mel_gap"]
     assert mel_gap["n"] == 2 and math.isfinite(mel_gap["mean"])
-    # ngữ điệu: đủ 5 metric × 2 timeline, có mẫu cho `slope_all`
+    # ngữ điệu: đủ metric × 2 timeline, có mẫu cho `slope_all`
     intonation = report["intonation"]
     assert set(intonation) == set(ev._SLOPE_METRICS)
     for metric in ev._SLOPE_METRICS:
@@ -294,6 +387,24 @@ def test_evaluate_free_v2_them_nhip_nghi_va_ngu_dieu(setup):
     assert intonation["slope_all"]["true"]["n"] == 2
     assert intonation["slope_all"]["true"]["mean"] < 0  # cache giả dốc xuống
     assert report["intonation_note"]
+    # B1: `?` (ROW1) và `.` (ROW2) đều ở âm tiết GIỮA câu ⇒ bản "cuối row" rỗng, bản `_any` có số
+    assert intonation["slope_final_question"]["true"]["n"] == 0
+    assert intonation["slope_final_question_any"]["true"]["n"] == 1  # chỉ ROW1 có `?`
+    assert intonation["slope_final_period"]["true"]["n"] == 0
+    # `_any` của `.`: ROW2 (`.` ở âm tiết 4/5) đủ cửa sổ; ROW1 (`.` ở âm tiết ĐẦU) chỉ 8 frame
+    # < `PAD_SLOPE_MIN_FRAMES` (12) ⇒ không có số — đúng thiết kế "không bịa", không phải lỗi.
+    assert intonation["slope_final_period_any"]["true"]["n"] == 1
+    # B1: Δ ghép cặp (khoá mới) + tách theo nhãn âm tiết cuối row (không có cặp ⇒ khoá rỗng)
+    assert isinstance(report["intonation_paired"], dict)
+    by_final = report["intonation_by_final"]
+    assert isinstance(by_final, dict)
+    for group, labels in by_final.items():
+        assert group in ev._SLOPE_FINAL_GROUPS          # dùng đúng máy móc nhóm ghép
+        assert set(labels) <= {"NONE", "NGANG", "HOI", "NONE|NGANG", "NONE|HOI"}
+        for metrics in labels.values():
+            for entry in metrics.values():
+                assert entry["n"] >= 1 and isinstance(entry["ci95"], list | type(None))
+    json.dumps(report)
     # nhóm
     assert set(report["groups"]) == {"coda", "tone"}
     json.dumps(report)

@@ -5,10 +5,12 @@
   `pauses` (pause ≥150 ms giữa hai từ, điểm cắt ưu tiên).
 - **Cắt tại biên âm tiết** (không bao giờ cắt giữa âm tiết): ưu tiên điểm cắt là **pause**, nếu
   không có pause trong cửa sổ thì cắt tại biên âm tiết xa nhất còn trong `[min, max]` frame.
-- Segment **không gồm** khoảng lặng ngoài rìa: `frame_range = [start_âm-tiết-đầu, end_âm-tiết-cuối]`
-  (tự động cắt lặng đầu clip ở segment đầu và đuôi clip ở segment cuối khi rìa là pause/lặng).
+- Segment **gồm pause đuôi** (A2/§43.1): `frame_range = [đầu âm tiết đầu, cuối âm tiết cuối + gap_đuôi]`
+  — trước đây `gaps[start:end-1]` bỏ mất **46,5% khối lượng pause** của clip (pause nằm đúng chỗ
+  cắt + lặng đuôi clip). Bất biến: `T == Σdur + Σgap` (mọi gap của row đều có frame trong row).
+  Lặng **đầu** clip vẫn bị cắt ở segment đầu ⇒ toạ độ row tính từ âm tiết đầu (`lead_frames = 0`).
 - Row của segment giữ nguyên `audio_path` của clip gốc + `frame_range` [start, end) +
-  `durations`/`gaps` đã cắt (gaps chỉ còn khoảng lặng **giữa** các âm tiết trong segment).
+  `durations`/`gaps` đã cắt (gaps đủ cho mọi âm tiết: kể cả khoảng lặng **sau âm tiết cuối**).
 - Đuôi ngắn hơn `min` được gộp vào segment trước nếu tổng ≤ `max`.
 
 Chạy:
@@ -66,8 +68,8 @@ def cut_manifest(manifest: str | Path, out_path: str | Path, *,
                  min_frames: int, max_frames: int, floor_frames: int = 24) -> dict[str, Any]:
     """Cắt toàn bộ manifest thành segment; ghi manifest mới + trả thống kê.
 
-    `floor_frames`: segment ngắn hơn ngưỡng này (mặc định 24 frame ≈ 0,26 s) bị bỏ —
-    đuôi vụn sau khi cắt không đủ để thành mẫu huấn luyện.
+    `floor_frames`: segment có **độ dài hữu thanh** ngắn hơn ngưỡng này (mặc định 24 frame ≈ 0,26 s)
+    bị bỏ — đuôi vụn sau khi cắt không đủ để thành mẫu huấn luyện (không tính pause đuôi, xem A2).
     """
     rows = [json.loads(line) for line in Path(manifest).read_text(encoding="utf-8").splitlines() if line.strip()]
     out_rows: list[dict[str, Any]] = []
@@ -91,8 +93,15 @@ def cut_manifest(manifest: str | Path, out_path: str | Path, *,
         if len(cuts) > 1:
             stats["clips_split"] += 1
         for index, (start, end) in enumerate(cuts):
-            frame_range = [spans[start][0], spans[end - 1][1]]
-            if frame_range[1] - frame_range[0] < floor_frames:
+            # A2 (§43.1): giữ ĐỦ gap của đoạn, kể cả gap **sau âm tiết cuối** (chính là pause ở
+            # mép cắt / lặng đuôi clip) ⇒ `frame_range` phải phủ các frame đó, nếu không bất biến
+            # `T == Σdur + Σgap` vỡ và gate/log_gap của vị trí cuối trỏ ra ngoài row ("pause bịa").
+            segment_gaps = [int(gaps[i]) if i < len(gaps) else 0 for i in range(start, end)]
+            speech_span = spans[end - 1][1] - spans[start][0]
+            frame_range = [spans[start][0], spans[end - 1][1] + segment_gaps[-1]]
+            # Sàn áp trên **độ dài hữu thanh** (không tính pause đuôi): đuôi vụn vẫn bị bỏ như trước,
+            # nếu không thì gap đuôi dài sẽ "cứu" những mảnh 1 âm tiết chỉ có vài frame tiếng.
+            if speech_span < floor_frames:
                 stats["dropped_tiny"] += 1
                 continue
             segment = {
@@ -102,7 +111,9 @@ def cut_manifest(manifest: str | Path, out_path: str | Path, *,
                 "frame_range": frame_range,
                 "syllables": row["syllables"][start:end],
                 "durations": durations[start:end],
-                "gaps": gaps[start:end - 1] if gaps else [],
+                "gaps": segment_gaps,
+                # Toạ độ row tính từ `frame_range[0]` (= đầu âm tiết đầu của segment, lặng đầu clip
+                # đã bị cắt) ⇒ lead tương đối LUÔN bằng 0 (khớp `v2_targets.segment_windows`).
                 "lead_frames": 0,
                 "text": " ".join(str(s.get("raw", "")) for s in row["syllables"][start:end]),
             }
