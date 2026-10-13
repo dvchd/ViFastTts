@@ -262,3 +262,24 @@ Tool: `tools/r2_weak_labels.py` · báo cáo: `artifacts/dataset_v2/r2_report.js
   timing thật (nặng/coda tắc/iê-uô-ươ) cần biên IPA hoặc aligner (T2.4).
 - **Chốt cho T2.1**: dùng **hybrid** — slot theo cấu trúc abstract (inactive = 0 frame);
   âm tiết không tìm được biên rhyme → weight rule; min-1 frame cho slot active theo B2.
+
+## 18. T2.1 — `seg_durations` weak label (13/10/2026)
+
+Tool: `tools/add_seg_durations.py` (hybrid §17 + fallback rule) → `data/codelung/<stem>_slot4.jsonl`,
+mỗi row thêm `seg_durations [N,4]` (thứ tự **O, M, N, C**) + `seg_method` + `seg_method_version`
++ `seg_weights_hash` (B9). Report: `artifacts/dataset_v2/seg_durations_report.json`.
+
+| Tập | Row | Âm tiết | Lỗi `Σ seg ≠ d_syl` | Fallback (rule) | Methods |
+|---|---|---|---|---|---|
+| train | 9.763 | 222.737 | **0** | 1,4% | hybrid 7.576 + hybrid+rule 2.187 |
+| val | 1.773 | 41.521 | **0** | 1,6% | hybrid 1.332 + hybrid+rule 441 |
+| holdout | 842 | 35.112 | **0** | 1,5% | hybrid 531 + hybrid+rule 311 |
+
+- Slot active: 1 slot 2,3% · 2 slot 36,8% · 3 slot 59,0% · **4 slot 1,9%** (medial chỉ 2,5%
+  âm tiết — corpus vlog; M share khi active ~15,4%).
+- Role share trung bình của `d_syl`: O 35,8% · M 0,4% · N 48,5% · C 15,3%.
+- Nucleus share theo thanh (median): hỏi 0,50 · huyền 0,467 · ngang 0,467 · ngã 0,474 ·
+  sắc 0,45 · **nặng 0,417** — khác biệt chủ yếu do thành phần coda, đúng cảnh báo B5:
+  luật trọng số không biết nét thanh → timing thật cần IPA/aligner (T2.4).
+- Bất biến đã verify độc lập trên cả 3 file: `Σ seg == d_syl` **100%**;
+  `lead + Σd + Σg == T` giữ nguyên (không đụng durations/gaps).
