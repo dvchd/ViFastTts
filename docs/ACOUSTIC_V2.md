@@ -874,3 +874,48 @@ Tương quan log-F0 harvest ↔ tham chiếu (cùng frame hữu thanh), per cử
   ngắn: span 3,3 frame khi bỏ vs 9,5 khi chấm) ⇒ so bằng bảng `paired` (n=1106).
 - **Hệ quả kế hoạch**: GTA Vocos = **đòn cảm nhận** (làm rõ cái mel đang có), *không tạo thêm thông tin
   contour*; muốn dấu rõ phải sửa **từ mel** (loss phân biệt thanh §33.4.3 · K=6 §33.4.4 · dữ liệu §33.4.6).
+
+## 34. Ba giả thuyết về dấu: kiểm tra bằng đo (14/10/2026)
+
+### 34.1 Kiến trúc — F0 **có** đi vào decoder (giả thuyết "thiếu kết nối" SAI)
+
+- `models/v2_slot5.py`: `decoded = decoder(expanded + variance_proj([f0_frames, energy, phonation]) + pos)`
+  ⇒ contour F0 dự đoán được **chiếu thành embedding đưa thẳng vào decoder** (kiểu FastSpeech2) — không
+  phải đầu phụ tách rời. Trọng số loss F0 cũng không nhỏ: `f0 1,0 · f0_delta 0,5 · f0_prior 0,1`.
+- Nhưng **biểu diễn** mới là chỗ hẹp: 4 hệ số DCT + prior trung bình theo thanh *không* tả nổi các thanh
+  có **creak** (ngã/nặng) — xem 34.2.
+
+### 34.2 Trần phân biệt của CHÍNH dữ liệu thật (100 row val, 2.448 âm tiết, không gian s_k chuẩn)
+
+| | Accuracy |
+|---|---|
+| **Target THẬT** (contour người) → prior gần nhất | **0,433** |
+| Model dự đoán → prior gần nhất | 0,741 |
+| khoảng cách bq: tới prior ĐÚNG 3,32 · prior SAI gần nhất 2,99 | |
+
+- **Contour người thật gần prior SAI hơn prior ĐÚNG!** ⇒ trong không-gian-này, dấu vốn đã lẫn nhau —
+  không model nào cứu được nếu chỉ dùng F0-4-hệ-số.
+- Model đạt 0,741 **vì nó mượt hơn thật** (regression về trung bình) — điểm cao trên thước dở ≠ dấu đúng.
+- Per-thanh target thật: NGANG 0,48 · HUYỀN 0,43 · SẮC 0,41 · HỎI 0,71 · **NGÃ 0,42 · NẶNG 0,11**.
+  ⇒ **creak (ngã/nặng) là chỗ không biểu diễn được** — khớp đúng cảm nhận tai người.
+- Phụ: chuẩn hoá cao độ theo từng câu (mean / mean+std / min-max) **không** cải thiện (0,30–0,31 so 0,309)
+  ⇒ **không phải lỗi "lệch tông người nói"**, mà là biểu diễn + chất lượng contour (creak, harvest).
+
+### 34.3 Trả lời 3 giả thuyết
+
+1. **Kiến trúc thiếu trọng số/đường cho F0?** → SAI (34.1). Nhưng **biểu diễn 4 hệ số + prior mean**
+   là hẹp thật (34.2) ⇒ sửa ở *target/loss*, không phải thêm tham số cho head.
+2. **Dữ liệu video kém?** → Có phần: contour thật của ngã/nặng lẫn nhau + harvest trên creak kém
+   (NẶNG 0,11 *trên chính target thật*) ⇒ target nhiễu, phải (a) thêm kênh *chất giọng* vào biểu diễn
+   thanh, (b) mask frame creak khi tính F0. Chưa đủ bằng chứng để đổ hết cho chất lượng video.
+3. **Do small?** → Đo được: model hiện **đã vượt trần thật** trên thước prior (0,74 so 0,43) ⇒ dung
+   lượng **không** phải chốt của riêng bài toán dấu. Base (đang chạy) sẽ xác nhận lại bằng F0 RMSE/thanh.
+
+### 34.4 Kế hoạch sửa dấu (cập nhật)
+
+- **T6.1 (đã code)**: `tone_disc` CE trên s_k — chỉ chữa được các thanh *tách được* (ngang/huyền/sắc/hỏi);
+  trần của nó chính là 0,43 ⇒ **không đủ một mình**.
+- **T6.2 (chính)**: `tone_ruler` (F0 + **phonation** + độ dài — đang train) dùng làm **loss phân biệt
+  thanh đông lạnh** (differentiable: đầu vào đúng là các đầu ra của model) ⇒ mô hình được thưởng vì
+  contour+chất giọng+độ dài *phân biệt được*, không chỉ vì "gần prior".
+- **T6.3**: mask frame creak khi tạo target F0 (giảm nhiễu nhãn) + xét K=6.
