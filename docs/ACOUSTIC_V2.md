@@ -628,8 +628,12 @@ Loss `mel_sharp` = khớp **chênh lệch liền kề** (thời gian + tần s�
 - Tần suất 2.567 âm tiết train: "cái" 9.050 · "là" 9.049 · **"mình" 8.737** (top 3) …
 - Lỗi mel tf_seg trên 2.460 âm tiết val: hiếm (<p25) **0,617** · vừa 0,590 · hay gặp (>p75) **0,563**;
   Spearman(log-freq, lỗi) = **−0,148** → **có thật nhưng yếu** (hiếm lỗi hơn ~9,6%).
-- **Không overfit**: loss train (~0,5–0,7) ≈ val (0,64); val còn giảm nhẹ tới cuối run ⇒ thiếu **bước**
-  và/hoặc **dung lượng**, không phải học vẹt.
+- **ĐÍNH CHÍNH (đo lại 14/10, đúng thước val trên 20 row)**: lỗi mel hữu thanh
+  **train 0,557 vs val 0,612 → gap +9,7%** (đo theo *mọi frame*: 1,03 vs 1,31 = +27%, phần lớn do
+  các đoạn **lặng G bị thuộc nhẹ**). Trước đó ghi "train ≈ val" là do đọc log theo batch bị nhiễu — sai.
+  Chẩn đoán đúng: **overfit nhẹ đã bắt đầu ở phần macro/hữu thanh** (size small sắp tới hạn) + phần
+  **texture chi tiết vẫn underfit** (gồ ghề thiếu 62–69% ngay cả trên train) ⇒ scale lên base là đúng;
+  nếu base overfit nhanh thì **dữ liệu (17,1h) mới là chốt** → cần thêm video.
 - Ảnh hưởng ưu tiên: **bước (chắc chắn)** · **dung lượng (cần thử)** · **đa dạng dữ liệu (nhỏ, cần thêm nguồn)**.
 
 ### 28.4 Kế hoạch acoustic-only (user chốt: **không fine-tune Vocos**)
