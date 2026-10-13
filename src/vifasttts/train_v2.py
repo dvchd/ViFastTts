@@ -391,6 +391,12 @@ def train_slot_v2(
                                      float(mel_voiced),
                                      metrics["total"], metrics["mel_voiced"], learning_rate])
                     history.flush()
+                    improved = metrics["mel_voiced"] < best_val
+                    if improved:
+                        best_val = metrics["mel_voiced"]
+                        no_improve = 0
+                    else:
+                        no_improve += 1
                     state = {
                         "model": model.state_dict(), "optimizer": optimizer.state_dict(),
                         "config": config, "step": step, "best_val": best_val,
@@ -403,12 +409,9 @@ def train_slot_v2(
                         torch.save({"discriminator": discriminator.state_dict(),
                                     "d_optimizer": d_optimizer.state_dict(), "step": step},
                                    out / "d_last.pt")
-                    if metrics["mel_voiced"] < best_val:
-                        best_val = metrics["mel_voiced"]
-                        no_improve = 0
+                    if improved:
                         torch.save(state, out / "best.pt")
                     else:
-                        no_improve += 1
                         if early_stop_patience and no_improve >= early_stop_patience:
                             (out / "early_stop.json").write_text(json.dumps({
                                 "step": step, "best_val": best_val, "no_improve": no_improve,

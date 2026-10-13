@@ -723,3 +723,41 @@ Loss `mel_sharp` = khớp **chênh lệch liền kề** (thời gian + tần s�
 - Cách dùng đúng: **cắt đuôi tệ nhất** (5–10% clip ồn/align kém), không bỏ 12h. Nếu chạy ablation:
   chấm điểm sạch/clip (speech-frame, năng lượng vùng lặng, điểm alignment) → train bản lọc top-X%
   → so **cùng val 300 clip + gồ ghề + CER**.
+
+## 31. Small đạt ngưỡng (run b8) → khởi động BASE (14/10/2026)
+
+### 31.1 Kết quả run b8 (small, batch 8, 60k bước; best.pt @46k)
+
+| Thước (300 val clip) | B0 | 5d | **b8 best (46k)** | b8 last (60k) |
+|---|---|---|---|---|
+| mel_l1_z mean | 1,2758 | 1,1745 | **1,1603** | 1,1627 |
+| mel_l1_z median | 0,8636 | 0,7900 | 0,7934 | 0,7790 |
+| mel dB hữu thanh | 9,79 | 8,72 | 8,64 | 8,64 |
+| vuv (nucleus) | 0,9918 (–) | 0,9823/0,9925 | 0,9823/0,9925 | 0,9823/0,9925 |
+| dur_mae (frame) | 4,79 | 4,78 | 4,75 | 4,76 |
+| free CER (20 holdout) | 0,964 | 0,236 | **0,198** | – |
+
+- best (46k) vs last (60k) chênh **0,0025 ≈ nhiễu** (§30.1) ⇒ dùng `best.pt`; val đi ngang 46k→60k
+  (với patience 5 sẽ tự dừng ~51k — tiết kiệm ~45 phút mà artifact không đổi).
+- ⇒ **small đạt ngưỡng thực dụng**: mel tốt hơn B0 9,1% (mean), CER 0,198 (B0 0,964).
+
+### 31.2 Demo CER — 3 câu cố định, cùng Vocos (`artifacts/demo/`, release `demo-audio-20261013`)
+
+| Câu | b0 | v2c | v2d | **v2b8** |
+|---|---|---|---|---|
+| câu dài (Xin chào các bạn…) | 0,730 | 0,169 | 0,034 | **0,022** |
+| hội thoại (Dạ vâng, cái này…) | 0,747 | 0,013 | 0,013 | 0,051 |
+| 6 thanh (ma má mà mả mã mạ) | – | 0,461 | 0,371 | 0,528 |
+
+- Câu dài: **tốt nhất từ trước tới nay** (0,022); hội thoại tương đương v2d (chênh 1 chữ).
+- **6 thanh vẫn yếu** (0,371→0,528 — trong nhiễu 1 clip) và khớp tai người ("gần như không hiểu").
+  Thanh điệu là **đích riêng tiếp theo**: cần (a) thêm dữ liệu dấu hiếm, hoặc (b) nhánh F0 chuyên dụng —
+  cả hai đều *sau* khi biết kết quả base.
+
+### 31.3 BASE khởi động (tối 14/10)
+
+- Probe (§29.2): batch 8 → **0,374–0,415 s/bước**, RAM MPS **7,3–8,4 GB** (32 GB thoải mái) ⇒ không hạ batch.
+- Lệnh chạy: `tools/watch_train_v2.sh runs/acoustic_v2_base <log> 40000 configs/small_codelung_v2_base.yaml …`
+  → **40.000 bước ≈ 33 epoch**, cosine 40k, val 300 clip (SE ±0,0046), `early_stop_patience: 5`, tự resume khi crash.
+- Giả thuyết cần đo: base giảm val **> nhiễu** so small 0,6267 ⇒ dung lượng là nút thắt → cân nhắc large;
+  base **overfit nhanh** (gap phình) ⇒ **dữ liệu là nút thắt** → xin thêm nguồn (17,1h hiện tại có trần).
