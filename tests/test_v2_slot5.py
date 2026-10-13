@@ -207,3 +207,36 @@ def test_v2_onnx_export_va_parity(tmp_path):
     named_long = dict(zip(output_names, outputs_long))
     assert named_long["mel"].shape[1] == expected_long["mel"].shape[1]
     assert np.allclose(named_long["mel"], expected_long["mel"].numpy(), atol=1e-4)
+
+def test_f0_output_dung_thang_log_tu_nhien():
+    """`f0` output = f0_log_mean + f0_log_std × contour(s_k) — bug đã gặp: thiếu affine ngoài
+    → f0 ra ~1,0 log (~3 Hz) thay vì ~4,8 log (~140 Hz); khoá bằng ca đơn giản (s_k = hằng số)."""
+    model = _model()
+    with torch.no_grad():  # variance head ra 0 → shape_z = 0 → contour = shape_mean (raw)
+        model.variance_mlp.net[-1].weight.zero_()
+        model.variance_mlp.net[-1].bias.fill_(0.0)
+        model.shape_mean.copy_(torch.tensor([0.5, 0.0, 0.0, 0.0]))
+        model.shape_std.copy_(torch.tensor([2.0, 1.0, 1.0, 1.0]))
+        model.f0_log_mean.copy_(torch.tensor(4.8))
+        model.f0_log_std.copy_(torch.tensor(0.2))
+    with torch.no_grad():
+        out = model(FEATURES, durations=D_SYL, seg_durations=SEG, gaps=GAPS, lead=LEAD)
+    expected = 4.8 + 0.2 * 0.5  # log-F0 tự nhiên = mean + std × s0 (các s_k bậc cao = 0)
+    total = int(out["slot_durations"].sum())
+    lead = int(LEAD)
+    # frame đầu tiên của âm tiết 0 (sau lead) = trong slot O → đúng thang; frame lead/G = 0
+    assert abs(float(out["f0"][0, lead]) - expected) < 1e-4
+    assert float(out["f0"][0, 0]) == 0.0
+    gap_start = lead + int(SEG[0, 0].sum())
+    assert float(out["f0"][0, gap_start]) == 0.0  # slot G giữa âm tiết 0 và 1 → 0
+    next_start = gap_start + int(GAPS[0, 0])
+    assert abs(float(out["f0"][0, next_start]) - expected) < 1e-4
+    assert total == out["mel"].shape[1]
+
+
+def test_energy_output_khong_nhan_lai_thang():
+    """Head energy học thô (loss so raw) → output `energy` phải bằng đúng giá trị head (nucleus)."""
+    model = _model()
+    with torch.no_grad():
+        out = model(FEATURES, durations=D_SYL, seg_durations=SEG, gaps=GAPS, lead=LEAD)
+    assert torch.allclose(out["energy"], out["seg_energy"][..., 2])

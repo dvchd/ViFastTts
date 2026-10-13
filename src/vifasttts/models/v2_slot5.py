@@ -247,8 +247,10 @@ class ViFastTtsModelV2(nn.Module):
             return torch.cat([head, padded], dim=1)
 
         shape_slots = segment_to_slot(shape_natural)
-        f0_frames = build_f0_contour(shape_slots, slot_durations, positions)
-        f0_frames = f0_frames * (1.0 - gap_expanded.squeeze(-1))
+        # `s_k` (raw) tính trên log-F0 **đã z-score** (f0_stats) → contour cần thêm biến đổi ngoài
+        # `f0_log_mean + f0_log_std ×` để về log-F0 tự nhiên (§6); thiếu bước này f0 ra ~1,0 log.
+        contour_shape = build_f0_contour(shape_slots, slot_durations, positions)
+        f0_frames = (self.f0_log_mean + self.f0_log_std * contour_shape) * (1.0 - gap_expanded.squeeze(-1))
 
         variance_parts = [f0_frames.unsqueeze(-1)]
         for values in (segment_out[..., 4], segment_out[..., 5]):
@@ -270,7 +272,8 @@ class ViFastTtsModelV2(nn.Module):
         if self.use_postnet:
             mel_refined = mel_pre + self.postnet(mel_pre.transpose(1, 2)).transpose(1, 2)
 
-        seg_energy_natural = segment_out[..., 5] * self.energy_std + self.energy_mean
+        # energy: head học **thô** (đơn vị thật, loss so raw) — không nhân lại thang (khác shape head).
+        seg_energy_natural = segment_out[..., 5]
         outputs: dict[str, torch.Tensor] = {
             "mel": mel_refined,
             "log_duration": log_d,
