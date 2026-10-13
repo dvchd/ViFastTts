@@ -68,8 +68,10 @@
   `v2(<task>): <kết quả ngắn>`; kết thúc bằng push (lệnh ở §2).
 - Một R/T xong phải có: **số đo + so mốc** (B0 hoặc số cũ) + cổng đạt/không + file thay đổi
   → ghi vào `docs/ACOUSTIC_V2.md` (số liệu trong doc; JSON thô ở `artifacts/` — local).
-- **Không commit** `data/`, `cache/`, `runs/`, `artifacts/`; **không upload audio demo lên GitHub**
-  (user đã yêu cầu xoá khỏi cả lịch sử).
+- **Không commit** `data/`, `cache/`, `runs/`, `artifacts/`.
+- **Demo audio**: *không* commit vào lịch sử repo; khi user cần nghe từ xa → đẩy bằng
+  **GitHub Release asset** (vd `gh release create demo-audio-<ngày> artifacts/demo/*.wav`),
+  xoá sạch về sau bằng `gh release delete <tag> --yes` (không cần force-push).
 - Báo cáo trung thực: nêu cả trường hợp trượt cổng + cảnh báo rõ.
 - Quy trình 3 vai: Agent 0 (kiến trúc, ra addendum khi số đo khác kỳ vọng) · Agent 1 (soát code) ·
   Agent 2 (chạy trên M6). Sub-agent khi được giao việc **không tự commit** — trả file + cách chạy cho phiên chính.
