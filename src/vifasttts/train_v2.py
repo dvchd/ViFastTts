@@ -211,11 +211,14 @@ def train_slot_v2(
     save_every = int(training.get("save_every", 1000))
     min_lr_ratio = float(training.get("min_lr_ratio", 0.05))
     weights = config.get("loss_weights", {})
+    early_stop_patience = int(training.get("early_stop_patience", 0))
+    early_stopped = False
 
     optimizer = AdamW(model.parameters(), lr=phase_a_lr,
                       weight_decay=float(training.get("weight_decay", 1e-4)))
     start_step = 0
     best_val = float("inf")
+    no_improve = 0
     if resume:
         state = torch.load(resume, map_location=resolved_device, weights_only=False)
         if arch_of_checkpoint(state) != ARCH_V2:
@@ -228,6 +231,7 @@ def train_slot_v2(
             optimizer.load_state_dict(state["optimizer"])
         start_step = int(state.get("step", 0))
         best_val = float(state.get("best_val", float("inf")))
+        no_improve = int(state.get("no_improve", 0))
         print(f"Tiếp tục từ {resume} (bước {start_step}, best_val {best_val:.4f})")
 
     # ── T4.1: adversarial train-only (mel sau postnet; D tách khỏi checkpoint/ONNX) ──
@@ -390,7 +394,7 @@ def train_slot_v2(
                     state = {
                         "model": model.state_dict(), "optimizer": optimizer.state_dict(),
                         "config": config, "step": step, "best_val": best_val,
-                        "mel_hash": _mel_hash(config), "arch": ARCH_V2,
+                        "no_improve": no_improve, "mel_hash": _mel_hash(config), "arch": ARCH_V2,
                         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
                         "warm_start_from": warm_hash, **seg_meta,
                     }
@@ -401,27 +405,42 @@ def train_slot_v2(
                                    out / "d_last.pt")
                     if metrics["mel_voiced"] < best_val:
                         best_val = metrics["mel_voiced"]
+                        no_improve = 0
                         torch.save(state, out / "best.pt")
+                    else:
+                        no_improve += 1
+                        if early_stop_patience and no_improve >= early_stop_patience:
+                            (out / "early_stop.json").write_text(json.dumps({
+                                "step": step, "best_val": best_val, "no_improve": no_improve,
+                                "patience": early_stop_patience,
+                            }, ensure_ascii=False), encoding="utf-8")
+                            print(f"Dừng sớm: val không cải thiện {no_improve} mốc "
+                                  f"(patience={early_stop_patience}), best_val={best_val:.4f}")
+                            early_stopped = True
+                            break
                 elif step % save_every == 0:
                     torch.save({
                         "model": model.state_dict(), "optimizer": optimizer.state_dict(),
                         "config": config, "step": step, "best_val": best_val,
-                        "mel_hash": _mel_hash(config), "arch": ARCH_V2,
+                        "no_improve": no_improve, "mel_hash": _mel_hash(config), "arch": ARCH_V2,
                         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
-                        "warm_start_from": warm_hash, **seg_meta,
+                        "warm_start_from": warm_hash,
+                        **seg_meta,
                     }, out / "last.pt")
                     if discriminator is not None:
                         torch.save({"discriminator": discriminator.state_dict(),
                                     "d_optimizer": d_optimizer.state_dict(), "step": step},
                                    out / "d_last.pt")
-                if step >= steps:
+                if step >= steps or early_stopped:
                     break
+            if early_stopped:
+                break
     torch.save({
         "model": model.state_dict(), "optimizer": optimizer.state_dict(),
         "config": config, "step": step, "best_val": best_val,
         "mel_hash": _mel_hash(config), "arch": ARCH_V2,
         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
-        "warm_start_from": warm_hash, **seg_meta,
+        "warm_start_from": warm_hash, "no_improve": no_improve, **seg_meta,
     }, out / "last.pt")
     if discriminator is not None:
         torch.save({"discriminator": discriminator.state_dict(),

@@ -124,3 +124,29 @@ def test_train_v2_smoke_va_metadata(tmp_path):
     assert torch.equal(state["model"]["embedding.proj.weight"], reference["embedding.proj.weight"])
     # module mới của v2 có trọng số khác 0 (đã khởi tạo, không copy từ v1)
     assert float(state["model"]["role_emb.weight"].abs().sum()) > 0
+
+
+def test_train_v2_early_stop_patience(tmp_path):
+    """Với LR = 0 (model không đổi) và patience = 1 → val không cải thiện lần 2 → dừng sớm."""
+    rows = [_row("clip__es0", 0, [5, 6], [2], [[2, 0, 2, 1], [2, 0, 2, 2]])]
+    manifest = tmp_path / "es.jsonl"
+    manifest.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows),
+                        encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    for row in rows:
+        _write_cache(cache_dir, row, CONFIG)
+    stats_path = tmp_path / "f0_stats.json"
+    stats_path.write_text(json.dumps(F0_STATS), encoding="utf-8")
+    config = {
+        **CONFIG,
+        "f0_stats_path": str(stats_path),
+        "training": {**CONFIG["training"], "cache_dir": str(cache_dir), "learning_rate": 0.0,
+                     "phase_a_steps": 0, "phase_b_warmup_steps": 1, "log_every": 100,
+                     "validate_every": 1, "validate_batches": 1, "save_every": 100,
+                     "early_stop_patience": 1},
+    }
+    run_dir = tmp_path / "run_es"
+    train_slot_v2(config, str(manifest), str(manifest), str(run_dir), max_steps=20, device="cpu")
+    early = json.loads((run_dir / "early_stop.json").read_text(encoding="utf-8"))
+    assert early["step"] < 20 and early["patience"] == 1  # dừng TRƯỚC max_steps
