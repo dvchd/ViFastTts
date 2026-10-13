@@ -402,3 +402,38 @@ Interface ba hàm, thuần torch (ONNX-export được, không vòng lặp độ
 - **Pool** energy/`vuv` theo cửa sổ role; **`s_k` + trọng số loss F0** đúng Addendum 6
   (N = tỷ lệ hữu thanh; O cần `F0_VOICED_ONSETS ∧ ratio ≥ 0,5`; M/C ratio ≥ 0,5; `n < 2` → bỏ).
 - `segment_targets(row, features, f0_stats)` gộp 9 tensor cho collate (task 5 slot tiêu thụ).
+
+## 23. Cache v3 + task 5 (đợt 1) — model `v2_slot5` + factory/warm-start (13/10/2026)
+
+### 23.1 Cache v3 đã build + verify 100%
+
+Build: `.venv/bin/vifasttts cache-features --config configs/small_codelung_v2.yaml` cho 3 manifest
+(train 9.763 row / **5.807 file**, val 1.773 / 1.011, holdout 842 / 842). Verify bằng
+`tools/verify_cache_v3.py` (sub-agent) — **0 file thiếu · 0 lỗi cấu trúc · 0 mismatch recompute**
+(20 file/manifest trích lại so cache, tất định theo audio+config); exit 0. Kênh:
+`mel, energy, f0, vuv, hnr, glottalization, jitter`.
+
+### 23.2 `models/v2_slot5.py` + `models/factory.py` (đợt 1 của task 5)
+
+- **Model v2** (§1–§6): hidden cấp segment `[O,M,N,C,G]` (segment expander = MLP trên
+  `concat(h_syl, role_emb, emb thành phần)`); `G` = `silence_emb + Linear(boundary_emb, punct_emb)`;
+  `G_lead` chung `silence_emb` + boundary SENTENCE; ratio softmax có mask active; pause head
+  (gate + log_gap) cấp âm tiết; hệ số `s_k` per segment (4) + vuv + energy + phonation (3);
+  `speed` float32 `[1]` **trong graph** (chỉ scale khi tự dự đoán — §5); output v1 giữ nguyên +
+  `slot_durations` + `pause_gate` ở cuối; output mới cho eval: `seg_ratio`, `seg_shape`, `f0` [B,T].
+- **Factory**: `arch_of_checkpoint` (thiếu → `v1_syl`), `build_model(config, sizes, arch)`;
+  `warm_start_v2_from_v1` copy **tường minh** (§11: embedding/encoder/decoder/mel/postnet/
+  tone_classifier/duration), raise khi shape lệch — không load chéo ngầm.
+- **Test** (`tests/test_v2_slot5.py`, 8 test): bất biến `G_lead + Σslot == T` (khớp cả list),
+  `Σ d_seg == d_syl` + inactive = 0 ở free, `speed=1.0` **byte-identical**, vị trí pause bất biến
+  {0.5, 1.0, 1.25}, gate=1 → ≥1 frame kể cả speed 1,25 (và đúng `round(gap/speed)`), gate=0 → 0 frame
+  kể cả 0.8, teacher-forced **không** scale, warm-start so khớp từng tensor, factory arch,
+  **ONNX export parity** + độ dài động N=4→6.
+- **Bẫy đã bắt khi test**: (1) `segment_to_slot` thiếu `G_lead` → lệch chỉ số 1 slot (f0/vuv/energy
+  gán nhầm slot — chỉ lộ vì test kiểm tra *giá trị*, không chỉ shape); (2) export wrapper phải để
+  model là **submodule** (closure làm tham số bị bake thành constant → lỗi "requires grad as constant")
+  và bọc `torch.no_grad()` (v2 có slice/index Parameter — v1 không có).
+- **Chưa xong (đợt 2)**: dataset v2 (nối `v2_targets` vào collate + raise khi thiếu `seg_durations`),
+  loss v2, `export.py`/runtime rẽ nhánh `arch` (+ speed), eval `tf_seg`/`tf_syl` v2, warm-start
+  train từ B0 → cổng so B0.
+- Checklist tích hợp chi tiết: `docs/V2_INTEGRATION_CHECKLIST.md` (sub-agent, 127 dòng).

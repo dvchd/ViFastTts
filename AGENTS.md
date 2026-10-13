@@ -80,8 +80,9 @@
   **R5a/R5b** (stats cấp segment, `data/codelung/f0_stats_v2.json`) · **Addendum 6** (mask F0 theo lớp onset;
   `vuv` không đủ tin cho O) · **R6** (phonation: hnr 0,869 · jitter 0,864 · glottalization 0,763 —
   tilt/aper rớt) · **R4** (`models/slot_ops.py` đóng băng + 1e5 bất biến + parity ONNX) ·
-  **T2.2 nền tảng** (`data/v2_targets.py`: cửa sổ segment, ratio/pause target, s_k + mask).
-- **Đang chạy nền**: cache v3 (train/val/holdout, có phonation) vào `cache/codelung_v2`.
-- **Tiếp theo (task 5)**: dataset v2 (nối `v2_targets` vào collate) → model `v2_slot5`
-  (5 slot O/M/N/C/G + `G_lead`, ratio + pause head, `speed` trong graph) → warm-start từ B0 (§11) →
-  cổng: mel hữu thanh `tf_syl` không tệ hơn B0 quá 20% (giai đoạn A) rồi so B0 đầy đủ + free CER.
+  **T2.2 nền tảng** (`data/v2_targets.py`) · **cache v3** (đã build + verify 100%, `tools/verify_cache_v3.py`) ·
+  **task 5 đợt 1** (`models/v2_slot5.py` + `models/factory.py` + 8 test gồm ONNX parity).
+- **Tiếp theo (task 5 đợt 2)**: dataset v2 (nối `v2_targets` vào collate) → loss v2 + train (raise khi
+  thiếu `seg_durations`) → `export.py`/runtime rẽ nhánh `arch` + `speed` → eval `tf_seg`/`tf_syl` v2 →
+  warm-start từ B0 (§11) → cổng: mel hữu thanh `tf_syl` không tệ hơn B0 quá 20% rồi so B0 đầy đủ + free CER.
+- **Song song**: `docs/V2_INTEGRATION_CHECKLIST.md` (kiểm kê vị trí cần nhánh v2 + hợp đồng interface cũ).
