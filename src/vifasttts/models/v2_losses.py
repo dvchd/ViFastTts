@@ -20,10 +20,13 @@ from vifasttts.losses import masked_l1
 
 DEFAULT_WEIGHTS: dict[str, float] = {
     "mel": 1.0, "mel_pre": 0.2, "mel_sharp": 1.0, "duration": 1.0, "ratio": 1.0,
-    "f0": 1.0, "f0_delta": 0.5, "f0_prior": 0.1,
+    "f0": 1.0, "f0_delta": 0.5, "f0_prior": 0.1, "tone_disc": 0.0,
     "vuv": 0.5, "energy": 0.5, "phonation": 0.5,
     "tone": 0.1, "pause_gate": 0.5, "pause_gap": 0.5,
 }
+
+#: Nhiệt độ của CE phân biệt thanh (§33.4.3): logits = −d²/T với d = khoảng cách tới prior.
+TONE_DISC_TEMPERATURE = 1.0
 
 #: Vị trí chuẩn hoá để đo "độ dốc" contour (độc lập độ dài — B1/§6).
 DELTA_POSITIONS = (0.25, 0.5, 0.75)
@@ -119,6 +122,21 @@ def slot_losses(
         nucleus_weight = batch["f0_weight"][..., 2]
         prior_error = ((outputs["seg_shape"][..., 2, :] - prior) ** 2).sum(dim=-1)
         losses["f0_prior"] = (prior_error * nucleus_weight).sum() / nucleus_weight.sum().clamp_min(1)
+        # T6.1 (§33.4.3) — CE *phân biệt* thanh từ chính contour dự đoán: logits = −d²/T với
+        # d = khoảng cách (bình quân trên hệ số hợp lệ) tới prior của 6 thanh. Khác `f0_prior`
+        # (chỉ *kéo về* prior đúng): số hạng này *đẩy ra* khỏi prior sai ⇒ thưởng biên phân biệt
+        # (NGÃ vs SẮC/NẶNG — đo §33.3: model sai 1,5–2 nửa cung dù basis chỉ cần 13–65 cent).
+        temperature = float(merged.get("tone_disc_temperature", TONE_DISC_TEMPERATURE))
+        nucleus = outputs["seg_shape"][..., 2, :]                      # [B,N,4] — chỉ slot N
+        kmask_n = batch["f0_k_mask"][..., 2, :].to(torch.float32)      # [B,N,4] hệ số hợp lệ
+        distance = (((nucleus.unsqueeze(-2) - tone_prior.view(1, 1, -1, 4)) ** 2)
+                    * kmask_n.unsqueeze(-2)).sum(-1) / kmask_n.sum(-1, keepdim=True).clamp_min(1.0)
+        disc_mask = (nucleus_weight > 0) & kmask_n.any(dim=-1)
+        if disc_mask.any():
+            logits = -distance / max(temperature, 1e-3)
+            losses["tone_disc"] = F.cross_entropy(logits[disc_mask], tone[disc_mask])
+        else:
+            losses["tone_disc"] = distance.sum() * 0.0
 
     losses["vuv"] = (
         F.binary_cross_entropy_with_logits(outputs["seg_vuv_logits"],

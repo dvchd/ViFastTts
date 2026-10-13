@@ -251,3 +251,39 @@ def test_mel_sharp_khop_do_go_ghe():
     _total, losses = slot_losses({**outputs, "mel": smoothed}, batch, weights=_only("mel_sharp"),
                                  shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)
     assert float(losses["mel_sharp"]) > 0.01
+
+
+def test_tone_disc_thuong_bien_phan_biet_thanh():
+    """T6.1: contour khớp prior ĐÚNG → loss thấp; lệch sang prior SAI → loss cao; gradient vào seg_shape."""
+    outputs, batch = _fixture()
+    tones = batch["features"][..., 4]
+    tone_prior = torch.randn(6, 4, generator=torch.Generator().manual_seed(11))
+    shape = outputs["seg_shape"].clone()
+    for b in range(B):
+        for n in range(N):
+            if batch["f0_weight"][b, n, 2] > 0:
+                shape[b, n, 2] = tone_prior[tones[b, n]]
+    weights = _only("tone_disc")
+    _total, losses = slot_losses({**outputs, "seg_shape": shape}, batch, weights=weights,
+                                 shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD, tone_prior=tone_prior)
+    good = float(losses["tone_disc"])
+    # đổi nucleus sang prior của thanh KHÁC → mất biên phân biệt → CE tăng
+    swapped = shape.clone()
+    for b in range(B):
+        for n in range(N):
+            if batch["f0_weight"][b, n, 2] > 0:
+                swapped[b, n, 2] = tone_prior[(int(tones[b, n]) + 1) % 6]
+    _total, losses = slot_losses({**outputs, "seg_shape": swapped}, batch, weights=weights,
+                                 shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD, tone_prior=tone_prior)
+    bad = float(losses["tone_disc"])
+    assert good < bad - 0.5, (good, bad)
+    # gradient phải chảy vào contour dự đoán (dùng được làm loss train, không detach)
+    seg = torch.nn.Parameter(swapped.clone())
+    total, _ = slot_losses({**outputs, "seg_shape": seg}, batch, weights=weights,
+                           shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD, tone_prior=tone_prior)
+    total.backward()
+    assert seg.grad is not None and float(seg.grad.abs().sum()) > 0.0
+    # trọng số mặc định = 0 ⇒ run cũ không đổi hành vi (tổng không gồm tone_disc)
+    _total, losses = slot_losses({**outputs, "seg_shape": shape}, batch,
+                                 shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD, tone_prior=tone_prior)
+    assert "tone_disc" in losses and DEFAULT_WEIGHTS["tone_disc"] == 0.0
