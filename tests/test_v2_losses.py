@@ -237,3 +237,17 @@ def test_f0_prior_mem_theo_thanh_va_mask_nucleus():
                                  weights=_only("f0_prior"), shape_mean=SHAPE_MEAN,
                                  shape_std=SHAPE_STD, tone_prior=tone_prior)
     assert float(losses["f0_prior"]) > 0.5
+
+
+def test_mel_sharp_khop_do_go_ghe():
+    """Mel khớp → 0 (kể cả padding); làm mượt mel (như model thật) → loss > 0."""
+    outputs, batch = _fixture()
+    _total, losses = slot_losses(outputs, batch, weights=_only("mel_sharp"),
+                                 shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)
+    assert float(losses["mel_sharp"]) < 1e-6
+    # làm mượt mel của model (trung bình trượt trên trục thời gian) → mất "gồ ghề" → loss tăng
+    smoothed = outputs["mel"].clone()
+    smoothed[:, 1:-1] = (outputs["mel"][:, :-2] + outputs["mel"][:, 1:-1] + outputs["mel"][:, 2:]) / 3.0
+    _total, losses = slot_losses({**outputs, "mel": smoothed}, batch, weights=_only("mel_sharp"),
+                                 shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)
+    assert float(losses["mel_sharp"]) > 0.01

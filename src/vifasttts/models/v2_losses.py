@@ -19,7 +19,7 @@ import torch.nn.functional as F
 from vifasttts.losses import masked_l1
 
 DEFAULT_WEIGHTS: dict[str, float] = {
-    "mel": 1.0, "mel_pre": 0.2, "duration": 1.0, "ratio": 1.0,
+    "mel": 1.0, "mel_pre": 0.2, "mel_sharp": 1.0, "duration": 1.0, "ratio": 1.0,
     "f0": 1.0, "f0_delta": 0.5, "f0_prior": 0.1,
     "vuv": 0.5, "energy": 0.5, "phonation": 0.5,
     "tone": 0.1, "pause_gate": 0.5, "pause_gap": 0.5,
@@ -74,6 +74,26 @@ def slot_losses(
     if "mel_pre" in outputs:
         losses["mel_pre"] = masked_l1(outputs["mel_pre"], batch["mel"], batch.get("frame_lengths"),
                                       mean_over_bins=True)
+    # T4.1 (biến thể ổn định): khớp độ **gồ ghề** của mel (chênh lệch liền kề thời gian + tần số).
+    # Đo thật: mel model mượt hơn mel thật 62% (thời gian) / 69% (tần số) — đây là "mờ" cần sửa;
+    # GAN (adv) ở batch 1 phân kỳ (xem §28) nên chọn loss tất định này làm đòn chính.
+    fake_mel = outputs["mel"]
+    real_mel = batch["mel"]
+    frames = min(fake_mel.size(1), real_mel.size(1))
+    fake_mel, real_mel = fake_mel[:, :frames], real_mel[:, :frames]
+    frame_mask = torch.ones(fake_mel.size(0), frames, dtype=torch.bool, device=fake_mel.device)
+    if batch.get("frame_lengths") is not None:
+        steps = torch.arange(frames, device=fake_mel.device).view(1, -1)
+        frame_mask = steps < batch["frame_lengths"].unsqueeze(1)
+    pair_mask = (frame_mask[:, 1:] & frame_mask[:, :-1]).to(torch.float32)
+    delta_time = ((fake_mel[:, 1:] - fake_mel[:, :-1]) - (real_mel[:, 1:] - real_mel[:, :-1])).abs().mean(dim=-1)
+    delta_freq = ((fake_mel[:, :, 1:] - fake_mel[:, :, :-1]) - (real_mel[:, :, 1:] - real_mel[:, :, :-1])).abs().mean(dim=-1)
+    mask_float = frame_mask.to(torch.float32)
+    losses["mel_sharp"] = (
+        (delta_time * pair_mask).sum() / pair_mask.sum().clamp_min(1)
+        + (delta_freq * mask_float).sum() / mask_float.sum().clamp_min(1)
+    )
+
     losses["duration"] = F.mse_loss(outputs["log_duration"], torch.log1p(batch["durations"].float()))
 
     ratio_mask = batch["seg_ratio_mask"]

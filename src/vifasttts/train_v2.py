@@ -362,6 +362,7 @@ def train_slot_v2(
                           f"G={mel_gap:.4f} tho={mel_voiced:.4f} "
                           f"f0d={float(parts['f0_delta'].detach()):.3f} "
                           f"f0p={float(parts.get('f0_prior', torch.zeros(())).detach()):.3f} "
+                          f"sharp={float(parts.get('mel_sharp', torch.zeros(())).detach()):.3f} "
                           f"adv={float(parts.get('adv', torch.zeros(())).detach()):.3f} "
                           f"d={float(parts.get('d', torch.zeros(())).detach()):.3f} "
                           f"lr={learning_rate:.2e} ({speed:.3f}s/bước){memory}")

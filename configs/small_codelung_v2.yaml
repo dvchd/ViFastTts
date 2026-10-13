@@ -140,6 +140,7 @@ vocoder_training:
 loss_weights:
   mel: 1.0
   mel_pre: 0.2    # F2: loss phụ trên mel trước postnet
+  mel_sharp: 1.0  # T4.1 (bản ổn định): khớp độ gồ ghề mel (|Δ| thời gian + tần số)
   duration: 1.0
   ratio: 1.0      # v2: CE phân bố slot (mask inactive + d_syl < 3 — B5)
   f0: 1.0         # v2: L1 hệ số hình dạng s_k (z-score, mask Addendum 6 × k_mask)
