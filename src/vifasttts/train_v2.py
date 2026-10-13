@@ -115,8 +115,13 @@ def train_slot_v2(
     max_steps: int | None = None,
     resume: str | None = None,
     device: str | None = None,
+    adversarial_flag: bool | None = None,
 ) -> None:
-    """Vòng train v2 (xem docstring module); `device` ghi đè `training.device`."""
+    """Vòng train v2 (xem docstring module); `device` ghi đè `training.device`.
+
+    `adversarial_flag`: ghi đè `adversarial.enabled` trong config (T4.1) — D tách khỏi
+    checkpoint model (lưu riêng `d_last.pt`).
+    """
     from vifasttts.config import validate_config
 
     validate_config(config, "acoustic")
@@ -218,6 +223,41 @@ def train_slot_v2(
         best_val = float(state.get("best_val", float("inf")))
         print(f"Tiếp tục từ {resume} (bước {start_step}, best_val {best_val:.4f})")
 
+    # ── T4.1: adversarial train-only (mel sau postnet; D tách khỏi checkpoint/ONNX) ──
+    adversarial: dict[str, Any] = dict(config.get("adversarial", {}))
+    if adversarial_flag is not None:
+        adversarial["enabled"] = bool(adversarial_flag)
+    adv_enabled = bool(adversarial.get("enabled", False))
+    discriminator = None
+    d_optimizer = None
+    if adv_enabled:
+        from vifasttts.models.discriminators import MultiScaleMelDiscriminator
+
+        discriminator = MultiScaleMelDiscriminator(
+            n_mels=int(config["mel"]["n_mels"]),
+            scales=tuple(int(s) for s in adversarial.get("scales", (1, 2, 4))),
+            channels=int(adversarial.get("channels", 64)),
+            layers=int(adversarial.get("layers", 3)),
+        ).to(resolved_device)
+        d_optimizer = AdamW(discriminator.parameters(),
+                            lr=float(adversarial.get("d_learning_rate", 2e-4)),
+                            weight_decay=0.0)
+        d_path = out / "d_last.pt"
+        if resume and d_path.exists():
+            d_state = torch.load(d_path, map_location=resolved_device, weights_only=False)
+            discriminator.load_state_dict(d_state["discriminator"])
+            if "d_optimizer" in d_state:
+                d_optimizer.load_state_dict(d_state["d_optimizer"])
+            print(f"Nạp discriminator từ {d_path}")
+        print(f"T4.1 adversarial: {sum(p.numel() for p in discriminator.parameters()) / 1e6:.2f}M tham số "
+              f"(start_step {adversarial.get('start_step', 0)}, warm-up D {adversarial.get('d_warmup_steps', 1000)})")
+    adv_mode = str(adversarial.get("mode", "lsgan"))
+    adv_start = int(adversarial.get("start_step", 0))
+    adv_d_warmup = int(adversarial.get("d_warmup_steps", 1000))
+    adv_weight = float(adversarial.get("mel_adv_weight", 1.0))
+    fm_weight = float(adversarial.get("feature_matching_weight", 1.0))
+    adv_grad_clip = float(adversarial.get("grad_clip_d", 5.0))
+
     first_row = json.loads(Path(train_manifest).read_text(encoding="utf-8").splitlines()[0])
     seg_meta = {key: first_row.get(key) for key in ("seg_method", "seg_method_version", "seg_weights_hash")}
     steps = max_steps if max_steps is not None else int(training.get("max_steps", 20000))
@@ -269,6 +309,35 @@ def train_slot_v2(
                 loss, parts = slot_losses(outputs, moved, weights,
                                           shape_mean=model.shape_mean, shape_std=model.shape_std,
                                           tone_prior=model.tone_prior_z)
+                if discriminator is not None and step >= adv_start:
+                    from vifasttts.models.discriminators import (
+                        discriminator_loss,
+                        feature_matching_loss,
+                        generator_adversarial_loss,
+                    )
+
+                    d_optimizer.zero_grad(set_to_none=True)
+                    # real cần **có grad** cho cập nhật D; fake detach để không đẩy G ở bước D.
+                    out_real = discriminator(moved["mel"])
+                    out_fake_detached = discriminator(outputs["mel"].detach())
+                    loss_d = discriminator_loss(out_real, out_fake_detached, mode=adv_mode)
+                    loss_d.backward()
+                    if adv_grad_clip:
+                        torch.nn.utils.clip_grad_norm_(discriminator.parameters(), adv_grad_clip)
+                    d_optimizer.step()
+                    parts["d"] = loss_d.detach()
+                    if step > adv_start + adv_d_warmup:  # warm-up D xong → mới đẩy G
+                        for parameter in discriminator.parameters():
+                            parameter.requires_grad_(False)  # G-term không đụng gradient của D
+                        out_real_g = discriminator(moved["mel"])
+                        out_fake_g = discriminator(outputs["mel"])
+                        adv = generator_adversarial_loss(out_fake_g, mode=adv_mode)
+                        feature_match = feature_matching_loss(out_real_g, out_fake_g)
+                        for parameter in discriminator.parameters():
+                            parameter.requires_grad_(True)
+                        loss = loss + adv_weight * adv + fm_weight * feature_match
+                        parts["adv"] = adv.detach()
+                        parts["fm"] = feature_match.detach()
                 loss.backward()
                 if grad_clip:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -287,6 +356,8 @@ def train_slot_v2(
                           f"G={mel_gap:.4f} tho={mel_voiced:.4f} "
                           f"f0d={float(parts['f0_delta'].detach()):.3f} "
                           f"f0p={float(parts.get('f0_prior', torch.zeros(())).detach()):.3f} "
+                          f"adv={float(parts.get('adv', torch.zeros(())).detach()):.3f} "
+                          f"d={float(parts.get('d', torch.zeros(())).detach()):.3f} "
                           f"lr={learning_rate:.2e} ({speed:.3f}s/bước){memory}")
                 if resolved_device.type == "mps" and step % 500 == 0:
                     torch.mps.empty_cache()
@@ -310,6 +381,10 @@ def train_slot_v2(
                         "warm_start_from": warm_hash, **seg_meta,
                     }
                     torch.save(state, out / "last.pt")
+                    if discriminator is not None:
+                        torch.save({"discriminator": discriminator.state_dict(),
+                                    "d_optimizer": d_optimizer.state_dict(), "step": step},
+                                   out / "d_last.pt")
                     if metrics["mel_voiced"] < best_val:
                         best_val = metrics["mel_voiced"]
                         torch.save(state, out / "best.pt")
@@ -321,6 +396,10 @@ def train_slot_v2(
                         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
                         "warm_start_from": warm_hash, **seg_meta,
                     }, out / "last.pt")
+                    if discriminator is not None:
+                        torch.save({"discriminator": discriminator.state_dict(),
+                                    "d_optimizer": d_optimizer.state_dict(), "step": step},
+                                   out / "d_last.pt")
                 if step >= steps:
                     break
     torch.save({
@@ -330,5 +409,8 @@ def train_slot_v2(
         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
         "warm_start_from": warm_hash, **seg_meta,
     }, out / "last.pt")
+    if discriminator is not None:
+        torch.save({"discriminator": discriminator.state_dict(),
+                    "d_optimizer": d_optimizer.state_dict(), "step": step}, out / "d_last.pt")
     print(f"Đã huấn luyện v2 {step} bước, checkpoint tại {out}/last.pt "
           f"(best mel hữu thanh {best_val:.4f})")

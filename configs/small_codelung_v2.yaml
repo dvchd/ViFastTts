@@ -82,6 +82,19 @@ training:
 
 f0_stats_path: data/codelung/f0_stats_v2.json  # ngoài block `f0` — tránh đổi khoá cache v3
 
+adversarial:              # T4.1 — mel discriminator đa thang, TRAIN-ONLY (D tách khỏi checkpoint/ONNX)
+  enabled: false          # bật bằng `--adversarial` (resume sau khi L1 hội tụ)
+  start_step: 0           # bước bắt đầu chấm adversarial
+  d_warmup_steps: 1000    # chỉ train D trong ngần này bước đầu (pattern warm-up D)
+  mode: lsgan
+  d_learning_rate: 0.0002
+  mel_adv_weight: 1.0
+  feature_matching_weight: 1.0
+  grad_clip_d: 5.0
+  scales: [1, 2, 4]
+  channels: 64
+  layers: 3
+
 phonation:
   # R6 (docs/ACOUSTIC_V2.md §20): 3/5 ứng viên đạt cổng AUC ≥ 0,7 → bật cho cache v3 + train v2.
   # Đạt: hnr 0,869 · jitter 0,864 · glottalization 0,763. Rớt: tilt 0,521 · aper(1–4 kHz) 0,576.

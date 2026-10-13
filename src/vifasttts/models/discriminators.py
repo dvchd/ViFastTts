@@ -279,3 +279,66 @@ def multi_resolution_stft_loss(
         log_l1 = F.l1_loss(torch.log(pred_spec.clamp_min(1e-5)), torch.log(target_spec.clamp_min(1e-5)))
         total = total + convergence.mean() + log_l1
     return total / max(1, len(resolutions))
+
+
+class MelScaleDiscriminator(nn.Module):
+    """Một thang mel: Conv1d giảm dần theo thời gian (mel là kênh vào) — T4.1.
+
+    Vào `mel [B,T,M]` → `(logits [B,1,T'], features theo từng lớp)` (khớp
+    `discriminator_loss`/`generator_adversarial_loss`/`feature_matching_loss`).
+    """
+
+    def __init__(self, n_mels: int = 100, channels: int = 64, layers: int = 3) -> None:
+        """`channels`: kênh tầng đầu; mỗi tầng tăng đôi (tối đa ×8)."""
+        super().__init__()
+        blocks: list[nn.Module] = []
+        current_in = int(n_mels)
+        current = int(channels)
+        for _ in range(max(1, layers)):
+            blocks += [
+                nn.Conv1d(current_in, current, 5, stride=2, padding=2),
+                nn.LeakyReLU(0.1),
+            ]
+            current_in = current
+            current = min(current * 2, channels * 8)
+        self.blocks = nn.ModuleList(blocks)
+        self.head = nn.Conv1d(current_in, 1, 5, padding=2)
+
+    def forward(self, mel: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        """mel [B,T,M] (không gian chuẩn hoá) → (logits, feature map mỗi lớp)."""
+        x = mel.transpose(1, 2)  # [B, M, T]
+        features: list[torch.Tensor] = []
+        for layer in self.blocks:
+            x = layer(x)
+            if isinstance(layer, nn.Conv1d):
+                features.append(x)
+        logits = self.head(x)
+        return logits, features
+
+
+class MultiScaleMelDiscriminator(nn.Module):
+    """Discriminator mel **đa thang** (T4.1/§8): mỗi thang = average-pool trục thời gian rồi conv.
+
+    Trả `list[(logits, features)]` theo thang — dùng thẳng với các helper loss có sẵn.
+    """
+
+    def __init__(self, n_mels: int = 100, scales: tuple[int, ...] = (1, 2, 4),
+                 channels: int = 64, layers: int = 3) -> None:
+        """`scales`: hệ số gộp thời gian mỗi nhánh (1 = không gộp)."""
+        super().__init__()
+        self.scales = tuple(int(scale) for scale in scales)
+        self.discriminators = nn.ModuleList([
+            MelScaleDiscriminator(n_mels, channels, layers) for _ in self.scales
+        ])
+
+    def forward(self, mel: torch.Tensor) -> list[tuple[torch.Tensor, list[torch.Tensor]]]:
+        """mel [B,T,M] → list theo thang của (logits, features)."""
+        outputs: list[tuple[torch.Tensor, list[torch.Tensor]]] = []
+        for scale, discriminator in zip(self.scales, self.discriminators):
+            current = mel
+            if scale > 1:
+                pooled = F.avg_pool1d(mel.transpose(1, 2), kernel_size=scale,
+                                      stride=scale, ceil_mode=True)
+                current = pooled.transpose(1, 2)
+            outputs.append(discriminator(current))
+        return outputs
