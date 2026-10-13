@@ -638,3 +638,49 @@ Loss `mel_sharp` = khớp **chênh lệch liền kề** (thời gian + tần s�
 2. **Medium (hidden 256, `configs/small_codelung_v2_medium.yaml`)**: đo s/bước rồi probe 1–2k bước để so
    đường loss khởi đầu với small → nếu khả quan mới chạy dài (2–3× chậm).
 3. **Dữ liệu** (tuỳ chọn, cần nguồn từ user): `youtube-fetch` để tăng độ phủ; giữ gate metric như cũ.
+
+## 29. Kinh nghiệm vận hành gom từ phiên 13/10/2026 (đọc trước khi đổi gì)
+
+### 29.1 Batch & thông lượng train (bài học lớn nhất — bỏ sót từ đầu)
+
+- **Batch 1 không phải "an toàn" mà là nút thắt**: `collate_slot_batch` cần **cùng N** trong batch;
+  pipeline v2 chạy batch 1 suốt 56k bước → mỗi bước chỉ 1 mẫu. Đo lại:
+  **batch 1 = 0,229 s/mẫu · batch 8 = 0,0375 (nhanh 6,1×) · batch 16 = 0,047 (tệ hơn 25%)**.
+  → **8 là điểm ngọt đo được** (không phải quy tắc chung; đổi model/pipeline phải **đo lại**).
+- Số liệu epoch (quan trọng): train **hiệu dụng 17,1 giờ** (9.674 row dùng được) — không phải 51h corpus.
+  60k bước × batch 1 = **6,2 epoch**; với batch 8 = **~50 epoch**. B0 (batch 16, 20k bước) đã "thấy"
+  **33 epoch** trong khi v2 mới **5,8 epoch mà vẫn thắng** ⇒ kiến trúc ổn, vấn đề là **thông lượng**.
+- Cách làm: `SameNBatchSampler` (gộp index theo N, xáo trộn trong nhóm + giữa batch; val giữ batch 1
+  cho metric ổn định). RAM không phải giới hạn (máy 32 GB; batch 8 dùng 3,9–7,4 GB MPS).
+- Hệ quả về LR: lịch LR canh cho batch 1; khi tăng batch nên để LR như cũ trước, theo dõi rồi mới chỉnh.
+
+### 29.2 Quy trình bắt buộc khi đổi thứ gì trong train (đã cứu nhiều lần)
+
+1. **Probe 60–100 bước** trước khi chạy dài (đã bắt 2 lần adversarial phân kỳ, 1 lần LR ở sàn do
+   `max_steps` nhỏ làm lịch cosine hết sớm — nhớ: LR phụ thuộc `max_steps`).
+2. Đo **s/bước + s/mẫu + RAM MPS** ngay trong probe.
+3. Chỉ chạy dài khi loss/mel ổn định; sau đó **eval đủ bộ** (mel/thanh/CER/fidelity/gồ ghề) + so mốc.
+4. Mọi kết luận phải có số; kết quả trung thực kể cả khi không cải thiện (vd làm nét mel chỉ 0,354→0,331).
+
+### 29.3 Bẫy môi trường MPS (tóm tắt; chi tiết §25 + AGENTS §7)
+
+- SDPA + dropout trên MPS lỗi khi q/k/v không `requires_grad` (giai đoạn đóng băng) → nhánh viết tay.
+- `ConvPredictor` backward với **N=1** abort tiến trình → lọc `min_syllables=2` khi train; **không**
+  đặt ca N=1-backward vào test (abort giết cả pytest).
+- `torch.onnx.export`: v2 cần `torch.no_grad()` + wrapper **submodule** (không closure).
+- Watchdog MPS: đặt **cả hai** env `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.8` **và** `..._LOW_...=0.7`
+  (chỉ đặt HIGH → lỗi "invalid low watermark ratio").
+
+### 29.4 GAN/đối kháng ở batch 1 (đã thử, đã bỏ — có mã nguồn giữ lại)
+
+- Hai lỗi logic đã bắt: `adv_start` phải **tương đối theo bước resume**; `lsgan` không bị chặn khi
+  logits D phình to (→ dùng **BCE** + spectral norm + ramp + d_lr thấp).
+- Kể cả vậy, vẫn phân kỳ khi trọng số adversarial ~0,5 ⇒ **shelve** ở batch 1. Ghi chú: sau khi có
+  batch 8, có thể **thử lại** (D ổn định hơn khi batch lớn) — nhưng phải qua đúng quy trình §29.2.
+
+### 29.5 Demo audio & bằng chứng nghe
+
+- Demo qua **GitHub Release asset** (không commit vào lịch sử): release `demo-audio-20261013`
+  (B0/v2c/v2d) — xoá bằng `gh release delete <tag> --yes`.
+- **Tai người + CER phải khớp nhau**: hội thoại CER 0,051 (nghe "mang máng" do timbre),
+  clip 6 thanh CER 0,865 (không ngữ cảnh ⇒ đo trực tiếp độ rõ dấu) — dùng làm thước cho các lần sau.

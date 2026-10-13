@@ -60,6 +60,10 @@
 - **`arch`** trong checkpoint: `"v1_syl"` (mặc định khi thiếu) | `"v2_slot5"`; factory đọc `arch`;
   không load chéo bằng `strict=False` ngầm — chỉ warm-start có chủ đích (§11 ACOUSTIC_V2).
 - `MAX_POSITIONS = 4096` frame (≈43,7 s @ hop 256) — chia câu trước model.
+- **Batch > 1**: dùng `SameNBatchSampler` (gộp cùng N; `collate_slot_batch` không pad N). Batch tối ưu
+  phải **ĐO** — trên M6: batch 1 = 0,229 s/mẫu · **8 = 0,0375** · 16 = 0,047 (không suy diễn; xem §29).
+- **Trước mọi thay đổi train**: probe 60–100 bước (loss ổn định? s/bước? RAM MPS?) + nhớ LR phụ thuộc
+  `max_steps` (đặt max_steps nhỏ → cosine hết sớm → LR ở sàn).
 - Comment/docstring **tiếng Việt**, ngắn, nêu lý do.
 
 ## 6. Quy trình làm việc & commit
