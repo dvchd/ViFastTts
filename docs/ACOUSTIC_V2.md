@@ -505,35 +505,44 @@ z-score, mask Addendum 6 × `f0_k_mask`) · `vuv` (BCE theo segment) · `energy`
    `test_dataset_v2.py::test_min_syllables_loc_row_n_1`. **Không** đặt ca N=1-backward vào test
    (abort giết cả tiến trình pytest) — chỉ ghi nhận trong docstring.
 
-## 26. Task 5 cổng — run 1 (20k) + bug thang F0 (13/10/2026)
+## 26. Task 5 cổng — run 1 + bug thang F0 → run 2 **ĐẠT cổng** (13/10/2026)
 
-### 26.1 Run 1 (`runs/acoustic_v2_slot5`, 20k bước, ~1 h)
+### 26.1 Kết quả chốt (run 2, 20k bước; 300 clip val + 20 clip holdout, cùng tool)
 
-Val nội bộ (tf_seg) cải thiện đều: giai đoạn A 0,795 → B: 0,723 (5k) → 0,694 (8k) → 0,681 (11k) →
-0,660 (14k) → **0,651 (20k)**; `best.pt` = bước 20.000 (best rơi vào cuối).
-
-**Bảng cổng (300 clip val `tf_syl` + 20 clip holdout `free`, cùng tool):**
-
-| Metric | B0 best | B0 last | **v2 run 1 best** | Cổng §11 (≤1,2× B0) |
+| Metric | B0 best | v2 run 1 | **v2 run 2** | Cổng §11 (≤1,2× B0) |
 |---|---|---|---|---|
-| `mel_l1_z` (mean) | 1,276 | 1,220 | **1,179** | ✅ **−7,6 %** |
-| speech mel | 9,79 dB | 9,57 dB | 8,76 dB (raw-dB −10,5 %) | ✅ (≤20 %) |
-| VUV | 0,9918 | 0,9910 | 0,982 | ✅ |
-| duration MAE | 51,1 ms | 51,9 ms | **50,8 ms** | ✅ |
-| **free CER** (holdout 20) | **0,964** | — | **0,230** | ✅ **−76 %** |
-| RTF (free) | 0,0068 | — | **0,0035** | ✅ nhanh hơn ~2× |
+| `mel_l1_z` (tf_syl, nhỏ = tốt) | 1,276 | 1,179 | **1,182** | ✅ **−7,4 %** |
+| `mel_l1_z` (tf_seg) | — | 1,136 | **1,140** | ✅ |
+| speech mel (raw dB) | 9,79 | 8,76 | 8,78 | ✅ (−10,3 %, trong 20 %) |
+| **F0 median theo thanh** (cents) | 135·129·163·223·197·154 | ~~7.729–9.195~~ | **129·107·152·153·184·150** | ✅ **tốt hơn cả 6 thanh** |
+| VUV (seg / nucleus) | 0,992 / — | 0,982 | 0,982 / **0,9925** | ✅ |
+| duration MAE | 51,1 ms | 50,8 | **50,8 ms** | ✅ |
+| **free CER** (holdout 20) | **0,964** | 0,230 | **0,236** | ✅ **−75 %** |
+| RTF free | 0,0068 | 0,0035 | **0,0027** | ✅ nhanh 2,5× |
+| `slot_sum_mae_frames` (Σ slot == T) | — | 0,0 | **0,0** | ✅ bất biến B2 |
 
-- `tf_seg` (cho seg thật) còn tốt hơn `tf_syl` ở mel (1,136 vs 1,179) — đầu vào B2 không tệ hơn đáp án.
-- ⚠️ **F0 v2 ≈ 7.700–9.200 cents** (bất thường) → soi ra bug thang (26.2), run 1 **không** dùng cho F0.
+F0 mean theo thanh (tf_seg): ngang 178 · huyền 144 · sắc 207 · hỏi 198 · ngã 251 · nặng 216 cents —
+các thanh khó (hỏi/ngã/nặng) đều **tốt hơn B0** (223/197/154 → 145/182/148 median).
 
-### 26.2 Bug thang F0 (đã sửa, commit `64b7cf4`) — retrain run 2
+### 26.2 Bug thang F0 (đã sửa, `64b7cf4`) — vì sao phải retrain
 
-- **Phát hiện**: `s_k` target tính trên log-F0 **đã z-score** (`f0_stats_v2`), nhưng model dựng
-  contour thiếu biến đổi ngoài → f0 ra ≈ 1,0 log (~3 Hz) thay vì ~4,8 (~140 Hz) ⇒ sai ≈8.100 cents.
-  Sửa: `f0 = f0_log_mean + f0_log_std × contour(s_k)` (đúng §6; contour nội bộ giữ z-space).
-- Cùng lúc sửa output `energy`: head học **thô** (loss so raw) nên bỏ phép `× std + mean` ở output
-  (trước đó output bị nhân đôi thang — eval vẫn đúng vì đo trên head raw).
+- `s_k` target tính trên log-F0 **đã z-score** (`f0_stats_v2`), nhưng model dựng contour thiếu biến
+  đổi ngoài `f0_log_mean + f0_log_std × …` → f0 ra ≈ 1,0 log (~3 Hz) thay vì ~4,8 (~140 Hz)
+  (sai ≈8.100 cents). Sửa đúng §6; sửa thêm output `energy` bị nhân đôi thang (head học raw).
 - 2 test khoá: `test_f0_output_dung_thang_log_tu_nhien` (đơn vị + frame lead/G = 0) ·
   `test_energy_output_khong_nhan_lai_thang`.
-- **Retrain bắt buộc** (fix đổi thang đầu vào `variance_proj` → checkpoint cũ không còn hợp lệ):
-  run 2 = cùng lệnh, cùng warm-start B0, `runs/acoustic_v2_slot5b`; eval lại toàn bộ (gồm F0 theo thanh).
+- Fix đổi thang đầu vào `variance_proj` → **retrain** (`runs/acoustic_v2_slot5b`, cùng warm-start B0,
+  cùng hyperparam): mel giữ nguyên (0,6514 vs 0,6508), F0 về đúng thang và **tốt hơn B0**.
+
+### 26.3 Export ONNX với checkpoint thật (`artifacts/onnx/v2b_acoustic.onnx`)
+
+- 0,83 s export; input `['features','speed']`; 11 output (8 tên cũ + `phonation` + `slot_durations`
+  + `pause_gate` cuối); metadata `arch=v2_slot5`, `seg_method=hybrid+rule`, `f0_stats_hash=66e6809c…`
+  (khớp checkpoint). Chạy thật: **byte-identical 2 lần**, `speed=0,5` → dài đúng gấp đôi, `Σ slot == T`,
+  `pause_gate` học được ranh giới nghỉ (0,76–0,81) vs trong cụm (0,08–0,46).
+
+### 26.4 Kết luận cổng
+
+**Task 5 ĐẠT toàn bộ cổng** (mel hữu thanh · F0 theo thanh · duration · VUV · free CER · RTF · bất biến
+slot). Chuyển sang T3.2 (prior mềm theo thanh + delta loss) → T3.3 (eval thanh minimal pairs) → R8/T4.1
+(adversarial train-only).
