@@ -241,3 +241,24 @@ Ghi chú (không chặn): ca `len(gaps)=N-2` + `Σd==T` ra `forced_khong_gap` th
 - `"..."` giữa câu hiện gắn `SENTENCE` — theo dõi ở v2.1 cùng SIL token.
 - Giới hạn `MAX_POSITIONS = 4096` (≈43,7 s @ hop 256) — thêm assert + chia câu trước model.
 - Row segment N=1 (`gaps=[]`) là bình thường; v2: G slot = 0.
+
+## 17. Kết quả R2 — weak label O/M/N/C (13/10/2026)
+
+Tool: `tools/r2_weak_labels.py` · báo cáo: `artifacts/dataset_v2/r2_report.json`
+(200 clip `mfa_v2c_vn_aligned` = 7.224 âm tiết, seed 42; đối chiếu thêm dict 3.631 mục).
+
+| Phương án | Coverage (corpus) | Coverage (dict) | Ghi chú |
+|---|---|---|---|
+| `ipa` (biên từ phone tier) | 94,4% | 91,5% | fail chủ yếu: **coda tắc không có phone riêng** (C 114 · T 123 · P 17 · CH 15) |
+| **`lai` (biên onset\|rhyme từ IPA + weight rule trong rhyme)** | **98,3%** | **100,0%** | ≥ cổng 85% (B4) → **chọn làm mặc định** |
+| `rule` (weight thuần) | 100% | 100% | luôn chạy; nhưng timing thô hơn |
+
+- Nhóm fail 1,7% còn lại: **từ vay / đọc chữ cái / âm tiết cụt** không có nguyên âm mang thanh
+  ("pi", "bo", "gu", "vi", "min", "tu"...; median 110 ms, p90 220 ms) → **fallback weight rule**.
+- Bảng phone→role thực nghiệm (top; đầy đủ trong JSON): onset `k m l ɗ n tʰ s tɕ…` · medial `w` ·
+  nucleus (nguyên âm mang thanh) · coda `j n ŋ w ɲ ŋm t̚…`.
+- **Định lượng B5**: trên âm tiết IPA đầy đủ, weight rule lệch IPA **nucleus +15,5 ms ·
+  coda −15,2 ms** (mean |Δ| ≈ 18 ms ≈ 1,7 frame) → ratio predictor chỉ học lại luật;
+  timing thật (nặng/coda tắc/iê-uô-ươ) cần biên IPA hoặc aligner (T2.4).
+- **Chốt cho T2.1**: dùng **hybrid** — slot theo cấu trúc abstract (inactive = 0 frame);
+  âm tiết không tìm được biên rhyme → weight rule; min-1 frame cho slot active theo B2.
