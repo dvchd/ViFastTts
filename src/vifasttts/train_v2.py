@@ -238,6 +238,7 @@ def train_slot_v2(
             scales=tuple(int(s) for s in adversarial.get("scales", (1, 2, 4))),
             channels=int(adversarial.get("channels", 64)),
             layers=int(adversarial.get("layers", 3)),
+            spectral_norm=bool(adversarial.get("spectral_norm", True)),
         ).to(resolved_device)
         d_optimizer = AdamW(discriminator.parameters(),
                             lr=float(adversarial.get("d_learning_rate", 2e-4)),
@@ -255,6 +256,7 @@ def train_slot_v2(
     adv_start = int(adversarial.get("start_step", 0))
     adv_d_warmup = int(adversarial.get("d_warmup_steps", 1000))
     adv_weight = float(adversarial.get("mel_adv_weight", 1.0))
+    adv_ramp = max(1, int(adversarial.get("ramp_steps", 2000)))
     fm_weight = float(adversarial.get("feature_matching_weight", 1.0))
     adv_grad_clip = float(adversarial.get("grad_clip_d", 5.0))
 
@@ -327,6 +329,8 @@ def train_slot_v2(
                     d_optimizer.step()
                     parts["d"] = loss_d.detach()
                     if step > adv_start + adv_d_warmup:  # warm-up D xong → mới đẩy G
+                        # ramp tuyến tính 0→1 trong `ramp_steps` (chống sốc ở bước đầu)
+                        ramp = min(1.0, (step - adv_start - adv_d_warmup) / adv_ramp)
                         for parameter in discriminator.parameters():
                             parameter.requires_grad_(False)  # G-term không đụng gradient của D
                         out_real_g = discriminator(moved["mel"])
@@ -335,7 +339,7 @@ def train_slot_v2(
                         feature_match = feature_matching_loss(out_real_g, out_fake_g)
                         for parameter in discriminator.parameters():
                             parameter.requires_grad_(True)
-                        loss = loss + adv_weight * adv + fm_weight * feature_match
+                        loss = loss + ramp * (adv_weight * adv + fm_weight * feature_match)
                         parts["adv"] = adv.detach()
                         parts["fm"] = feature_match.detach()
                 loss.backward()

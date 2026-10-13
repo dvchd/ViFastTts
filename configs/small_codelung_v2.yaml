@@ -87,7 +87,9 @@ adversarial:              # T4.1 — mel discriminator đa thang, TRAIN-ONLY (D 
   start_step: 0           # bước bắt đầu chấm adversarial
   d_warmup_steps: 1000    # chỉ train D trong ngần này bước đầu (pattern warm-up D)
   mode: lsgan
-  d_learning_rate: 0.0002
+  d_learning_rate: 0.0001    # hạ từ 2e-4 sau lần phân kỳ đầu (D thắng quá nhanh)
+  ramp_steps: 2000           # trọng số adversarial 0→1 tuyến tính sau warm-up D
+  spectral_norm: true        # chuẩn hoá phổ conv của D (chặn Jacobian → grad G không nổ)
   mel_adv_weight: 1.0
   feature_matching_weight: 1.0
   grad_clip_d: 5.0

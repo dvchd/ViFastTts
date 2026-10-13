@@ -288,21 +288,28 @@ class MelScaleDiscriminator(nn.Module):
     `discriminator_loss`/`generator_adversarial_loss`/`feature_matching_loss`).
     """
 
-    def __init__(self, n_mels: int = 100, channels: int = 64, layers: int = 3) -> None:
-        """`channels`: kênh tầng đầu; mỗi tầng tăng đôi (tối đa ×8)."""
+    def __init__(self, n_mels: int = 100, channels: int = 64, layers: int = 3,
+                 spectral_norm: bool = True) -> None:
+        """`channels`: kênh tầng đầu (tăng đôi mỗi tầng, tối đa ×8).
+
+        `spectral_norm=True` (mặc định): chuẩn hoá phổ từng conv — chặn Jacobian của D phình to
+        (đo thật: thiếu nó thì nhánh adversarial phân kỳ: adv 165, mel 129 chỉ sau ~300 bước).
+        """
         super().__init__()
+
+        def conv(in_channels: int, out_channels: int, *, stride: int) -> nn.Conv1d:
+            layer = nn.Conv1d(in_channels, out_channels, 5, stride=stride, padding=2)
+            return torch.nn.utils.parametrizations.spectral_norm(layer) if spectral_norm else layer
+
         blocks: list[nn.Module] = []
         current_in = int(n_mels)
         current = int(channels)
         for _ in range(max(1, layers)):
-            blocks += [
-                nn.Conv1d(current_in, current, 5, stride=2, padding=2),
-                nn.LeakyReLU(0.1),
-            ]
+            blocks += [conv(current_in, current, stride=2), nn.LeakyReLU(0.1)]
             current_in = current
             current = min(current * 2, channels * 8)
         self.blocks = nn.ModuleList(blocks)
-        self.head = nn.Conv1d(current_in, 1, 5, padding=2)
+        self.head = conv(current_in, 1, stride=1)
 
     def forward(self, mel: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
         """mel [B,T,M] (không gian chuẩn hoá) → (logits, feature map mỗi lớp)."""
@@ -323,12 +330,13 @@ class MultiScaleMelDiscriminator(nn.Module):
     """
 
     def __init__(self, n_mels: int = 100, scales: tuple[int, ...] = (1, 2, 4),
-                 channels: int = 64, layers: int = 3) -> None:
+                 channels: int = 64, layers: int = 3, spectral_norm: bool = True) -> None:
         """`scales`: hệ số gộp thời gian mỗi nhánh (1 = không gộp)."""
         super().__init__()
         self.scales = tuple(int(scale) for scale in scales)
         self.discriminators = nn.ModuleList([
-            MelScaleDiscriminator(n_mels, channels, layers) for _ in self.scales
+            MelScaleDiscriminator(n_mels, channels, layers, spectral_norm)
+            for _ in self.scales
         ])
 
     def forward(self, mel: torch.Tensor) -> list[tuple[torch.Tensor, list[torch.Tensor]]]:
