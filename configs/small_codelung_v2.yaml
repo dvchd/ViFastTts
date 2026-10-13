@@ -57,7 +57,7 @@ model:
   use_postnet: true   # F2: 5 lớp conv residual làm nét mel (+1,24M tham số); loss dùng cả mel trước
 
 training:
-  batch_size: 1           # v2: collate yêu cầu **cùng N** trong batch (xem dataset_v2) → batch 1
+  batch_size: 8           # gộp **cùng N** bằng SameNBatchSampler (batch 1 = thấy ít mẫu/giờ)
   learning_rate: 0.0002
   weight_decay: 0.0001
   max_steps: 60000

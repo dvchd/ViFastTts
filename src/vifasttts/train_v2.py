@@ -130,7 +130,7 @@ def train_slot_v2(
     from torch.utils.data import DataLoader
 
     from vifasttts.data.dataset import ManifestDataset
-    from vifasttts.data.dataset_v2 import SlotDataset, collate_slot_batch
+    from vifasttts.data.dataset_v2 import SameNBatchSampler, SlotDataset, collate_slot_batch
     from vifasttts.device import resolve_device
     from vifasttts.frontend.vocab import ComponentVocabs
     from vifasttts.models.factory import (
@@ -161,15 +161,22 @@ def train_slot_v2(
     train_data = SlotDataset(train_manifest, config, f0_stats, cache_dir=cache_dir, min_syllables=2)
     val_data = SlotDataset(val_manifest, config, f0_stats, cache_dir=cache_dir)
     batch_size = int(training.get("batch_size", 1))
-    if batch_size != 1:
-        print(f"[v2] batch_size={batch_size}: collate yêu cầu **cùng N** — sẽ raise nếu khác N.")
     dropped = len(ManifestDataset(train_manifest).rows) - len(train_data.rows)
     if dropped:
         print(f"[v2] Lọc {dropped} row 1 âm tiết khỏi train (MPS abort conv backward với N=1 — §25).")
-    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True,
-                              num_workers=int(training.get("num_workers", 0)),
-                              collate_fn=collate_slot_batch, drop_last=False)
-    val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False,
+    if batch_size > 1:
+        # Batch > 1 cần **cùng N** trong mỗi batch → gộp theo N (không pad trục âm tiết).
+        train_loader = DataLoader(train_data,
+                                  batch_sampler=SameNBatchSampler(train_data.rows, batch_size,
+                                                                  shuffle=True, seed=int(config.get("seed", 42))),
+                                  num_workers=int(training.get("num_workers", 0)),
+                                  collate_fn=collate_slot_batch)
+        print(f"[v2] batch_size={batch_size} (gộp cùng N; val giữ batch 1 cho metric ổn định)")
+    else:
+        train_loader = DataLoader(train_data, batch_size=1, shuffle=True,
+                                  num_workers=int(training.get("num_workers", 0)),
+                                  collate_fn=collate_slot_batch, drop_last=False)
+    val_loader = DataLoader(val_data, batch_size=1, shuffle=False,
                             num_workers=int(training.get("num_workers", 0)),
                             collate_fn=collate_slot_batch, drop_last=False)
 

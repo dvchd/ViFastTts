@@ -206,3 +206,18 @@ def test_collate_khac_n_raise(dataset):
               "pause_mask": item["pause_mask"][:1]}
     with pytest.raises(ValueError, match="cùng N"):
         collate_slot_batch([item, narrow])
+
+
+def test_same_n_batch_sampler_gop_cung_n():
+    """Batch > 1: sampler gộp cùng N, phủ hết index, tất định theo seed."""
+    from vifasttts.data.dataset_v2 import SameNBatchSampler
+
+    rows = [{"durations": [1] * n} for n in (2, 2, 3, 2, 3, 5)]
+    sampler = SameNBatchSampler(rows, 2, shuffle=False, seed=0)
+    batches = list(sampler)
+    assert all(len({len(rows[i]["durations"]) for i in batch}) == 1 for batch in batches)
+    assert sorted(index for batch in batches for index in batch) == list(range(len(rows)))
+    assert len(sampler) == len(batches)
+    first = list(SameNBatchSampler(rows, 2, shuffle=True, seed=7))
+    second = list(SameNBatchSampler(rows, 2, shuffle=True, seed=7))
+    assert first == second  # tất định theo seed (+ epoch)

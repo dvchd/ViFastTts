@@ -162,3 +162,55 @@ def collate_slot_batch(items: list[dict[str, Any]]) -> dict[str, Any]:
             continue
         output[key] = torch.stack([item[key] for item in items])
     return output
+
+
+class SameNBatchSampler:
+    """Sampler gộp index **theo cùng N** (số âm tiết) — để batch > 1 vẫn hợp lệ.
+
+    `collate_slot_batch` yêu cầu cùng N trong batch (không pad trục âm tiết); sampler này
+    chia index thành nhóm cùng N rồi cắt thành batch `batch_size`, xáo trộn trong nhóm và
+    xáo trộn thứ tự batch. Nhờ vậy dùng được batch > 1 mà không đổi dữ liệu/model.
+    """
+
+    def __init__(self, rows: list[dict[str, Any]], batch_size: int, *,
+                 shuffle: bool = True, seed: int = 42, drop_last: bool = False) -> None:
+        """`rows`: manifest rows (cần `durations` để biết N)."""
+        import math
+
+        self.rows = rows
+        self.batch_size = max(1, int(batch_size))
+        self.shuffle = bool(shuffle)
+        self.seed = int(seed)
+        self.drop_last = bool(drop_last)
+        self.epoch = 0
+        self._groups: dict[int, list[int]] = {}
+        for index, row in enumerate(rows):
+            self._groups.setdefault(len(row.get("durations") or []), []).append(index)
+        self._count = sum(
+            (len(group) // self.batch_size if self.drop_last
+             else math.ceil(len(group) / self.batch_size))
+            for group in self._groups.values()
+        )
+
+    def __len__(self) -> int:
+        """Tổng số batch mỗi epoch."""
+        return self._count
+
+    def __iter__(self):
+        """Yield từng batch (list index cùng N)."""
+        import random
+
+        rng = random.Random(self.seed + self.epoch)
+        self.epoch += 1
+        batches: list[list[int]] = []
+        for group in self._groups.values():
+            indices = list(group)
+            if self.shuffle:
+                rng.shuffle(indices)
+            for start in range(0, len(indices), self.batch_size):
+                chunk = indices[start:start + self.batch_size]
+                if len(chunk) == self.batch_size or not self.drop_last:
+                    batches.append(chunk)
+        if self.shuffle:
+            rng.shuffle(batches)
+        return iter(batches)
