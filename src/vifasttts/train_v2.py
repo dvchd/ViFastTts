@@ -234,6 +234,12 @@ def train_slot_v2(
     weights = config.get("loss_weights", {})
     early_stop_patience = int(training.get("early_stop_patience", 0))
     early_stopped = False
+    # §40: ghi "danh tính tập val" vào checkpoint — chống footgun resume bằng tập val KHÁC
+    # (best_val/early-stop vô nghĩa nếu tập val đổi — đã từng xảy ra khi val 40→300 clip, §32.1).
+    val_meta = {
+        "val_manifest_hash": hashlib.sha1(Path(val_manifest).read_bytes()).hexdigest(),
+        "validate_batches": int(training.get("validate_batches", 0)),
+    }
 
     optimizer = AdamW(model.parameters(), lr=phase_a_lr,
                       weight_decay=float(training.get("weight_decay", 1e-4)))
@@ -424,7 +430,7 @@ def train_slot_v2(
                         "config": config, "step": step, "best_val": best_val,
                         "no_improve": no_improve, "mel_hash": _mel_hash(config), "arch": ARCH_V2,
                         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
-                        "warm_start_from": warm_hash, **seg_meta,
+                        "warm_start_from": warm_hash, **seg_meta, **val_meta,
                     }
                     torch.save(state, out / "last.pt")
                     if discriminator is not None:
@@ -437,7 +443,7 @@ def train_slot_v2(
                         if early_stop_patience and no_improve >= early_stop_patience:
                             (out / "early_stop.json").write_text(json.dumps({
                                 "step": step, "best_val": best_val, "no_improve": no_improve,
-                                "patience": early_stop_patience,
+                                "patience": early_stop_patience, **val_meta,
                             }, ensure_ascii=False), encoding="utf-8")
                             print(f"Dừng sớm: val không cải thiện {no_improve} mốc "
                                   f"(patience={early_stop_patience}), best_val={best_val:.4f}")
@@ -449,7 +455,7 @@ def train_slot_v2(
                         "config": config, "step": step, "best_val": best_val,
                         "no_improve": no_improve, "mel_hash": _mel_hash(config), "arch": ARCH_V2,
                         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
-                        "warm_start_from": warm_hash,
+                        "warm_start_from": warm_hash, **val_meta,
                         **seg_meta,
                     }, out / "last.pt")
                     if discriminator is not None:
@@ -465,7 +471,7 @@ def train_slot_v2(
         "config": config, "step": step, "best_val": best_val,
         "mel_hash": _mel_hash(config), "arch": ARCH_V2,
         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
-        "warm_start_from": warm_hash, "no_improve": no_improve, **seg_meta,
+        "warm_start_from": warm_hash, "no_improve": no_improve, **seg_meta, **val_meta,
     }, out / "last.pt")
     if discriminator is not None:
         torch.save({"discriminator": discriminator.state_dict(),

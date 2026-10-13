@@ -150,3 +150,33 @@ def test_train_v2_early_stop_patience(tmp_path):
     train_slot_v2(config, str(manifest), str(manifest), str(run_dir), max_steps=20, device="cpu")
     early = json.loads((run_dir / "early_stop.json").read_text(encoding="utf-8"))
     assert early["step"] < 20 and early["patience"] == 1  # dừng TRƯỚC max_steps
+
+
+def test_train_v2_ghi_danh_tinh_tap_val(tmp_path):
+    """§40: checkpoint + early_stop.json phải ghi `val_manifest_hash` và `validate_batches`."""
+    rows = [_row("clip__vm0", 0, [5, 6], [2], [[2, 0, 2, 1], [2, 0, 2, 2]])]
+    manifest = tmp_path / "vm.jsonl"
+    manifest.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows), encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    for row in rows:
+        _write_cache(cache_dir, row, CONFIG)
+    stats_path = tmp_path / "f0_stats.json"
+    stats_path.write_text(json.dumps(F0_STATS), encoding="utf-8")
+    config = {
+        **CONFIG,
+        "f0_stats_path": str(stats_path),
+        "training": {**CONFIG["training"], "cache_dir": str(cache_dir), "learning_rate": 0.0,
+                     "phase_a_steps": 0, "phase_b_warmup_steps": 1, "log_every": 100,
+                     "validate_every": 1, "validate_batches": 1, "save_every": 100,
+                     "early_stop_patience": 1},
+    }
+    run_dir = tmp_path / "run_vm"
+    train_slot_v2(config, str(manifest), str(manifest), str(run_dir), max_steps=5, device="cpu")
+    import hashlib
+    expected = hashlib.sha1(manifest.read_bytes()).hexdigest()
+    state = torch.load(run_dir / "last.pt", map_location="cpu", weights_only=False)
+    assert state["val_manifest_hash"] == expected
+    assert state["validate_batches"] == 1
+    early = json.loads((run_dir / "early_stop.json").read_text(encoding="utf-8"))
+    assert early["val_manifest_hash"] == expected and early["validate_batches"] == 1
