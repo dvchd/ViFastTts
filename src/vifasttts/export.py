@@ -119,13 +119,13 @@ def _export_v2_fp32(config: dict, checkpoint: str, output: str, opset_version: i
     import torch
 
     from vifasttts.frontend.vocab import ComponentVocabs
-    from vifasttts.models.factory import ARCH_V2, build_model
+    from vifasttts.models.factory import ARCH_V2, build_model, load_model_state
 
     vocabs = ComponentVocabs.default()
     sizes = [len(vocabs.onset), len(vocabs.medial), len(vocabs.nucleus), len(vocabs.coda), len(vocabs.tone), len(vocabs.boundary), len(vocabs.punctuation)]
     model = build_model(config, sizes, arch=ARCH_V2)
     ckpt = torch.load(checkpoint, map_location="cpu")
-    model.load_state_dict(ckpt.get("model", ckpt))
+    load_model_state(model, ckpt.get("model", ckpt))
     f0_stats = ckpt.get("f0_stats")
     if isinstance(f0_stats, dict):
         model.load_f0_stats(f0_stats)

@@ -240,3 +240,19 @@ def test_energy_output_khong_nhan_lai_thang():
     with torch.no_grad():
         out = model(FEATURES, durations=D_SYL, seg_durations=SEG, gaps=GAPS, lead=LEAD)
     assert torch.allclose(out["energy"], out["seg_energy"][..., 2])
+
+
+def test_load_model_state_tha_buffer_moi_nhung_van_chat():
+    """Checkpoint cũ thiếu `tone_prior_z` (buffer suy từ f0_stats) → nạp được; thiếu weight thật → raise."""
+    from vifasttts.models.factory import load_model_state
+
+    model = _model()
+    state = {key: value.clone() for key, value in model.state_dict().items()}
+    state.pop("tone_prior_z")  # checkpoint thời trước T3.2
+    load_model_state(model, state)  # OK
+    state.pop("embedding.proj.weight")
+    try:
+        load_model_state(model, state)
+        raise AssertionError("phải raise khi thiếu weight thật")
+    except ValueError as error:
+        assert "embedding.proj.weight" in str(error)

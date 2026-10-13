@@ -37,6 +37,25 @@ def build_model(config: dict, vocab_sizes: list[int], arch: str | None = None) -
     raise ValueError(f"arch không hợp lệ: {chosen!r} (dùng {', '.join(ARCHES)})")
 
 
+#: Buffer mới thêm sau này được phép thiếu khi nạp checkpoint cũ (đều suy ra từ `f0_stats`).
+OPTIONAL_STATE_KEYS = frozenset({"tone_prior_z"})
+
+
+def load_model_state(model: nn.Module, state: dict) -> None:
+    """Nạp `state` (đã là state_dict của model) — chặt, chỉ tha buffer trong `OPTIONAL_STATE_KEYS`.
+
+    Dùng cho v2: checkpoint train trước T3.2 thiếu `tone_prior_z` (buffer suy từ `f0_stats`).
+    Mọi key khác thiếu/lạ → raise (giữ nguyên tắc "không load chéo ngầm" — §10).
+    """
+    incompatible = model.load_state_dict(state, strict=False)
+    missing = set(incompatible.missing_keys) - OPTIONAL_STATE_KEYS
+    if missing or incompatible.unexpected_keys:
+        raise ValueError(
+            f"Nạp checkpoint không khớp: thiếu {sorted(missing)}, "
+            f"lạ {sorted(incompatible.unexpected_keys)}"
+        )
+
+
 def warm_start_v2_from_v1(model_v2: nn.Module, checkpoint_v1: dict) -> dict[str, list[str]]:
     """Copy trọng số v1 → v2 theo danh sách tường minh; trả `{"loaded", "skipped"}`.
 

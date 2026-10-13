@@ -208,7 +208,10 @@ def train_slot_v2(
         state = torch.load(resume, map_location=resolved_device, weights_only=False)
         if arch_of_checkpoint(state) != ARCH_V2:
             raise ValueError(f"Resume cần checkpoint {ARCH_V2}, nhận {arch_of_checkpoint(state)!r}")
-        model.load_state_dict(state["model"])
+        from vifasttts.models.factory import load_model_state
+
+        load_model_state(model, state["model"])
+        model.load_f0_stats(f0_stats)  # buffer suy từ stats (tone_prior_z) — nạp lại sau resume
         if "optimizer" in state:
             optimizer.load_state_dict(state["optimizer"])
         start_step = int(state.get("step", 0))

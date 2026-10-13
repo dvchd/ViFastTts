@@ -79,7 +79,12 @@ class Synthesizer:
         from vifasttts.data.features import canonical_mel_config, verify_mel_hash
         from vifasttts.device import resolve_device
         from vifasttts.frontend.vocab import ComponentVocabs
-        from vifasttts.models.factory import ARCH_V2, arch_of_checkpoint, build_model
+        from vifasttts.models.factory import (
+            ARCH_V2,
+            arch_of_checkpoint,
+            build_model,
+            load_model_state,
+        )
         from vifasttts.models.istftnet import build_generator, load_generator_state
 
         validate_config(config, "acoustic")
@@ -94,7 +99,7 @@ class Synthesizer:
         verify_mel_hash(state, canonical_mel_config(config), str(checkpoint))
         self.arch = arch_of_checkpoint(state if isinstance(state, dict) else {})
         self.model = build_model(config, sizes, arch=self.arch)
-        self.model.load_state_dict(state.get("model", state))
+        load_model_state(self.model, state.get("model", state))
         if self.arch == ARCH_V2 and hasattr(self.model, "load_f0_stats"):
             stats = state.get("f0_stats") if isinstance(state, dict) else None
             if stats is None:
