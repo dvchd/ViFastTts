@@ -800,3 +800,57 @@ Loss `mel_sharp` = khớp **chênh lệch liền kề** (thời gian + tần s�
   5. Tăng trọng số `mel_sharp` (knob rẻ, kỳ vọng nhỏ: 0,354→0,331 trước đây).
 - Ghi chú dùng thực tế: CER free 0,198 (holdout) = đọc *hiểu được nhưng đục*; muốn "dùng được"
   cho một giọng cụ thể → **fine-tune 1 speaker** (vài giờ dữ liệu sạch) là đòn lớn nhất/giờ công.
+
+## 33. Thanh điệu: chẩn đoán từng khâu + sửa thước đo (14/10/2026)
+
+### 33.1 Đường đi của thanh (60 clip val ≈ 1.462 âm tiết; bộ phân loại T3.3)
+
+| Đường | Accuracy | n (paired) |
+|---|---|---|
+| A: audio THẬT → harvest F0 → phân loại | 0,460 | 1106 |
+| B: mel THẬT → Vocos → F0 | 0,463 | 1106 |
+| C: free-run (text→model→Vocos) → F0 | **0,481** | 1106 |
+| D: f0 head của model | 0,764 | 1106 |
+
+- **B ≈ A** (Vocos + mel không làm mất thanh) và **C ≥ A** (pipeline giữ thanh *ngang* audio thật).
+- ⚠️ **Trần của chính bộ phân loại trên audio thật chỉ 0,46** ⇒ các số cũ (0,19–0,22) đo trong
+  *bối cảnh minimal-pair* là **hiện tượng của thước đo**, không phải bằng chứng model mất thanh.
+  → Phải làm **thước mới** trước khi kết luận (`tools/tone_ruler.py`, đang xây).
+
+### 33.2 Lỗi biểu diễn contour (đo lại bằng hàm chuẩn `dct4_frames/idct4_frames`)
+
+Lỗi bình phương trung bình (cent) khi dựng lại contour F0 **THẬT** của âm tiết với K hệ số:
+
+| Thanh | K=2 | K=4 | K=6 | K=8 | K=12 | n |
+|---|---|---|---|---|---|---|
+| NGANG | 39 | 19 | 11 | 6 | 3 | 1718 |
+| HUYỀN | 26 | 13 | 7 | 5 | 2 | 1595 |
+| SẮC | 46 | 23 | 14 | 8 | 4 | 1488 |
+| HỎI | 70 | 34 | 19 | 12 | 4 | 457 |
+| **NGÃ** | **126** | **65** | **33** | 20 | 10 | 304 |
+| NẶNG | 88 | 44 | 22 | 10 | 2 | 606 |
+
+- **Sửa lỗi của tôi**: phép đo đầu (transform tự viết) sai chuẩn hoá → lỗi không giảm khi tăng K;
+  số trên dùng hàm chuẩn của repo. Ghi lại để nhớ: *đo bằng hàm của repo, không tự chế*.
+- **Kết luận**: ở K=4 contour thật chỉ mất **13–65 cent**, trong khi model sai **111–197 cent**
+  (§31.1) ⇒ **lỗi DỰ ĐOÁN, không phải lỗi basis**. K=6 chỉ giúp NGÃ (65→33) — knob rẻ, đáng thử sau.
+
+### 33.3 F0 RMSE theo thanh (300 val clip; trung vị, cent — 100 cent = 1 nửa cung)
+
+| | NGANG | HUYỀN | SẮC | HỎI | NGÃ | NẶNG |
+|---|---|---|---|---|---|---|
+| B0 | 135 | 129 | 163 | 223 | 197 | 154 |
+| **b8 (small)** | **128** | **111** | 165 | **152** | 197 | 154 |
+
+⇒ Đúng thứ tự khó mà tai người nghe thấy: NGANG/HUYỀN tốt nhất; **NGÃ (197) · SẮC (165) ·
+NẶNG (154) · HỎI (152)** kém nhất. Small chỉ hơn B0 ở HỎI (−71), còn NGÃ/SẮC/NẶNG gần như đứng.
+
+### 33.4 Kế hoạch sửa thanh (theo thứ tự, có cổng đo)
+
+1. **Base** (đang chạy) → đo lại bảng §33.3 xem dung lượng có giúp NGÃ/SẮC/NẶNG không.
+2. **Thước mới** `tone_ruler` (≥0,75 trên audio thật) — điều kiện để *xác nhận* mọi cải tiến thanh.
+3. **Loss phân biệt thanh**: CE mềm giữa `s_k` dự đoán và prior 6 thanh (thay vì chỉ L1 có trọng số 0,1)
+   → tối ưu trực tiếp *khả năng phân biệt*, không phải khớp hệ số.
+4. **K=6** cho contour (stats + đầu f0) — kỳ vọng ~30 cent cho NGÃ.
+5. **GTA fine-tune Vocos** (tai user xác nhận `sh15/sh25` tốt hơn rõ) — texture mel giữ dấu tốt hơn.
+6. **Dữ liệu dấu hiếm**: NGÃ chỉ 304 âm tiết val (~5,4k train, 6× ít hơn NGANG) — nút thắt dài hạn.
