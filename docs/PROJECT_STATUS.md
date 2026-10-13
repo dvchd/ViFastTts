@@ -1,7 +1,7 @@
 # Trạng thái dự án (PROJECT_STATUS)
 
 > **Tài liệu "compact"** — tóm tắt phiên làm việc, trạng thái as-built, nhật ký
-> quyết định, kết quả audit và việc còn lại. Cập nhật: 12/10/2026.
+> quyết định, kết quả audit và việc còn lại. Cập nhật: 13/10/2026.
 > Nguồn sự thật as-built: `docs/ARCHITECTURE.md`; thuật ngữ: `docs/GLOSSARY.md`.
 
 ## 1. TL;DR
@@ -9,6 +9,8 @@
 - ViFastTts = frontend tiếng Việt + model TTS non-autoregressive một giọng +
   pipeline train/synthesize/export ONNX.
 - **2264 test pass**; `ruff` + `mypy` sạch; working tree không còn thay đổi.
+- **Acoustic v2 (13/10/2026)**: thiết kế **đóng** (Plan + Addendum 1–5) → `docs/ACOUSTIC_V2.md`;
+  preflight M6 **5/5 pass**; B0 (v1) resume 9k→20k đang chạy; test mới mel-contract + punct (7 pass).
 - **Kết luận chuyên gia (rev.4)** đã chốt toàn bộ A–F và lịch chạy — xem `docs/REVISION_PLAN_V2.md`.
   Đã code xong: mel log-magnitude + chuẩn hoá toàn cục, F0 pyworld, vocoder **MPD đầy đủ + MRD +
   MR-STFT + generator Vocos** (đo 0,659 s/bước MPS), **postnet** (small → 7,38M), VAD nới biên clip (B3),
@@ -211,3 +213,18 @@ python tools/parser_audit.py --wordlist words.txt   # audit từ điển (+ --pr
 d3f2558 Docs: khảo sát G2P/TTS, glossary thuật ngữ, hướng dẫn cấu trúc âm tiết
 314bc40 Frontend + neural: nâng cấp toàn diện (534 test pass)
 ```
+
+## 8. Acoustic v2 — mốc 13/10/2026
+
+- **Thiết kế ĐÓNG** (Plan + Addendum 1–5); bản tổng hợp triển khai: **`docs/ACOUSTIC_V2.md`**
+  (5 slot `[O,M,N,C,G]` + `G_lead`, chia slot B2, speed trong graph, pause gate+log_gap,
+  DCT hệ số hình dạng `s_k`, mask hữu thanh bằng `vuv`, adversarial train-only, warm-start từ B0).
+- **Preflight M6 5/5 pass**: forced 0% lỗi · F1 xác nhận (gap mang vector âm tiết) · LengthRegulator 3/3 ·
+  DCT 7/7 (≤4,4e-16) · holdout lead 533/842 (63,3%).
+- **B0 (v1) resume 9k→20k** đang chạy: `runs/small_codelung_v2`, watchdog `tools/watch_train_v2.sh`,
+  log `artifacts/small_codelung/train_v2_full2.log` — mốc so sánh trước khi code v2.
+- **Test mới**: `tests/test_vocos_mel_contract.py` (hợp đồng mel với Vocos — bank ≤6,6e-6, mel ≤1,2e-4,
+  round-trip 0,145–0,154) + `tests/test_punct_attachment.py` (4 ca dấu câu) — 7 pass.
+- **Tool mới**: `tools/check_v2_preflight.py` (5 kiểm tra bắt buộc trước khi code tính năng).
+- Bước kế: **R5a** (duration × thanh × coda tắc, slope F0, pause theo boundary WORD/PHRASE/SENTENCE
+  + tách "..." giữa câu) · **T1.2** (`tools/eval_acoustic.py`: 3 chế độ + mask vùng đo + thống kê forced) · **R2**.

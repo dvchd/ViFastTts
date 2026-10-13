@@ -1,0 +1,243 @@
+# Acoustic v2 — thiết kế chốt (Plan + Addendum 1–5)
+
+> **Trạng thái: ĐÓNG thiết kế (13/10/2026).** Thứ tự ưu tiên nguồn gốc:
+> **Addendum 5 > 4 > 3 > 2 > 1 > Plan**. Tài liệu này là bản tổng hợp chốt để triển khai;
+> số đo thực thi ở §15. Nền nghiên cứu: `docs/TTS_ARCHITECTURE_RESEARCH.md` §9 (v2.1),
+> `docs/REVISION_PLAN_V2.md`.
+
+## 0. Mục tiêu & nguyên tắc
+
+- **Prosody từ cấp âm tiết → cấp segment** (O/M/N/C) + **khoảng lặng tường minh** (slot G):
+  ngã (creak), hỏi (dip-break), nặng (ngắn/tense), coda tắc, iê/uô/ươ + medial w.
+- Giữ **deterministic NAR, 1 forward, ONNX 1 graph tĩnh** (C1–C10); không đưa
+  AR/diffusion nhiều bước vào đường chính.
+- **Không nâng cấp gì trước khi có thước đo** — B0 (bản hiện tại, 20k bước) là mốc so sánh.
+- **Vocos là lớp thay được**: acoustic chỉ cam kết "hợp đồng mel" (`mel_config_hash`).
+- Chống mel mờ bằng **adversarial train-only**, không đổi inference.
+
+Ba phát hiện nền (đã kiểm chứng trên code/dữ liệu thật):
+
+- **F1 — B0 lệch train/infer**: train phủ gap bằng vector âm tiết (`spans = durations+gaps`),
+  infer không có gap → free-run của B0 bị bất lợi hệ thống. **Không sửa B0**; so sánh chính
+  bằng `tf_syl`; R1 chỉ dùng mel `tf_syl`.
+- **F2 — 5 slot dùng lại `LengthRegulator`**: slot duration 0 tự bị bỏ qua (đã kiểm chứng).
+- **F3 — fallback `allocate_durations` im lặng**: v2 loại row không forced; **raise** nếu train v2
+  thiếu `seg_durations` (không fallback sang prior).
+
+## 1. Kiến trúc 5 slot `[O, M, N, C, G]` + `G_lead`
+
+```text
+h_syl [B,N,H]
+ → slots [B,N,5,H]   (O/M/N/C từ segment expander; G = vector "lặng" học được)
+ → reshape [B,5N,H] + durations [B,5N]  (inactive = 0, G = gap)
+ → LengthRegulator hiện tại (KHÔNG sửa) — slot duration 0 tự bị bỏ qua
+```
+
+- Chuỗi slot toàn câu có thêm `G_lead` ở đầu → độ dài `1 + 5N` (cho holdout còn `lead > 0`).
+- **Bất biến toàn cục**: `G_lead + Σ(5N slot) == T` cho mọi row (segment: `G_lead = 0`).
+- Slot G:
+  - vector = `silence_emb` + `Linear(boundary_emb, punct_emb)` của **âm tiết đứng trước**;
+  - **không** cộng variance F0/energy/phonation; `vuv = 0`; position = 0;
+  - train: `gaps` thật (gap cuối row segment = 0 sẵn); infer: pause predictor (§4).
+- `G_lead` dùng **chung `silence_emb`** với slot G (segment train có `G_lead = 0` nên vector riêng
+  không bao giờ nhận gradient); boundary = `SENTENCE`.
+- Predictor cấp segment = **MLP** trên `concat(h_syl, role_emb, emb thành phần của role)` — không dùng
+  Conv trên chuỗi 5N (kernel sẽ trộn slot G/inactive vào ngữ cảnh). Predictor cấp âm tiết giữ Conv:
+  **duration tổng**, **pause**.
+- Position: `(t+0.5)/n` **trong từng slot**; slot G cố định 0.
+- Output ONNX thêm: `slot_durations [B, 1+5N]` (axis `slots`), `pause_gate [B,N]` (axis `syllables`).
+
+## 2. Chia slot tĩnh (B2) — một hàm tensor duy nhất
+
+1. `n_act` = số slot active; `k = min(d_syl, n_act)`.
+2. Cấp 1 frame cho `k` slot active **ưu tiên cao nhất** — thứ tự cố định **N, O, C, M**.
+3. Phần còn lại `r = d_syl − k` chia theo `ratio` (chỉ trên active) bằng floor + largest remainder.
+4. Hòa phá bằng chỉ số role cố định.
+
+- Xếp hạng 4 phần tử bằng **ma trận so sánh 4×4 + sum** (hoặc TopK k=4 cố định) — không argsort động.
+- **3 bất biến (A1)**: inactive = 0 · active ≥ 1 nếu đủ frame · `Σd_seg == d_syl` tuyệt đối.
+- `frontend/segments.py:distribute_frames` sửa theo **cùng thuật toán** (một nguồn sự thật).
+- Test: random 1e5 + Torch==ONNX + 3 bất biến + `Σ(5N)+G_lead==T` toàn manifest.
+- Interface đóng băng sau R4 trong `models/slot_ops.py`:
+  - `slot_positions(slot_durations, T) → pos` (`(t+0.5)/n`, slot G trả 0);
+  - `build_f0_contour(s, slot_durations, pos) → f0` (công thức §6);
+  - `distribute_slots(d_syl, ratio, active) → d_seg`.
+
+## 3. Duration 2 tầng, loss & 4 chế độ
+
+- Tầng 1: `d_syl` hữu thanh cấp âm tiết (khớp MFA word tier) — loss `log1p` MSE **luôn tính**.
+- Tầng 2: `ratio` softmax có mask active → chia bằng B2. Loss CE/KL, **mask inactive + `d_syl < 3`** (B5).
+
+| Chế độ | `seg_durations` | Loss ratio | Loss duration tổng | Loss pause |
+|---|---|---|---|---|
+| Train v2 | Có (từ `_seg.jsonl`) | Tính (mask inactive + d<3) | Luôn | Luôn (mask gap cuối row) |
+| `tf_seg` | Có | Chỉ báo cáo | Chỉ báo cáo | Chỉ báo cáo |
+| `tf_syl` | `None` (model tự chia) | Không | Chỉ báo cáo | Chỉ báo cáo |
+| `free` | `None` | Không | Không | Không |
+
+- **Raise** nếu `arch == v2_slot5` đang train mà `seg_durations is None` — không fallback.
+
+## 4. Pause predictor — gate + log_gap
+
+- `gate`: BCE, target `gap ≥ 3 frame` (~35 ms; tinh chỉnh theo phân bố thật ở R5b).
+- `log_gap`: `log1p` + MSE, **chỉ tính khi gate = 1**.
+- Inference (tất định, `Where`):
+  ```text
+  has_pause = gate > 0.5
+  gap       = has_pause ? round(expm1(log_gap)) : 0
+  ```
+- Mask gap cuối row (rìa đã cắt); khoảng nghỉ **giữa các câu** do lớp ghép câu ngoài model lo.
+
+## 5. Speed trong graph (`float32 [1]`)
+
+- `speed` là **input scalar của graph** — lần đầu speed thật trong ONNX (v1: 2 forward PyTorch,
+  ONNX chỉ xấp xỉ bằng `_stretch_mel`).
+- Công thức (gate quyết định ở speed gốc):
+  ```text
+  has_pause = pause_gate > 0.5
+  gap       = has_pause ? round(expm1(log_gap)) : 0
+  gap'      = has_pause ? max(1, round(gap / speed)) : 0
+  d_syl'    = max(1, round(d_syl / speed))
+  # giữ nguyên ratio, chia lại bằng B2
+  ```
+- Teacher-forced (`durations` truyền từ ngoài): **không scale** (tránh làm tròn 2 lần).
+- Test: `speed=1.0` byte-identical; tập vị trí pause **bất biến** trên {0.5, 0.8, 1.0, 1.25, 2.0};
+  `gate=0` → 0 frame kể cả speed 0.8; `gate=1` → ≥1 frame kể cả speed 1.25.
+- ONNX: `speed` **float32 shape [1]** (scalar `[]` kẹt TorchScript opset 18) — test export ngay ở R4.
+- Runtime: graph có input `speed` → bỏ `_stretch_mel`; rẽ nhánh theo `arch` trong metadata.
+
+## 6. F0: hệ số hình dạng (B1) + mask hữu thanh (F4)
+
+- Model dự đoán **hệ số hình dạng độc lập độ dài**:
+  ```text
+  s_k = c_k / √n        (c_k là hệ số DCT trực giao hiện có)
+  f(pos) = s0 + √2 · Σ_{k=1..3} s_k · cos(πk·pos),   pos = (t+0.5)/n
+  ```
+  → không có `n` trong công thức dựng (ONNX elementwise); đổi speed không đổi biên độ contour.
+- `s0 == mean` (test tới 1e-6; thực đo ≤ 2,8e-17 với float64).
+- Stats **hai pass** trên `s_k` (R5b: tính trên frame **nucleus**, mask `vuv`), đóng băng
+  `f0_stats_hash` vào checkpoint.
+- `n < 4` → mask hệ số `k ≥ n`. Có **delta loss**. **Prior mềm theo thanh** từ thống kê thật (R5).
+- **F4 — mask hữu thanh**: `f0.interpolate: true` lấp cả vùng vô thanh → `f0 > 0` **không phải** mask
+  hợp lệ (đo trên clip mẫu: `f0>0` = 100% vs `vuv>0.5` = 71%). Dùng **`vuv`** ở mọi nơi pool F0
+  (dataset v2, R5b, eval per-tone). `f0_stats.json` cũ phải tính lại (đằng nào cũng phải làm lại cho
+  `s_k` + nucleus).
+- Mask loss F0: slot O/C chỉ tính khi voiced ratio ≥ 0.5; nucleus luôn tính với trọng số theo tỷ lệ
+  hữu thanh (đo bằng `vuv`).
+
+## 7. Phonation — R6 quyết định
+
+- R6 so **3 ứng viên** trên 100 file (ngã/nặng vs ngang): (1) 3 kênh hiện tại; (2) aperiodicity
+  pyworld D4C; (3) độ bất ổn chu kỳ F0. Cổng: **AUC ≥ 0.7**; không đạt → không bật phonation ở v2.
+- Lý do nghi ngờ kênh cũ: `glottalization` (<80 Hz) chỉ ~4 bin ở n_fft 1024/24k; HNR frame ~43 ms
+  dễ làm mờ creak ngắn.
+- Chỉ bật trong **lần re-cache v3**.
+
+## 8. Chống mel mờ — adversarial train-only (T4.1)
+
+- Mel discriminator đa thang + feature matching, chấm trên mel **sau postnet**; `mel_pre` giữ L1 0.2.
+- Duration discriminator kiểu VITS2. **Tách D khỏi checkpoint/graph inference**.
+- Bật sau khi L1 hội tụ (~20–30k bước); đo s/step MPS trước (R8); copy pattern warm-up D + grad clip 5.0.
+- Frame slot G **vẫn tính mel L1** (học lặng sạch), **không** tính F0/energy/phonation.
+
+## 9. Cache v3 & manifest `_seg.jsonl`
+
+- **Cache feature v3** (một lần): mel/energy/f0/vuv/**phonation** — tất định theo audio + config.
+  Giữ mtime (`rsync -a`); **cân nhắc chuyển content-hash ngay trong lần v3** (sha1 ~8,8 GB ≈ vài chục giây).
+- **Manifest `_seg.jsonl`**: `seg_durations` + `seg_method` (ipa/rule/hybrid/aligner) +
+  `seg_method_version` + hash bảng map/weight; checkpoint ghi lại các giá trị này (B9).
+  `seg_durations` thuộc **manifest**, không phải cache (cache key theo file audio).
+- Row không forced: **loại khỏi train v2** (hiện 0% — xem §15).
+
+## 10. Tương thích ngược (checkpoint `arch` / ONNX)
+
+- Checkpoint có trường `arch`: `"v1_syl"` (mặc định khi thiếu) | `"v2_slot5"`; **factory** đọc `arch`.
+- Không load v1→v2 bằng `strict=False` ngầm — chỉ warm-start có chủ đích (§11).
+- ONNX: **giữ nguyên tên + thứ tự output cũ**; thêm `slot_durations`, `pause_gate` vào cuối.
+  Metadata thêm `arch`, `mel_config_hash`, `f0_stats_hash`, `seg_method`, `seg_method_version`.
+- Runtime đọc output **theo tên**; input production chỉ `features` + `speed`; teacher-forced chỉ PyTorch.
+- Ý nghĩa output `durations` **không đổi**: `[B,N]` hữu thanh cấp âm tiết.
+
+## 11. Warm-start v2 từ B0
+
+- Lấy từ B0: `embedding`, `encoder`, `decoder`, `mel`, `postnet`, `tone_classifier`, `duration`.
+- Khởi tạo mới: `role_emb`, segment expander, MLP ratio/variance, pause predictor, `silence_emb`,
+  `variance_proj`, `position_proj`.
+- Giai đoạn A (~2k step): **đóng băng** `embedding`, `encoder`, `duration`; train module mới +
+  `decoder/mel/postnet` với LR **0.25×**; grad clip 1.0; log mel riêng **G vs hữu thanh**.
+- Giai đoạn B: mở khóa toàn bộ, warm-up LR lên base trong 2k step rồi cosine như config.
+- Cổng cuối giai đoạn A: **trên val** (trung bình 200 step cuối hoặc 1 val đầy đủ) — mel hữu thanh
+  không tệ hơn B0 quá **20%**; **không** đánh giá dựa trên loss 500 step đầu.
+- Optimizer **mới hoàn toàn**; checkpoint ghi `warm_start_from = <hash B0>`.
+
+## 12. Eval: `tf_syl` / `tf_seg` / `free` + mask vùng đo
+
+| Chế độ | Dùng thật | Dự đoán | Dùng để |
+|---|---|---|---|
+| `tf_syl` | `d_syl`, `gaps`, `lead` | ratio, variance | **So B0 với v2** (chính) |
+| `tf_seg` | + `seg_durations` | variance | Chẩn đoán v2 |
+| `free` | — | tất cả | CER, RTF, RAM, nghe |
+
+- Tập val cố định, seed cố định, ghi danh sách clip vào repo.
+- **Mask vùng đo lấy từ manifest** (không từ output model):
+  - mel L1 / MCD: frame `[lead, T)` (bỏ vùng lead);
+  - F0 RMSE / VUV theo thanh: chỉ frame **hữu thanh của âm tiết** (`durations`), bỏ gap + lead.
+- RTF: **acoustic ONNX + vocoder ONNX + iSTFT numpy + chia câu**, CPU M6, ghi số luồng, tách phần.
+- Minimal pairs: đặt trong **câu khung** cố định, chấm **âm tiết đích** sau align, báo độ chính xác
+  thanh theo nhóm + **trang nghe A/B mù**.
+- **R1 chỉ dùng mel `tf_syl`**.
+
+## 13. Lộ trình thi hành
+
+1. Song song: T1.3 (B0 9k→20k) · T1.1 (mel contract) · T1.2 (eval_acoustic + mask) · R5a · punct test.
+2. B0 + R1.
+3. R2 (3 phương án weak label; ưu tiên **lai**: biên onset|rhyme từ MFA + weight rule trong rhyme)
+   → sửa hàm chia (B2) → manifest `_seg.jsonl` → T2.1 → R5b.
+4. R6 → cache v3 (một lần).
+5. R4 → đóng băng `slot_ops.py`.
+6. Task 5 slot (gộp T2.2+T2.3) + warm-start + tương thích ngược → cổng.
+7. T3.2 → T3.3 → cổng.
+8. R3 → T2.4 (điều kiện, không chặn).
+9. R8 → T4.1 → cổng.
+10. T5.1 GTA. 11. R7 sau Phase 3; Phase 6 (CFM) chỉ khi điều kiện mở.
+
+## 14. Checklist PR
+
+- [ ] Unit test + **3 bất biến** duration; `G_lead + Σ(5N) == T` toàn manifest + random 1e5.
+- [ ] Zero-slot: không frame nào gather vào slot 0 (kể cả đầu/cuối chuỗi).
+- [ ] `s0 == mean` + `build_f0_contour` khớp `idct4_frames` sau quy đổi.
+- [ ] Punct 4 case (dấu sau → âm tiết trước; dấu mở đầu → sau; OOV respell; nhiều dấu).
+- [ ] ONNX: export tĩnh, parity Torch/ONNX, **byte-identical** 2 lần chạy, output cũ giữ tên/thứ tự.
+- [ ] Load được checkpoint `v1_syl` cũ và infer như trước.
+- [ ] Loss raise khi train v2 thiếu `seg_durations`.
+- [ ] Tập vị trí pause không đổi theo speed {0.5, 0.8, 1.0, 1.25, 2.0}; `speed` float32 [1]; test export ở R4.
+- [ ] Runtime rẽ nhánh `_stretch_mel` theo `arch`; `silence_emb` chung `data_ptr` cho G/G_lead.
+- [ ] Báo số row bị loại (không forced); bảng metric `tf_syl` + `free` so B0.
+
+## 15. Preflight trên M6 (13/10/2026) — kết quả
+
+Môi trường: commit `2f6878a` · Python 3.12.15 · torch 2.14.1 · soundfile 0.14.0.
+Script: `tools/check_v2_preflight.py` (5 kiểm tra; chạy trước mọi tính năng).
+
+1. **forced**: 0% không forced trên cả 5 manifest — holdout 842 · train 5.811 · val 1.013 ·
+   train_seg 9.763 `{forced 9.674 + forced_khong_gap 89}` · val_seg 1.773 `{forced 1.761 + forced_khong_gap 12}`.
+   89+12 row là segment **1 âm tiết** (`gaps=[]`) — đúng nhánh `elif` của dataset. `approx_resample = 0`.
+2. **F1 xác nhận** (row `4kyqfOypVWI_0001__s00`): `spans == durations + gaps`; frame lặng mang vector
+   âm tiết (`max|Δ| = 0`); `pos` chạy 0→0,988 trên cả span; `exp_f0` đồng nhất qua span.
+3. **LengthRegulator**: 3/3 OK — `(2,0,3)→[0,0,2,2,2]`, `(0,2,3)→[1,1,2,2,2]`, `(2,3,0)→[0,0,1,1,1]`.
+4. **DCT**: 7/7 OK — max |s0−mean| = 2,8e-17; max |B1−idct| = 4,4e-16 (float64, n=1..40).
+5. **Holdout lead**: 842 row · lead>0: 533 (63,3%) · p50 = 18 · max = 35 frame.
+
+Ghi chú (không chặn): ca `len(gaps)=N-2` + `Σd==T` ra `forced_khong_gap` thay vì `gaps_sai_do_dai`
+(dataset lỗi shape ở ca này) — không có row nào như vậy trên dữ liệu thật.
+
+**T1.1 (mel contract)** — `tests/test_vocos_mel_contract.py`: bank ≤ 6,6e-6; mel max|Δ| ≤ 1,2e-4
+(dư lượng fp32; fail threshold 1e-3; mean|Δ| < 1e-5); round-trip melL1 0,145–0,154; len_ratio 0,9992–0,9994.
+**Punct test** — `tests/test_punct_attachment.py`: 4/4 pass (luật gộp `?!`→QUESTION, `...`→PERIOD ghi trong test).
+
+## 16. Ghi chú nhỏ đã chốt
+
+- Nucleus đôi IÊ/UÔ/ƯƠ: v2 dùng **1 slot N**; tách 2 đích giữ ở `frontend/segments.py` (chưa nối vào v2).
+- `"..."` giữa câu hiện gắn `SENTENCE` — theo dõi ở v2.1 cùng SIL token.
+- Giới hạn `MAX_POSITIONS = 4096` (≈43,7 s @ hop 256) — thêm assert + chia câu trước model.
+- Row segment N=1 (`gaps=[]`) là bình thường; v2: G slot = 0.
