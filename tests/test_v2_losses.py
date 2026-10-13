@@ -99,7 +99,7 @@ def test_hoan_hao_tong_xap_xi_0():
             assert abs(float(value) - _ratio_entropy(batch)) < 1e-4
         else:
             assert float(value) < 1e-5, key
-    expected = sum(float(losses[k]) * w for k, w in DEFAULT_WEIGHTS.items())
+    expected = sum(float(value) * DEFAULT_WEIGHTS[key] for key, value in losses.items())
     assert abs(float(total) - expected) < 1e-5
 
 
@@ -187,3 +187,53 @@ def test_vuv_energy_phonation_bo_inactive():
     _total, losses = slot_losses(outputs, batch, shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)
     for key in ("vuv", "energy", "phonation"):
         assert float(losses[key]) < 1e-5, key
+
+def test_f0_delta_chi_phu_thuoc_hinh_dang():
+    """Delta loss = 0 khi khớp target; đổi `s0` (mức trung bình) không ảnh hưởng, đổi `s1` thì tăng."""
+    outputs, batch = _fixture()
+    _total, losses = slot_losses(outputs, batch, weights=_only("f0_delta"),
+                                 shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)
+    baseline = float(losses["f0_delta"])
+    assert baseline < 1e-5  # dự đoán khớp target → 0
+    shifted = outputs["seg_shape"].clone()
+    shifted[..., 0] += 3.0  # chỉ đổi s0
+    outputs_shifted = {**outputs, "seg_shape": shifted}
+    _total, losses = slot_losses(outputs_shifted, batch, weights=_only("f0_delta"),
+                                 shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)
+    assert abs(float(losses["f0_delta"]) - baseline) < 1e-6
+    tilted = outputs["seg_shape"].clone()
+    tilted[..., 1] += 1.0  # đổi s1 (độ dốc)
+    _total, losses = slot_losses({**outputs, "seg_shape": tilted}, batch, weights=_only("f0_delta"),
+                                 shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)
+    assert float(losses["f0_delta"]) > 0.5
+
+
+def test_f0_prior_mem_theo_thanh_va_mask_nucleus():
+    """Prior: 0 khi nucleus khớp prior; bỏ qua slot không phải nucleus và segment không hữu thanh."""
+    outputs, batch = _fixture()
+    tones = batch["features"][..., 4]
+    # prior giả theo thanh; ép dự đoán nucleus = prior để kiểm tra "khớp → loss 0"
+    tone_prior = torch.randn(6, 4, generator=torch.Generator().manual_seed(7))
+    shape = outputs["seg_shape"].clone()
+    for b in range(B):
+        for n in range(N):
+            if batch["f0_weight"][b, n, 2] > 0:
+                shape[b, n, 2] = tone_prior[tones[b, n]]
+    outputs = {**outputs, "seg_shape": shape}
+    _total, losses = slot_losses(outputs, batch, weights=_only("f0_prior"),
+                                 shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD, tone_prior=tone_prior)
+    assert float(losses["f0_prior"]) < 1e-6
+    # sửa hình dạng của slot O (không phải nucleus) → prior không đổi
+    polluted = outputs["seg_shape"].clone()
+    polluted[..., 0, :] += 5.0
+    _total, losses = slot_losses({**outputs, "seg_shape": polluted}, batch,
+                                 weights=_only("f0_prior"), shape_mean=SHAPE_MEAN,
+                                 shape_std=SHAPE_STD, tone_prior=tone_prior)
+    assert float(losses["f0_prior"]) < 1e-6
+    # sửa nucleus → prior tăng
+    polluted_n = outputs["seg_shape"].clone()
+    polluted_n[..., 2, :] += 1.0
+    _total, losses = slot_losses({**outputs, "seg_shape": polluted_n}, batch,
+                                 weights=_only("f0_prior"), shape_mean=SHAPE_MEAN,
+                                 shape_std=SHAPE_STD, tone_prior=tone_prior)
+    assert float(losses["f0_prior"]) > 0.5

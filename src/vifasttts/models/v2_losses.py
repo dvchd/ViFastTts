@@ -11,6 +11,8 @@ Trọng số mặc định ở `DEFAULT_WEIGHTS`, config `loss_weights` ghi đè
 
 from __future__ import annotations
 
+import math
+
 import torch
 import torch.nn.functional as F
 
@@ -18,9 +20,26 @@ from vifasttts.losses import masked_l1
 
 DEFAULT_WEIGHTS: dict[str, float] = {
     "mel": 1.0, "mel_pre": 0.2, "duration": 1.0, "ratio": 1.0,
-    "f0": 1.0, "vuv": 0.5, "energy": 0.5, "phonation": 0.5,
+    "f0": 1.0, "f0_delta": 0.5, "f0_prior": 0.1,
+    "vuv": 0.5, "energy": 0.5, "phonation": 0.5,
     "tone": 0.1, "pause_gate": 0.5, "pause_gap": 0.5,
 }
+
+#: Vị trí chuẩn hoá để đo "độ dốc" contour (độc lập độ dài — B1/§6).
+DELTA_POSITIONS = (0.25, 0.5, 0.75)
+
+
+def shape_deltas(shape: torch.Tensor) -> torch.Tensor:
+    """Đạo hàm contour theo vị trí chuẩn hoá tại `DELTA_POSITIONS` → `[.., 3]` (T3.2).
+
+    `df/dpos = −√2·π·Σ_{k≥1} k·s_k·sin(πk·pos)` — dùng cho **delta loss** (khớp *hướng đi* của
+    cao độ, không phụ thuộc mức trung bình `s0` hay độ dài segment).
+    """
+    positions = torch.tensor(DELTA_POSITIONS, device=shape.device, dtype=shape.dtype)
+    order = torch.arange(shape.size(-1), device=shape.device, dtype=shape.dtype)
+    slope = (-math.sqrt(2.0) * math.pi * order.view(-1, 1)
+             * torch.sin(math.pi * order.view(-1, 1) * positions.view(1, -1)))
+    return shape @ slope
 
 
 def structural_active(features: torch.Tensor) -> torch.Tensor:
@@ -38,11 +57,13 @@ def slot_losses(
     *,
     shape_mean: torch.Tensor,
     shape_std: torch.Tensor,
+    tone_prior: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Trả (loss tổng đã nhân trọng số, dict từng thành phần để log).
 
     `shape_mean`/`shape_std` là buffer chuẩn hoá của model (từ `f0_stats_v2`) — target `s_k`
-    được z-score cùng thang trước khi so.
+    được z-score cùng thang trước khi so. `tone_prior` [6,4] (z-space, `model.tone_prior_z`)
+    bật **prior mềm theo thanh** (T3.2).
     """
     merged = {**DEFAULT_WEIGHTS, **(weights or {})}
     losses: dict[str, torch.Tensor] = {}
@@ -67,6 +88,17 @@ def slot_losses(
     target_z = (batch["f0_shape"] - shape_mean.view(1, 1, 1, -1)) / shape_std.view(1, 1, 1, -1).clamp_min(1e-6)
     f0_mask = batch["f0_weight"].unsqueeze(-1) * batch["f0_k_mask"].to(torch.float32)
     losses["f0"] = ((outputs["seg_shape"] - target_z).abs() * f0_mask).sum() / f0_mask.sum().clamp_min(1)
+    # T3.2 — delta loss: khớp *độ dốc contour* (không phụ thuộc s0/độ dài); mask theo trọng số segment
+    delta_mask = batch["f0_weight"].unsqueeze(-1)
+    delta_error = (shape_deltas(outputs["seg_shape"]) - shape_deltas(target_z)).abs()
+    losses["f0_delta"] = (delta_error * delta_mask).sum() / (delta_mask.sum() * len(DELTA_POSITIONS)).clamp_min(1)
+    # T3.2 — prior mềm theo thanh: kéo nucleus về hình dạng trung bình của thanh (z-score)
+    if tone_prior is not None:
+        tone = batch["features"][..., 4]
+        prior = tone_prior[tone]  # [B,N,4]
+        nucleus_weight = batch["f0_weight"][..., 2]
+        prior_error = ((outputs["seg_shape"][..., 2, :] - prior) ** 2).sum(dim=-1)
+        losses["f0_prior"] = (prior_error * nucleus_weight).sum() / nucleus_weight.sum().clamp_min(1)
 
     losses["vuv"] = (
         F.binary_cross_entropy_with_logits(outputs["seg_vuv_logits"],

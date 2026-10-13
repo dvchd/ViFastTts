@@ -93,7 +93,8 @@ def _validate(model, loader, weights: dict, device, max_batches: int = 0) -> dic
                             seg_durations=moved["seg_durations"], gaps=moved["gaps"],
                             lead=moved["lead"])
             loss, parts = slot_losses(outputs, moved, weights,
-                                      shape_mean=model.shape_mean, shape_std=model.shape_std)
+                                      shape_mean=model.shape_mean, shape_std=model.shape_std,
+                                      tone_prior=model.tone_prior_z)
             _gap, mel_voiced = _mel_split(outputs, moved)
             totals["total"] += float(loss.detach())
             totals["mel"] += float(parts["mel"].detach())
@@ -263,7 +264,8 @@ def train_slot_v2(
                                 seg_durations=moved["seg_durations"], gaps=moved["gaps"],
                                 lead=moved["lead"])
                 loss, parts = slot_losses(outputs, moved, weights,
-                                          shape_mean=model.shape_mean, shape_std=model.shape_std)
+                                          shape_mean=model.shape_mean, shape_std=model.shape_std,
+                                          tone_prior=model.tone_prior_z)
                 loss.backward()
                 if grad_clip:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -280,6 +282,8 @@ def train_slot_v2(
                     print(f"step {step} [{'A' if step <= phase_a_steps else 'B'}]: "
                           f"loss={loss.detach().item():.4f} mel={float(parts['mel'].detach()):.4f} "
                           f"G={mel_gap:.4f} tho={mel_voiced:.4f} "
+                          f"f0d={float(parts['f0_delta'].detach()):.3f} "
+                          f"f0p={float(parts.get('f0_prior', torch.zeros(())).detach()):.3f} "
                           f"lr={learning_rate:.2e} ({speed:.3f}s/bước){memory}")
                 if resolved_device.type == "mps" and step % 500 == 0:
                     torch.mps.empty_cache()

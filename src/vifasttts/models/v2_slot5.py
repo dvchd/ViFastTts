@@ -108,6 +108,8 @@ class ViFastTtsModelV2(nn.Module):
         self.register_buffer("f0_log_std", torch.ones(()))
         self.register_buffer("energy_mean", torch.zeros(()))
         self.register_buffer("energy_std", torch.ones(()))
+        # prior mềm theo thanh (T3.2/§6): z-score của s_k nucleus trung bình mỗi thanh
+        self.register_buffer("tone_prior_z", torch.zeros(6, 4))
 
     def load_f0_stats(self, stats: dict) -> None:
         """Nạp hằng số từ `f0_stats_v2.json` (§6: hai pass trên s_k, chuẩn hoá theo nucleus)."""
@@ -118,6 +120,15 @@ class ViFastTtsModelV2(nn.Module):
             self.f0_log_std.copy_(torch.tensor(float(stats["f0_log_std"]), dtype=torch.float32).clamp_min(1e-6))
             self.energy_mean.copy_(torch.tensor(float(stats["energy_mean"]), dtype=torch.float32))
             self.energy_std.copy_(torch.tensor(float(stats["energy_std"]), dtype=torch.float32).clamp_min(1e-6))
+            # prior theo thanh: cùng thang z với head để loss prior so trực tiếp (T3.2)
+            table = torch.zeros(6, 4)
+            prior = stats.get("shape_tone_prior") or {}
+            for index, tone in enumerate(("NGANG", "HUYEN", "SAC", "HOI", "NGA", "NANG")):
+                entry = prior.get(tone) or {}
+                mean = entry.get("mean") or []
+                if len(mean) == 4:
+                    table[index] = (torch.tensor(mean, dtype=torch.float32) - self.shape_mean) / self.shape_std
+            self.tone_prior_z.copy_(table)
 
     # ── tiện ích tensor ────────────────────────────────────────────────────────
     def _active_mask(self, features: torch.Tensor) -> torch.Tensor:
