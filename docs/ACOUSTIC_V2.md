@@ -283,3 +283,58 @@ mỗi row thêm `seg_durations [N,4]` (thứ tự **O, M, N, C**) + `seg_method`
   luật trọng số không biết nét thanh → timing thật cần IPA/aligner (T2.4).
 - Bất biến đã verify độc lập trên cả 3 file: `Σ seg == d_syl` **100%**;
   `lead + Σd + Σg == T` giữ nguyên (không đụng durations/gaps).
+
+## 19. R5b + Addendum 6 — thống kê cấp segment & mask F0 thật (13/10/2026)
+
+### 19.1 R5b — số đo (`tools/r5b_segment_stats.py`, 2.500/9.763 row seed 42)
+
+Nguồn model: `data/codelung/f0_stats_v2.json` (đóng băng `f0_stats_hash` khi train);
+báo cáo đầy đủ: `artifacts/dataset_v2/r5b_stats.json`.
+
+| Đại lượng | Giá trị |
+|---|---|
+| log-F0 **nucleus** (vuv>0,5) | mean **4,804** · std **0,168** (454.642 frame) |
+| log-F0 all (đối chiếu) | mean 4,847 · std 0,224 (bản cũ: 4,871/0,262 — rộng hơn vì gồm f0 nội suy) |
+| `s_k` chuẩn hoá = **nucleus** | mean [0,053 · 0,091 · 0,036 · 0,017] · std [**0,902 · 0,308 · 0,170 · 0,120**] |
+| energy theo segment | mean **−1,025** · std 1,768 (147.430 segment); nucleus −0,132/0,980 |
+
+- Energy: bản cũ (−4,58/4,67) đo trên âm tiết **chia đều cả clip** (thiếu alignment) — lần này mới
+  đo đúng trên cửa sổ segment thật (O/N/C tách nhau) → **thay thang chuẩn hoá** cho v2.
+- Số frame hữu thanh trung bình/segment: O 5,5 · M 2,9 · N 8,1 · C 4,2.
+
+- **Prior mềm theo thanh** (nucleus, `s0..s3`): ngang +0,387·+0,093·+0,021·+0,019 ·
+  huyền −0,349·+0,141 · sắc +0,420·−0,044 · hỏi −0,843·+0,351 (dip) · ngã +0,275·−0,084·+0,102
+  (creak) · nặng −0,080·+0,172 — dấu hình dạng **hợp ngữ âm** (huyền/nặng đi xuống, sắc đi lên,
+  hỏi lõm, ngã cong) → dùng làm prior T3.2.
+- Duration segment: O median 53,3 ms · N 74,7 · C 42,7 (p90 N 160 ms); nucleus sắc/nặng 64 ms
+  ngắn hơn ngang/huyền 74,7 ms (đúng R5a).
+- Voiced ratio theo role (số âm tiết): O 0,955 · M 0,989 · N 0,986 · C 0,979 — **mọi role ≥ 0,97**.
+
+### 19.2 Addendum 6 — `vuv` không đủ làm mask F0 cho slot O (probe định lượng)
+
+Probe: `tools/probe_f0_validity.py` · 400 row = 7.991 âm tiết ·
+`artifacts/dataset_v2/f0_validity_probe.json`. Kết quả theo nhóm cấu trúc:
+
+| Nhóm (cửa sổ segment) | `vuv=1` | ratio ≥ 0,5 | jitter f0 (median · p90) | rel-energy median |
+|---|---|---|---|---|
+| onset hữu thanh (11 lớp) | 97,8% | 99,3% | **0,0253 · 0,134** | −0,5 dB |
+| onset vô thanh (11 lớp) | 90,2% | 93,8% | **0,0785 · 0,338** (3,1×) | −2,9 dB |
+| coda sonorant (M/N/NG/NH/W/J) | 97,3% | 98,2% | 0,0203 · 0,109 | −0,6 dB |
+| coda tắc (P/T/C/CH) | 98,0% | 98,6% | 0,0389 · 0,175 (1,9×) | −2,4 dB |
+
+- **Phát hiện**: pyworld harvest+stonemask bật `vuv` cho ~90% frame của onset vô thanh
+  (closure ngắn trong speech liên tục) kèm f0 nhiễu 3-4× (ví dụ /k/ "các": 164→206→139 Hz).
+  **Năng lượng không tách được** (frame < −15 dB so nucleus = **0,0%** cho mọi nhóm) — mọi
+  "cổng năng lượng" đều vô dụng; đây cũng là một phần gốc rễ F0 nhiễu của B0.
+- **Quyết định (mask F0 v2)**:
+  1. **O**: chỉ tính F0 loss khi `onset ∈ F0_VOICED_ONSETS` (B, D, G, GI, L, M, N, NG, NH, R, V —
+     sonorant/implosive/ɣ, jitter ≤ 0,03) **và** `voiced ratio(O) ≥ 0,5`.
+  2. **N**: luôn tính, trọng số = voiced ratio (§6 giữ nguyên).
+  3. **M/C**: `ratio ≥ 0,5` giữ nguyên §6 — coda tắc tiếng Việt **không bung hơi**, f0 đo được là
+     đuôi nguyên âm (jitter 1,9× sonorant nhưng tuyệt đối nhỏ) → vẫn học được (không cần luật lớp).
+  4. Hằng số đóng băng tại `frontend/segments.py` (`F0_VOICED_ONSETS`, `F0_VOICED_CODAS`).
+- **Không đổi cache** (mask suy từ cấu trúc, tất định từ text) → không ảnh hưởng lần re-cache v3.
+- **Theo dõi**: nếu R6 (D4C aperiodicity) đạt cổng, cân nhắc `f0_valid` theo aperiodicity như
+  lớp gác thứ hai cho onset hữu thanh jitter cao (B 0,039 · D 0,056 — vẫn nhận, nhưng re-đo sau R6).
+- Giá trị s_k báo cáo ở §19.1 vẫn tính trên **mọi** segment (chuẩn hoá phục vụ T3.2); trọng số
+  loss F0 ở T3.2 dùng đúng mask §19.2.

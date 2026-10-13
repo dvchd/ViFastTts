@@ -57,6 +57,16 @@ _CODA_WEIGHTS = {"M": WEIGHT_CODA_NASAL, "N": WEIGHT_CODA_NASAL, "NG": WEIGHT_CO
                  "C": WEIGHT_CODA_STOP, "CH": WEIGHT_CODA_STOP, "J": WEIGHT_CODA_GLIDE,
                  "W": WEIGHT_CODA_GLIDE}
 
+# ── Mask F0 v2 (Addendum 6 — docs/ACOUSTIC_V2.md §19) ───────────────────────────
+# Đo trên train_seg (400 row, cache v2): `vuv` của pyworld bật ~90-94% frame của onset
+# vô thanh (closure ngắn trong speech liên tục) với f0 jitter 3-4× nhóm hữu thanh
+# (năng lượng KHÔNG tách được: < -15 dB chỉ 0,0%) → slot O chỉ tính F0 loss khi onset
+# thuộc nhóm **hữu thanh thật** dưới đây (kèm điều kiện `voiced ratio ≥ 0,5` của §6).
+# Coda giữ luôn luật §6: coda tắc tiếng Việt không bung hơi → f0 là đuôi nguyên âm
+# (jitter 0,039 chỉ ~1,9× sonorant nên vẫn dùng được).
+F0_VOICED_ONSETS = frozenset({"B", "D", "G", "GI", "L", "M", "N", "NG", "NH", "R", "V"})
+F0_VOICED_CODAS = frozenset({"M", "N", "NG", "NH", "W", "J"})  # để báo cáo/chẩn đoán
+
 
 @dataclass(frozen=True)
 class Segment:
