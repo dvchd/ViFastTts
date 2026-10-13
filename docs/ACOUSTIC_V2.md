@@ -1007,3 +1007,35 @@ HOI 0,92–0,94 · NGA 0,93→0,88 · NANG 0,87→0,77 (n nhỏ, đừng đọc 
 4. **Dữ liệu**: điểm mù của thước (ca ngắn/kết thúc tắc) + độ đa dạng nói chung.
 5. Tone-loss bằng `tone_ruler` (T6.2): hạ ưu tiên vì base đã đóng khoảng cách — chỉ làm nếu tai người
    vẫn thấy dấu nhoè (thước không chấm được nhóm ca khó nhất).
+
+## 37. Bài học chọn checkpoint: L1 trung bình ≠ tai người (14/10/2026)
+
+### 37.1 Bằng chứng (tai user + số đo độ nét)
+
+| Model | \|Δ_t\| (% thật) | \|Δ_f\| (% thật) | mel L1 (val) |
+|---|---|---|---|
+| small b8 | 39,3% | 31,6% | 1,4389 |
+| base **18k** (best theo L1) | 39,5% | 34,5% | **1,4315** |
+| base **40k** (anneal hết) | **41,9%** | **36,0%** | 1,4441 |
+
+- **Tai user**: bản 40k hay hơn rõ (ngang `sh25`), 6 thanh của base **đã phân biệt được dấu** (so với
+  small: "6 thanh nghe vẫn nhoè"). Nhưng 40k có L1 **xấu hơn** 18k ⇒ `best.pt` (theo L1) *lệch cảm nhận*.
+- Cơ chế: L1 trung bình **thưởng cho mel "điển hình"** (mượt, gần trung bình dữ liệu); tai người thưởng
+  **độ nét/chi tiết**. Anneal LR dài làm mel **nét hơn** (+2,4 điểm |Δ_t|) nhưng L1 nhích xấu ⇒ hai
+  thước *ngược chiều*.
+- ⇒ Từ nay: **chọn checkpoint cuối = L1 + `val_rough` + tai (A/B)**; `best.pt` chỉ là "neo an toàn".
+
+### 37.2 Đã sửa code: đo độ nét ngay trong validation
+
+- `train_v2._validate` trả thêm **`rough`** = |Δmel_model| / |Δmel_thật| (thời gian + tần số, mask
+  frame_lengths); in ra log (`· nét 0.xxx`) và ghi cột `val_rough` vào `history.csv`.
+- Test: `tests/test_train_v2.py` + `test_v2_losses.py` pass (13 test).
+
+### 37.3 Chiến lược "train lâu hơn" (có số)
+
+- Xu hướng đo được 18k→40k: **nét tăng, L1 nhích xấu** ⇒ độ nét *còn dư địa* ⇒ mở rộng theo **khối**
+  (40k→50k→60k, cosine mới), mỗi mốc đo L1 + `rough` + làm A/B cho user nghe → chọn bằng tai.
+- Cảnh báo: train lâu có thể bắt đầu **overfit người nói** (thuộc giọng) — phải theo dõi L1 *và* rough
+  cùng lúc; trần thật vẫn là 17,1h dữ liệu + dung lượng model.
+- Song song: **GTA fine-tune Vocos** (học nghịch đảo độ mờ trên mel model) — đòn cảm nhận trực tiếp,
+  ưu tiên trước vì rẻ (~2h cả sinh mel + train).

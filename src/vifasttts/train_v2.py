@@ -77,13 +77,19 @@ def _move_batch(batch: dict, device) -> dict:
 
 
 def _validate(model, loader, weights: dict, device, max_batches: int = 0) -> dict[str, float]:
-    """Val chế độ `tf_seg`: trả {'total', 'mel', 'mel_voiced'} (best.pt theo mel hữu thanh)."""
+    """Val chế độ `tf_seg`: trả {'total', 'mel', 'mel_voiced', 'rough'} (best.pt theo mel hữu thanh).
+
+    `rough` (§37) = |Δmel_dự đoán| / |Δmel_thật| (thời gian + tần số, bình quân) — độ **nét** của mel
+    (1,0 = nét bằng thật; thấp = mượt hơn thật). Cần đo cùng L1 vì **L1 trung bình thưởng cho mel
+    "điển hình/mượt"** còn tai người thưởng độ nét: đo thật base@40k nét hơn @18k (+2,4 điểm) dù L1
+    xấu hơn, và tai user chọn @40k.
+    """
     import torch
 
     from vifasttts.models.v2_losses import slot_losses
 
     model.eval()
-    totals: dict[str, float] = {"total": 0.0, "mel": 0.0, "mel_voiced": 0.0}
+    totals: dict[str, float] = {"total": 0.0, "mel": 0.0, "mel_voiced": 0.0, "rough": 0.0}
     batches = 0
     with torch.no_grad():
         for batch in loader:
@@ -99,6 +105,21 @@ def _validate(model, loader, weights: dict, device, max_batches: int = 0) -> dic
             totals["total"] += float(loss.detach())
             totals["mel"] += float(parts["mel"].detach())
             totals["mel_voiced"] += float(mel_voiced)
+            # §37: độ nét (gồ ghề) — bám frame_lengths để bỏ padding
+            pred, real = outputs["mel"], moved["mel"]
+            frames = min(pred.size(1), real.size(1))
+            pred, real = pred[:, :frames], real[:, :frames]
+            mask = torch.ones(pred.size(0), frames, dtype=torch.bool, device=pred.device)
+            if moved.get("frame_lengths") is not None:
+                steps = torch.arange(frames, device=pred.device).view(1, -1)
+                mask = steps < moved["frame_lengths"].unsqueeze(1)
+            pair = (mask[:, 1:] & mask[:, :-1]).to(pred.dtype)
+            flat = mask.to(pred.dtype)
+            dt_p = ((pred[:, 1:] - pred[:, :-1]).abs().mean(-1) * pair).sum() / pair.sum().clamp_min(1)
+            dt_r = ((real[:, 1:] - real[:, :-1]).abs().mean(-1) * pair).sum() / pair.sum().clamp_min(1)
+            df_p = ((pred[:, :, 1:] - pred[:, :, :-1]).abs().mean(-1) * flat).sum() / flat.sum().clamp_min(1)
+            df_r = ((real[:, :, 1:] - real[:, :, :-1]).abs().mean(-1) * flat).sum() / flat.sum().clamp_min(1)
+            totals["rough"] += float((dt_p + df_p) / (dt_r + df_r).clamp_min(1e-6))
             if max_batches and batches >= max_batches:
                 break
     model.train()
@@ -305,7 +326,7 @@ def train_slot_v2(
         writer = csv.writer(history)
         if not append_history:
             writer.writerow(["step", "phase", "train_total", "train_mel", "mel_gap", "mel_voiced",
-                             "val_total", "val_mel_voiced", "lr"])
+                             "val_total", "val_mel_voiced", "val_rough", "lr"])
         while step < steps:
             for batch in train_loader:
                 step += 1
@@ -385,11 +406,12 @@ def train_slot_v2(
                     if resolved_device.type == "mps":
                         torch.mps.empty_cache()
                     print(f"step {step}: val={metrics['total']:.4f} "
-                          f"(mel hữu thanh {metrics['mel_voiced']:.4f})")
+                          f"(mel hữu thanh {metrics['mel_voiced']:.4f} · nét {metrics['rough']:.3f})")
                     writer.writerow([step, "A" if step <= phase_a_steps else "B",
                                      float(loss), float(parts["mel"]), float(mel_gap),
                                      float(mel_voiced),
-                                     metrics["total"], metrics["mel_voiced"], learning_rate])
+                                     metrics["total"], metrics["mel_voiced"], metrics["rough"],
+                                     learning_rate])
                     history.flush()
                     improved = metrics["mel_voiced"] < best_val
                     if improved:
