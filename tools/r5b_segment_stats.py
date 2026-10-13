@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -36,34 +37,15 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+_ROOT = Path(__file__).resolve().parents[1]
+for _extra in (_ROOT, _ROOT / "tools"):
+    if str(_extra) not in sys.path:
+        sys.path.insert(0, str(_extra))
+
+from vifasttts.data.v2_targets import segment_windows
+
 ROLES = ("O", "M", "N", "C")
 TONES = ["NGANG", "HUYEN", "SAC", "HOI", "NGA", "NANG"]
-
-
-def segment_windows(row: dict[str, Any]) -> list[list[tuple[str, int, int]]]:
-    """Cửa sổ frame tuyệt đối `[(role, start, end)]` cho từng âm tiết (inactive bỏ trống).
-
-    Dùng `seg_durations` + `durations`/`gaps`/`frame_range`/`lead_frames` của row.
-    """
-    count = len(row["durations"])
-    gaps = list(row.get("gaps") or [])
-    if len(gaps) == count - 1:
-        gaps = gaps + [0]
-    seg_durations = row.get("seg_durations")
-    cursor = int(row["frame_range"][0]) if "frame_range" in row else int(row.get("lead_frames") or 0)
-    windows: list[list[tuple[str, int, int]]] = []
-    for index in range(count):
-        segment = seg_durations[index] if seg_durations is not None else None
-        inner = cursor
-        syllable: list[tuple[str, int, int]] = []
-        for role_index, role in enumerate(ROLES):
-            length = int(segment[role_index]) if segment is not None else 0
-            if length > 0:
-                syllable.append((role, inner, inner + length))
-            inner += length
-        windows.append(syllable)
-        cursor += int(row["durations"][index]) + (int(gaps[index]) if index < len(gaps) else 0)
-    return windows
 
 
 def segment_shape(f0: NDArray[np.float64], vuv: NDArray[np.float64], f0_mean: float,

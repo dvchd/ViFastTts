@@ -390,3 +390,15 @@ Interface ba hàm, thuần torch (ONNX-export được, không vòng lặp độ
   sửa `unsqueeze(-2)`; nếu chỉ chạy vài ca nhỏ đã có thể lọt.
 - Runtime speed (§5): `d_syl' = max(1, round(d_syl/speed))` rồi gọi lại `distribute_slots`
   với **cùng ratio** — không cần lưu d_seg.
+
+## 22. T2.2 (nền tảng) — module mục tiêu cấp segment (13/10/2026)
+
+`src/vifasttts/data/v2_targets.py` (+ `tests/test_v2_targets.py`, 7 test) — một nguồn sự thật cho:
+
+- **Cửa sổ segment** `segment_windows(row, relative=…)`: toạ độ tuyệt đối (R5b, T2.1) hoặc theo
+  feature đã cắt (dataset v2); `tools/r5b_segment_stats.py` đã gọi lại từ đây.
+- **Ratio target + mask** (B5: mask inactive + `d_syl < 3`) và **pause target** (§4: gate `gap ≥ 3`,
+  `log1p(gap)`, mask gap cuối row).
+- **Pool** energy/`vuv` theo cửa sổ role; **`s_k` + trọng số loss F0** đúng Addendum 6
+  (N = tỷ lệ hữu thanh; O cần `F0_VOICED_ONSETS ∧ ratio ≥ 0,5`; M/C ratio ≥ 0,5; `n < 2` → bỏ).
+- `segment_targets(row, features, f0_stats)` gộp 9 tensor cho collate (task 5 slot tiêu thụ).
