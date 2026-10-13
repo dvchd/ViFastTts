@@ -150,6 +150,36 @@ QC lại; nếu đạt (từ sát sàn ~≤5%, coverage ≥0,6) → train full `
 Thước đo: `tools/align_quality_report.py` — `floor_rate` = tỉ lệ từ ≤55 ms (sát sàn min-duration),
 `coverage` = tổng thời lượng word / span, `long_phone_rate` = tỉ lệ phone hữu thanh >0,5 s.
 
+**3c. Thiết kế durations v3 (13/10, chiều) — tách khoảng lặng khỏi nhãn ("SIL-lite"):**
+
+QC nhãn phát hiện **lạm phát duration**: âm tiết CUỐI mỗi clip gánh đuôi clip (p50 **2,9 s**,
+max 10,5 s), 12.178 âm tiết giữa nuốt pause 0,15–1,5 s, 433 âm tiết đầu gánh lặng đầu —
+tổng ~11% nhãn ≥0,64 s (nguyên nhân: duration = start-to-start, mọi khoảng lặng dồn vào âm
+tiết trước). Sửa ở **tầng dữ liệu** (không đổi vocab/model):
+
+- `mfa_to_durations.py`: `durations` = **frame hữu thanh** (word tier); khoảng lặng tách thành
+  `gaps` (sau từng âm tiết; phần tử cuối = đuôi clip) + `lead_frames`; bất biến
+  `lead + Σdurations + Σgaps == T`. **Bỏ hẳn luật loại clip vì pause** (D5-b đầy đủ).
+- `cut_segments.py`: cắt theo span tuyệt đối; `frame_range` **tự cắt lặng đầu/đuôi ở rìa
+  segment**; segment mang `durations` + `gaps` nội bộ (`Σd + Σg == span`); bỏ đuôi vụn
+  < 0,25 s (`--min-segment-seconds`).
+- `dataset.py`: trường mới `spans = durations + gaps` — **mở rộng frame (teacher forcing)
+  dùng `spans`**, duration predictor học trên `durations` hữu thanh; `train.py` truyền
+  `batch["spans"]`; verify finalize `Σspans == mel frames`.
+
+Kết quả (finalize 13/10 09:5x, `finalize_vn2.log`):
+
+| | train | val | holdout |
+|---|---|---|---|
+| giữ | 5.811/7.342 (79%) | 1.013/1.253 (81%) | 842/1.024 (82%) |
+| segment | 9.763 | 1.773 | — (không cắt) |
+
+- Nhãn: median **160 ms** · p95 **341 ms** · âm tiết ≥0,64 s **0,08%** (trước ~11%).
+- Segment: span **17,1 h** (hữu thanh 10,75 h + lặng 6,39 h) · median 7 s · max 10 s.
+- f0 stats (2.000 clip): log-F0 4,871/0,262 · DCT std [4,48, 2,41, 1,67, 1,22] ·
+  energy −4,58/4,67 (giờ chỉ tính frame hữu thanh).
+- Loại: C4 score 10% + `phone >0,5 s` (~10%) + thiếu TextGrid (8 clip) — không còn loại vì pause.
+
 **Pipeline alignment chốt (13/10):**
 
 1. Corpus `mfa_v2c` (labs/wavs) — giữ nguyên; không còn dùng lexicon/phone custom để align.
@@ -179,8 +209,8 @@ coverage p50 **0,622** · long-phone p99 0,03 · word dur p50 0,16 s. DB C4:
 
 | Tool | Việc | Test |
 | --- | --- | --- |
-| `tools/mfa_to_durations.py` | TextGrid → `durations` (frames) + `pauses` (pause ≥150 ms ở ranh giới câu); loại clip lỗi (ngừng thở giữa câu, phone >500 ms, âm tiết >1 s, lệch từ); assert `sum == T` | `tests/test_mfa_to_durations.py` (6) |
-| `tools/cut_segments.py` | Clip → segment 3–10 s, cắt tại biên âm tiết, ưu tiên pause; row có `frame_range` | `tests/test_cut_segments.py` (4) |
+| `tools/mfa_to_durations.py` | TextGrid → `durations` (**frame hữu thanh**) + `gaps`/`lead_frames` (khoảng lặng) + `pauses` (điểm cắt); loại clip lỗi (phone >500 ms, âm tiết >1 s, lệch từ, C4 score); assert `lead + Σd + Σg == T` | `tests/test_mfa_to_durations.py` (9) |
+| `tools/cut_segments.py` | Clip → segment 3–10 s, cắt tại biên âm tiết, ưu tiên pause; `frame_range` tự cắt lặng rìa; bỏ đuôi <0,25 s | `tests/test_cut_segments.py` (6) |
 | `frame_range` trong `TtsDataset` | Cắt mel/f0/vuv/energy từ clip đầy đủ theo frame (tránh hiệu ứng biên STFT — đúng spec §9.2) | idem |
 | `dct4_frames`/`idct4_frames` (`data/features.py`) | DCT-II trực giao `(t+0.5)/n`; n<4 → k=n (đúng R3 §C2) | `tests/test_dct_stats.py` (4) |
 | `tools/compute_f0_stats.py` | Stats log-F0 scalar + **DCT4 z-score từng hệ số** (2 pass) + energy. Preview 500 clip: log-F0 4,866/0,262 · DCT std [4,50, 2,39, 1,65, 1,22] (chốt lại khi có durations thật) | idem |

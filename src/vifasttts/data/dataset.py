@@ -137,10 +137,29 @@ class TtsDataset(Dataset):
         mel = extracted["mel"][start_frame:start_frame + segment_frames] if frame_range else extracted["mel"]
         frames = mel.size(0)
         durations_list = row.get("durations")
-        if durations_list and sum(durations_list) == frames and len(durations_list) == syllable_count:
+        gaps_list = row.get("gaps")
+        lead_frames = int(row.get("lead_frames") or 0)
+        forced = False
+        if durations_list and len(durations_list) == syllable_count:
             durations = torch.tensor(durations_list, dtype=torch.long)
-        else:
+            spans = durations.clone()
+            if gaps_list is not None and 0 < len(gaps_list) <= syllable_count:
+                gaps = torch.tensor(gaps_list, dtype=torch.long)
+                if len(gaps_list) == syllable_count - 1:
+                    # Segment: gaps chỉ còn khoảng lặng giữa các âm tiết (rìa đã cắt) → gap cuối = 0.
+                    gaps = torch.cat([gaps, torch.zeros(1, dtype=torch.long)])
+                    lead_frames = 0
+                spans = durations + gaps
+                if lead_frames + int(spans.sum()) == frames:
+                    if lead_frames > 0:  # row clip đầy đủ: lead chỉ để khớp độ dài khi mở rộng
+                        spans = spans.clone()
+                        spans[0] += lead_frames
+                    forced = True
+            elif int(durations.sum()) == frames:
+                forced = True
+        if not forced:
             durations = torch.tensor(allocate_durations(frames, syllable_count), dtype=torch.long)
+            spans = durations.clone()
 
         f0 = torch.zeros(syllable_count)
         vuv = torch.zeros(syllable_count)
@@ -163,10 +182,11 @@ class TtsDataset(Dataset):
                 energy[i] = frame_energy[start:end].mean()
                 if frame_phonation is not None:
                     phonation[i] = frame_phonation[start:end].mean(dim=0)
-            start = end
+            start += int(spans[i].item())
         item = {
             "features": features,
             "durations": durations,
+            "spans": spans,
             "f0": f0,
             "vuv": vuv,
             "energy": energy,
@@ -180,7 +200,8 @@ class TtsDataset(Dataset):
 def collate_batch(items: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tensor]:
     """Pad batch: features [B, Nmax, 7], mel [B, Tmax, M] + length masks.
 
-    Kèm `phonation` [B, Nmax, 3] khi dataset bật kênh phonation.
+    Kèm `spans` [B, Nmax] (durations + gaps — dùng cho teacher forcing/mở rộng frame)
+    và `phonation` [B, Nmax, 3] khi dataset bật kênh phonation.
     """
     batch = len(items)
     syllable_max = max(item["features"].size(0) for item in items)
@@ -189,6 +210,7 @@ def collate_batch(items: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tenso
     has_phonation = "phonation" in items[0]
     features = torch.zeros(batch, syllable_max, 7, dtype=torch.long)
     durations = torch.zeros(batch, syllable_max, dtype=torch.long)
+    spans = torch.zeros(batch, syllable_max, dtype=torch.long)
     f0 = torch.zeros(batch, syllable_max)
     vuv = torch.zeros(batch, syllable_max)
     energy = torch.zeros(batch, syllable_max)
@@ -200,6 +222,7 @@ def collate_batch(items: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tenso
         n, t = item["features"].size(0), item["mel"].size(0)
         features[i, :n] = item["features"]
         durations[i, :n] = item["durations"]
+        spans[i, :n] = item.get("spans", item["durations"])
         f0[i, :n] = item["f0"]
         vuv[i, :n] = item["vuv"]
         energy[i, :n] = item["energy"]
@@ -209,7 +232,7 @@ def collate_batch(items: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tenso
         syllable_lengths[i] = n
         mel_lengths[i] = t
     output = {
-        "features": features, "durations": durations, "f0": f0, "vuv": vuv,
+        "features": features, "durations": durations, "spans": spans, "f0": f0, "vuv": vuv,
         "energy": energy, "mel": mel,
         "syllable_lengths": syllable_lengths, "mel_lengths": mel_lengths,
     }

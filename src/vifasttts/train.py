@@ -87,7 +87,7 @@ def _run_validation(model, loader, config, device, max_batches: int = 0) -> floa
     with torch.no_grad():
         for batch in loader:
             batch = _to_device(batch, device)
-            outputs = model(batch["features"], durations=batch["durations"], input_lengths=batch["syllable_lengths"])
+            outputs = model(batch["features"], durations=batch["spans"], input_lengths=batch["syllable_lengths"])
             loss, _ = acoustic_losses(outputs, batch, weights)
             total_loss += float(loss.item())
             batches += 1
@@ -299,10 +299,10 @@ def train_reference(
                 batch = _to_device(batch, device)
                 optimizer.zero_grad(set_to_none=True)
                 with torch.autocast(device_type=device.type, enabled=use_amp):
-                    # Teacher forcing cho phép mở rộng: dùng duration thật để
-                    # decoder sinh mel đúng độ dài; duration predictor được học
-                    # qua log_duration loss (chuẩn FastSpeech2).
-                    outputs = model(batch["features"], durations=batch["durations"], input_lengths=batch["syllable_lengths"])
+                    # Teacher forcing cho phép mở rộng: dùng span thật (duration + gap) để
+                    # decoder sinh mel đúng độ dài; duration predictor được học trên
+                    # phần hữu thanh (batch["durations"]) qua log_duration loss (chuẩn FastSpeech2).
+                    outputs = model(batch["features"], durations=batch["spans"], input_lengths=batch["syllable_lengths"])
                 loss, parts = acoustic_losses(outputs, batch, weights)
                 loss.backward()
                 if grad_clip:

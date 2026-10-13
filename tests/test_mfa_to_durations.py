@@ -57,9 +57,9 @@ def _textgrid(path: Path, words: list[tuple[float, float, str]], phones: list[tu
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _row(tmp_path: Path, boundaries: list[dict]) -> dict:
+def _row(tmp_path: Path, boundaries: list[dict], seconds: float = 1.0) -> dict:
     wav = tmp_path / "s1.wav"
-    _wav(wav)
+    _wav(wav, seconds)
     return {
         "id": "s1", "audio_path": str(wav), "text": "chào bạn nhé",
         "syllables": [
@@ -114,7 +114,11 @@ def test_compute_durations_round_trip():
         syllable_boundaries=[{}, {"sentence_end": True}, {}],
     )
     assert result["dropped"] is None
-    assert result["durations"] == [33, 42, 19] and sum(result["durations"]) == 94
+    # durations = phần hữu thanh; gaps = lặng sau từng âm tiết (cuối = đuôi clip)
+    assert result["durations"] == [28, 23, 19]
+    assert result["gaps"] == [5, 19, 0]
+    assert result["lead_frames"] == 0
+    assert result["lead_frames"] + sum(result["durations"]) + sum(result["gaps"]) == 94
     assert result["pauses"] == [{"after": 1, "seconds": 0.2}]
 
 
@@ -125,15 +129,19 @@ def test_convert_manifest_giu_pause_o_ranh_gioi_cau(tmp_path: Path):
     grid_dir.mkdir()
     _textgrid(grid_dir / "s1.TextGrid",
               [(0.0, 0.3, "chào"), (0.35, 0.6, "bạn"), (0.8, 1.0, "nhé")],
-              [(0.0, 0.3, "o_ch"), (0.3, 0.35, "sil")])
+              [(0.0, 0.3, "Och"), (0.3, 0.35, "sil")])
     stats = convert_manifest(manifest, grid_dir, tmp_path / "out.jsonl")
     assert stats["kept"] == 1 and stats["pauses"] == 1
     kept = json.loads((tmp_path / "out.jsonl").read_text(encoding="utf-8").splitlines()[0])
-    assert sum(kept["durations"]) == 94 and kept["pauses"] == [{"after": 1, "seconds": 0.2}]
+    assert kept["durations"] == [28, 23, 19] and kept["gaps"] == [5, 19, 0]
+    assert kept["lead_frames"] == 0
+    assert kept["lead_frames"] + sum(kept["durations"]) + sum(kept["gaps"]) == 94
+    assert kept["pauses"] == [{"after": 1, "seconds": 0.2}]
 
 
 def test_convert_manifest_giu_pause_giua_cau_luon(tmp_path: Path):
-    # D5-b (13/10/2026): pause ≥150 ms giữa câu KHÔNG loại clip — thành điểm cắt segment.
+    # D5-b (13/10/2026): pause ≥150 ms giữa câu KHÔNG loại clip — thành điểm cắt segment,
+    # khoảng lặng tách vào `gaps` nên không làm phình `durations`.
     row = _row(tmp_path, [{}, {"sentence_end": False, "phrase_end": False}, {}])
     manifest = _manifest(tmp_path, row)
     grid_dir = tmp_path / "grid"
@@ -145,21 +153,25 @@ def test_convert_manifest_giu_pause_giua_cau_luon(tmp_path: Path):
     assert stats["kept"] == 1 and stats["pauses"] == 1
     assert not any("ngừng thở" in reason for reason in stats["dropped"])
     kept = json.loads((tmp_path / "out.jsonl").read_text(encoding="utf-8").splitlines()[0])
-    assert kept["pauses"] == [{"after": 1, "seconds": 0.2}]
+    assert kept["pauses"] == [{"after": 1, "seconds": 0.2, "mid_sentence": True}]
 
 
-def test_convert_manifest_loai_ngung_tho_dai_giua_cau(tmp_path: Path):
-    # Ngừng thở thật giữa câu (≥1,5 s) vẫn bị loại (D5).
-    row = _row(tmp_path, [{}, {"sentence_end": False, "phrase_end": False}, {}])
+def test_convert_manifest_giu_ngung_tho_dai_giua_cau(tmp_path: Path):
+    # Pause 1,4 s giữa câu: KHÔNG loại (tách vào gaps); durations chỉ còn phần hữu thanh.
+    row = _row(tmp_path, [{}, {"sentence_end": False, "phrase_end": False}, {}], seconds=3.0)
     manifest = _manifest(tmp_path, row)
     grid_dir = tmp_path / "grid"
     grid_dir.mkdir()
     _textgrid(grid_dir / "s1.TextGrid",
-              [(0.0, 0.3, "chào"), (0.4, 0.7, "bạn"), (2.4, 2.7, "nhé")],
-              [(0.0, 0.3, "Och")])
+              [(0.1, 0.4, "chào"), (0.5, 0.8, "bạn"), (2.2, 2.5, "nhé")],
+              [(0.1, 0.4, "Och")])
     stats = convert_manifest(manifest, grid_dir, tmp_path / "out.jsonl")
-    assert stats["kept"] == 0
-    assert any("ngừng thở" in reason for reason in stats["dropped"])
+    assert stats["kept"] == 1
+    kept = json.loads((tmp_path / "out.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    total = kept["lead_frames"] + sum(kept["durations"]) + sum(kept["gaps"])
+    assert total == 282  # T = 1 + 3.0s*24000//256
+    assert sum(kept["durations"]) == 29 + 28 + 28  # hữu thanh, không gồm pause 1,4 s
+    assert kept["pauses"] == [{"after": 1, "seconds": 1.4, "mid_sentence": True}]
 
 
 def test_convert_manifest_loai_phone_qua_dai_va_thieu_grid(tmp_path: Path):

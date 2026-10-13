@@ -52,9 +52,11 @@ loader = DataLoader(dataset, batch_size=4, collate_fn=collate_batch)
 batch = next(iter(loader))
 print("  batch:", {k: tuple(v.shape) for k, v in batch.items() if hasattr(v, "shape")})
 frames = int(batch["mel_lengths"][0])
-durations = int(batch["durations"][0][: batch["syllable_lengths"][0]].sum())
-assert frames == durations, f"mel frames {frames} != sum durations {durations}"
-print("  OK: sum(durations) == mel frames cho mẫu đầu")
+n = int(batch["syllable_lengths"][0])
+spans = int(batch["spans"][0][:n].sum())
+durations = int(batch["durations"][0][:n].sum())
+assert frames == spans, f"mel frames {frames} != sum spans {spans}"
+print(f"  OK: sum(spans) == mel frames · hữu thanh {durations}/{frames} frame ({durations / frames:.0%})")
 EOF
 
 echo "[finalize] XONG — xem báo cáo:"
