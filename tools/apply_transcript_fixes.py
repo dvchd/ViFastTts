@@ -39,9 +39,9 @@ def _apply(text: str, pairs: dict[tuple[str, str], tuple[str, str]]) -> tuple[st
         if replacement is not None:
             start, end = matches[index].start(), matches[index + 1].end()
             pieces.append(text[cursor:start])
-            # Giữ kiểu hoa/thường của từ gốc đầu tiên (thường là chữ thường trong corpus).
+            # Chèn CẢ cụm thay thế (cặp có thể 1→2 từ), giữ kiểu hoa/thường của từ gốc đầu.
             first = matches[index].group(0)
-            right = replacement[1]
+            right = " ".join(replacement)
             pieces.append(right.capitalize() if first[:1].isupper() else right)
             cursor = end
             used.append(f"{pair[0]} {pair[1]}")
