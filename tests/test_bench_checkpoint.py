@@ -122,3 +122,22 @@ def test_rough_from_history_bo_dong_chu_thich(tmp_path):
         "50000,B,5.1,0.5,0.6,0.55,8.1,0.59,0.43,1e-5\n", encoding="utf-8")
     assert _rough_from_history(run_dir, 50000) == 0.43
     assert _rough_from_history(run_dir, 45000) == 0.41
+
+
+def test_check_baseline_pin_lech_thi_dung(tmp_path):
+    """B5: sha256 tệp mốc khác giá trị ghim trong README ⇒ SystemExit; khớp ⇒ im lặng."""
+    import hashlib
+
+    import pytest as _pytest
+
+    from tools.bench_checkpoint import check_baseline_pin
+
+    target = tmp_path / "moc.json"
+    target.write_text("{}", encoding="utf-8")
+    good = hashlib.sha256(target.read_bytes()).hexdigest()
+    readme = tmp_path / "README.md"
+    readme.write_text(f"| `moc.json` | `{good}` | dùng cho cổng |\n", encoding="utf-8")
+    check_baseline_pin(str(target), readme)  # khớp ⇒ không lỗi
+    target.write_text('{"khac": 1}', encoding="utf-8")
+    with _pytest.raises(SystemExit, match="sha256"):
+        check_baseline_pin(str(target), readme)

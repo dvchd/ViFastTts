@@ -137,6 +137,7 @@ def train_slot_v2(
     resume: str | None = None,
     reset_val_state: bool = False,
     stop_at_step: int | None = None,
+    validate_at_stop: bool = False,
     device: str | None = None,
     adversarial_flag: bool | None = None,
 ) -> None:
@@ -492,6 +493,21 @@ def train_slot_v2(
                         torch.save({"discriminator": discriminator.state_dict(),
                                     "d_optimizer": d_optimizer.state_dict(), "step": step},
                                    out / "d_last.pt")
+                if (validate_at_stop and stop_at_step is not None and step >= stop_at_step
+                        and step % validate_every != 0):
+                    # B6: validate MỘT lần khi dừng — REPORT-ONLY: không chạm best_val/no_improve/
+                    # early-stop (chỉ để probe có BCE pause + loss val).
+                    metrics = _validate(model, val_loader, weights, resolved_device,
+                                        max_batches=int(training.get("validate_batches", 0)))
+                    if resolved_device.type == "mps":
+                        torch.mps.empty_cache()
+                    print(f"step {step} [validate-at-stop, report-only]: val={metrics['total']:.4f} "
+                          f"(mel hữu thanh {metrics['mel_voiced']:.4f} · nét {metrics['rough']:.3f})")
+                    writer.writerow([step, "A" if step <= phase_a_steps else "B",
+                                     float(loss), float(parts["mel"]), float(mel_gap),
+                                     float(mel_voiced), metrics["total"], metrics["mel_voiced"],
+                                     metrics["rough"], learning_rate])
+                    history.flush()
                 if step >= steps or early_stopped or (stop_at_step is not None and step >= stop_at_step):
                     break
             if early_stopped or (stop_at_step is not None and step >= stop_at_step):

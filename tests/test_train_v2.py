@@ -282,3 +282,27 @@ def test_stop_at_step_dung_dung_buoc_va_khong_cham_lr(tmp_path):
         progress = min(1.0, (step - 0 - 1) / (60000 - 0 - 1))
         expected = 2e-4 * (0.05 + 0.95 * 0.5 * (1.0 + math.cos(math.pi * progress)))
         assert abs(lr - expected) / expected < 1e-3  # LR không bị --stop-at-step chạm vào
+
+
+def test_validate_at_stop_report_only(tmp_path):
+    """B6: --validate-at-stop ghi 1 dòng history nhưng KHÔNG chạm best_val/no_improve."""
+    run_dir, manifest = _run_tiny(tmp_path, "vas", steps=3)
+    state = torch.load(run_dir / "last.pt", map_location="cpu", weights_only=False)
+    state["step"] = 40000
+    state["best_val"] = 0.1234
+    state["no_improve"] = 7
+    torch.save(state, run_dir / "last.pt")
+    config = {**CONFIG, "f0_stats_path": str(tmp_path / "f0_stats.json"),
+              "training": {**CONFIG["training"], "cache_dir": str(tmp_path / "cache"),
+                           "learning_rate": 2e-4, "phase_a_steps": 0, "phase_b_warmup_steps": 1,
+                           "log_every": 100, "validate_every": 1000, "validate_batches": 1,
+                           "save_every": 1000, "early_stop_patience": 1}}
+    out = tmp_path / "vas_stop"
+    train_slot_v2(config, str(manifest), str(manifest), str(out), max_steps=60000,
+                  resume=str(run_dir / "last.pt"), stop_at_step=40003, validate_at_stop=True,
+                  device="cpu")
+    saved = torch.load(out / "last.pt", map_location="cpu", weights_only=False)
+    assert saved["step"] == 40003
+    assert saved["best_val"] == 0.1234 and saved["no_improve"] == 7  # không bị chạm
+    rows = [l for l in (out / "history.csv").read_text(encoding="utf-8").splitlines() if l and not l.startswith("step")]
+    assert len(rows) == 1  # đúng 1 dòng report-only

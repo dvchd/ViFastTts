@@ -308,10 +308,12 @@ def main() -> None:
 
     base_old = base_fix = None
     if args.baseline_old:
+        check_baseline_pin(args.baseline_old)
         payload = json.loads(Path(args.baseline_old).read_text(encoding="utf-8"))
         base_old = payload.get("summary", payload)  # tệp mốc gọn: metric nằm trong "summary"
         _check_baseline_hash(payload, args.val_manifest_old, args.baseline_old)
     if args.baseline_fixgap:
+        check_baseline_pin(args.baseline_fixgap)
         payload = json.loads(Path(args.baseline_fixgap).read_text(encoding="utf-8"))
         base_fix = payload.get("summary_fixgap") or payload.get("summary", payload)
         _check_baseline_hash(payload, args.val_manifest, args.baseline_fixgap)
@@ -386,6 +388,30 @@ def main() -> None:
     verdict = conclusion(gates["hard"], gates["target"])
     print(f"\n== KẾT LUẬN: {verdict} ==")
     print(f"→ {report_path} · scoreboard: {scoreboard}")
+
+
+def readme_sha256(name: str, readme: str | Path = "eval/README.md") -> str | None:
+    """sha256 ghim cho tệp `name` trong eval/README.md (bảng mốc) — None nếu chưa ghim."""
+    import re
+
+    path = Path(ROOT / readme)
+    if not path.exists():
+        return None
+    match = re.search(rf"\| `{re.escape(name)}` \| `([0-9a-f]{{64}})`", path.read_text(encoding="utf-8"))
+    return match.group(1) if match else None
+
+
+def check_baseline_pin(path: str, readme: str | Path = "eval/README.md") -> None:
+    """B5/A4: sha256 tệp mốc phải khớp giá trị ghim trong README; lệch ⇒ dừng."""
+    name = Path(path).name
+    pinned = readme_sha256(name, readme)
+    if pinned is None:
+        print(f"    ⚠ chưa ghim sha256 cho {name} trong {readme} — bỏ qua kiểm")
+        return
+    actual = hashlib.sha256(Path(ROOT / path).read_bytes()).hexdigest()
+    if actual != pinned:
+        raise SystemExit(f"LỖI: sha256 của {path} ({actual[:12]}…) khác giá trị ghim trong {readme} "
+                         f"({pinned[:12]}…) — ghim lại trước khi dùng làm mốc (A4).")
 
 
 def _check_baseline_hash(baseline: dict, val_manifest: str, path: str) -> None:

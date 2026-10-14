@@ -192,6 +192,8 @@ def train_v2(
                                          help="X3: resume bằng tập val KHÁC ⇒ reset best_val/no_improve"),
     stop_at_step: int | None = typer.Option(None, "--stop-at-step",
                                             help="Dừng ở bước TUYỆT ĐỐI này (probe); không đổi LR/max_steps"),
+    validate_at_stop: bool = typer.Option(False, "--validate-at-stop",
+                                          help="Validate MỘT lần khi dừng (report-only, không chạm best/early)"),
     device: str | None = typer.Option(None, help="Ghi đè device (auto|cpu|mps|cuda)"),
     adversarial: bool | None = typer.Option(None, "--adversarial/--no-adversarial",
                                             help="T4.1: bật/tắt mel discriminator (train-only)"),
@@ -201,7 +203,8 @@ def train_v2(
 
     train_slot_v2(load_config(config), train_manifest, val_manifest, output,
                   warm_start=warm_start, max_steps=max_steps, resume=resume,
-                  reset_val_state=reset_val_state, stop_at_step=stop_at_step, device=device,
+                  reset_val_state=reset_val_state, stop_at_step=stop_at_step,
+                  validate_at_stop=validate_at_stop, device=device,
                   adversarial_flag=adversarial)
 
 
