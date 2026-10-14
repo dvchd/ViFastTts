@@ -33,3 +33,13 @@ nối lịch sử CER; bản fixgap là segment-level (khác cấu trúc) ⇒ **
 **Còn thiếu (đã biết)**: model `tone_ruler` (`artifacts/tone_path/tone_ruler.pt`) chưa được version-control
 (train lại ~4 phút: `tools/tone_ruler.py --train`) và chưa ghi hash model vào JSON kết quả — xem
 kiểm toán 14/10, việc #1/#10.
+
+## Mốc (baseline) — `eval/baselines/` (§44)
+
+| Tệp | sha256 | Dùng cho |
+|---|---|---|
+| `base40k_old.json` | `6cf65481655e657fa96bd33091b7a2f1c2e91d7d9c63b0d9c32c69ac7f33fdee` | CỔNG CỨNG (mel/dB/rough/tone_C/CER/F0 NGÃ @ val cũ) |
+| `base40k_fixgap.json` | `7aaa9676c30f5c777a362b589bf44fc1721193bc0f4932c2ba4d4fe739f4908a` | mel_gap + syl_z + CỔNG MỤC TIÊU pause (val fixgap) |
+
+Kiểm H1 (base 40k): `syl_z` val cũ **0,6612** → fixgap **0,6608** (chênh **0,1%**) · `gap_z` 1,9493 → 2,3862
+⇒ mọi phần tăng của `mel_l1_z` tổng nằm ở khung gap (khung âm tiết không đổi) — §44.6.

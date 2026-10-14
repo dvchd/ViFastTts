@@ -1,0 +1,50 @@
+{
+  "tag": "base40k",
+  "git_commit": "2ad92d2",
+  "checkpoint": "runs/acoustic_v2_base/last.pt",
+  "step": 40000,
+  "seed": "deterministic (không lấy mẫu; bootstrap thước thanh seed cố định)",
+  "val_manifest_hash_old": "19b6e11756284ea86ee88933cc315b34011378b7",
+  "holdout_manifest_hash": "3ca7c79b0ba4ee9a66fb958ea28b3130da928fd0",
+  "raw_paths": {
+    "old_tf": "artifacts/bench/base40k_new_old_tf.json",
+    "old_free": "artifacts/bench/base40k_new_old_free.json",
+    "old_cer": "artifacts/bench/base40k_new_old_cer.json",
+    "fixgap_tf": "artifacts/bench/base40k_new_fixgap_tf.json",
+    "fixgap_free": "artifacts/bench/base40k_new_fixgap_free.json",
+    "tone": "artifacts/bench/base40k_new_tone.json",
+    "creak": "artifacts/bench/base40k_new_creak.json"
+  },
+  "raw_sha256": {
+    "old_tf": "4485188c55a8596e92234d85efd4bd62382dcc6501dc88cae76f5ac03cdef0ad",
+    "old_free": "61a96b0d474c05111494681228bc13fab92caec6c7eed02b586d4aec8b849214",
+    "old_cer": "d2e388be76f6ce7f6b49802123c980ddc7490930e8aa094cc245a44e99552f84",
+    "fixgap_tf": "06ffeb0cba8190b92d36724e0c5698992d6c35bd1fa84fefc84b66ba3f7ba677",
+    "fixgap_free": "477f0746da00a0704cb8de2e75fefb553e7e49a1cb151c5c7ee264ff47fa9fcc",
+    "tone": "89cdb60e48c3812023e60ac03f872ed7534e61c494642ca8209f6addf2d1334b",
+    "creak": "068d77be2f34e150242c8d03484d69e5ba17ff5abc8db3e45bbde45fbd6647be"
+  },
+  "val_manifest_hash": "19b6e11756284ea86ee88933cc315b34011378b7",
+  "summary": {
+    "mel_l1_z": 1.1599,
+    "mel_db_speech": 8.9547,
+    "vuv": 0.9821,
+    "dur_mae": 4.9866,
+    "f0_nga": 180.1663,
+    "cer": 0.2332,
+    "pause_f1": 0.5274,
+    "gap_sum_mae": 119.1246,
+    "pause_f1_all": 0.5003,
+    "gap_sum_mae_all": 111.9667,
+    "pause_precision": 0.6058,
+    "length_ratio": 0.8995,
+    "mel_gap": 3.1155,
+    "mel_gap_z": null,
+    "syl_z": 0.6612,
+    "syl_db": 7.6776,
+    "tone_C": 0.8045,
+    "creak_djitter_nga": 0.03721089568716707,
+    "creak_dhnr_nga": -2.745237842667848,
+    "rough": 0.39191587275407475
+  }
+}

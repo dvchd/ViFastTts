@@ -221,7 +221,8 @@ def _eval_block(config: str, checkpoint: str, val_manifest: str, holdout: str | 
         "pause_f1_all": _mean(free, "pause_f1_all"), "gap_sum_mae_all": _mean(free, "gap_sum_mae_all_frames"),
         "pause_precision": _mean(free, "pause_precision"),
         "length_ratio": _mean(free, "length_ratio"),
-        "mel_gap": _mean(free, "mel_gap"), "mel_gap_z": _mean(free, "mel_gap_z"),
+        "mel_gap": _mean(free, "mel_gap"),  # free-run: L1 mel trên khung gap THẬT (cổng cứng)
+        "mel_gap_z": _mean(tf, "mel_gap_z"),  # tf: gap_z (§44/B2 — cổng mục tiêu A2)
         "syl_z": _mean(tf, "syl_z"), "syl_db": _mean(tf, "syl_db"),
     }
     return row, {"tf": tf, "free": free, "cer": cer}
