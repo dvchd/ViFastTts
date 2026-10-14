@@ -1254,3 +1254,23 @@ trọng số 0,5) — cần điều tra vì sao model vẫn hụt (target? slot 
 - **Vocoder có điều kiện phonation/F0** (HiFi-Glot/DSM): roadmap dài hạn (hop 256 ⇒ mel không chứa jitter
   mức chu kỳ — muốn hết rung phải thêm kênh vào vocoder).
 - **Lịch**: A2 → (A1 nếu cần) → chẩn đoán coda tắc → E4 (tone_disc + K=6) → E2 (LapMixture) → E5 (adv@b8).
+
+### 44.6 Điểm chặn D — ĐÃ GỠ: H1 xác nhận, H2 bị loại (D0/D1 mở rộng, 14/10/2026)
+
+**D0/D1 mục 5–7 (5 hàng val + 5 hàng train, base 40k, CPU):**
+
+| Kiểm | Kết quả |
+|---|---|
+| `frame_range[0]` cũ vs fixgap | **trùng hết** (val 26/950/12/924/29 · train 19/938/3/997/5) ⇒ **H2 bị loại** |
+| `syllables`, `durations` | **trùng hết** ⇒ không đổi nội dung |
+| mel FREE (cũ vs fixgap) | **trùng khít** (2,265→2,265 · 3,854→3,854 · …); sha256 mel đầu ra free **giống hệt** |
+| mel TF (cũ vs fixgap) | **lệch** ở hàng T dài (1,361→2,031 · 0,919→1,326 …); hàng T không đổi (896→912) thì gần như trùng (2,005→1,990) |
+| **TF @ fixgap tách vùng** (val) | âm tiết **0,53–0,61** · gap trong **1,73–6,79** · **gap CUỐI 0,90–6,87** |
+| TF @ fixgap tách vùng (train, trong mẫu) | âm tiết 0,33–0,37 · gap trong 0,24–0,42 · gap cuối 0,23–0,84 |
+
+⇒ **Kết luận: KHÔNG phải lỗi dữ liệu.** `mel_l1_z`/dB trên val fixgap tăng ở base 40k là do
+**teacher-forcing đưa vào các khoảng lặng chưa từng được học** (gap trong + lặng đuôi mới có nhãn);
+lỗi dồn vào đúng các khung đó, còn khung âm tiết vẫn 0,5–0,6. Đây **chính là khoảng hụt mà A2 sinh ra
+để sửa**. Free-run không phụ thuộc manifest (đã chứng minh bằng sha256) ⇒ **cổng cứng mel/dB chấm TF
+@ val CŨ** (tiếp lịch sử), theo dõi A2 thêm **mel_z TF @ val fixgap tách 3 vùng** (kỳ vọng: vùng gap
+giảm mạnh, vùng âm tiết không xấu quá +1%).
