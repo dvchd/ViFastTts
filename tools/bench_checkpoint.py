@@ -89,6 +89,117 @@ def _gate(key: str, value: float | None) -> str:
     return "✅" if ok else "❌"
 
 
+
+def hard_gates(row: dict, base: dict | None) -> dict[str, tuple[bool, str]]:
+    """CỔNG CỨNG (§44): None = TRƯỢT và ghi rõ "thiếu dữ liệu"."""
+
+    def at_most(key: str, limit: float) -> tuple[bool, str]:
+        value = row.get(key)
+        if value is None:
+            return False, "thiếu dữ liệu"
+        return value <= limit, f"{value:.4f}≤{limit}"
+
+    def at_least(key: str, limit: float) -> tuple[bool, str]:
+        value = row.get(key)
+        if value is None:
+            return False, "thiếu dữ liệu"
+        return value >= limit, f"{value:.4f}≥{limit}"
+
+    cer_base = (base or {}).get("cer")
+    if row.get("cer") is None or cer_base is None:
+        cer_gate = (False, "thiếu dữ liệu")
+    else:
+        cer_gate = (row["cer"] <= cer_base + 0.03, f"{row['cer']:.4f}≤{cer_base + 0.03:.4f}")
+    return {
+        "mel_l1_z≤1.16": at_most("mel_l1_z", 1.16),
+        "mel_db≤8.7": at_most("mel_db_speech", 8.7),
+        "rough≥0.40": at_least("rough", 0.40),
+        "tone_C≥0.79": at_least("tone_C", 0.79),
+        "cer≤mốc+0.03": cer_gate,
+    }
+
+
+def guard_gates(row: dict, base: dict) -> dict[str, tuple[bool, str]]:
+    """RÀO CHẮN so mốc (§44): không được tệ hơn mốc quá ngưỡng."""
+
+    def pair(key: str) -> tuple[float | None, float | None]:
+        return row.get(key), base.get(key)
+
+    mel_gap_new, mel_gap_base = pair("mel_gap")
+    mel_z_new, mel_z_base = pair("mel_l1_z")
+    tone_new, tone_base = pair("tone_C")
+    nga_new, nga_base = pair("f0_nga")
+    return {
+        "mel_gap không tăng": (mel_gap_new is None or mel_gap_base is None or mel_gap_new <= mel_gap_base + 1e-6,
+                               f"{mel_gap_new} vs {mel_gap_base}"),
+        "mel_l1_z≤mốc×1.01": (mel_z_new is not None and mel_z_base is not None and mel_z_new <= mel_z_base * 1.01,
+                              f"{mel_z_new} vs {mel_z_base}"),
+        "tone_C≥mốc−0.01": (tone_new is not None and tone_base is not None and tone_new >= tone_base - 0.01,
+                            f"{tone_new} vs {tone_base}"),
+        "F0 NGÃ≤mốc+5c": (nga_new is None or nga_base is None or nga_new <= nga_base + 5.0,
+                          f"{nga_new} vs {nga_base}"),
+    }
+
+
+def target_gates(row: dict, base: dict) -> dict[str, tuple[bool, str]]:
+    """CỔNG MỤC TIÊU pause (§44): tương đối so mốc; None = "chưa đo" (không tính là trượt)."""
+    f1_new, f1_base = row.get("pause_f1_all"), base.get("pause_f1_all")
+    gap_new, gap_base = row.get("gap_sum_mae_all"), base.get("gap_sum_mae_all")
+    ratio = row.get("length_ratio")
+    return {
+        "pause_f1_all≥mốc+0.073": (f1_new is not None and f1_base is not None and f1_new >= f1_base + 0.073,
+                                   f"{f1_new} vs {f1_base}"),
+        "gap_sum_mae_all≤mốc×0.714": (gap_new is not None and gap_base is not None and gap_new <= gap_base * 0.714,
+                                      f"{gap_new} vs {gap_base}"),
+        "length_ratio 1.00±0.05": (ratio is not None and abs(ratio - 1.0) <= 0.05, f"{ratio}"),
+    }
+
+
+def rough_from_checkpoint(config: str, checkpoint: str, clips: int = 12) -> float | None:
+    """Tính lại `rough` từ checkpoint (khi history.csv thiếu) — 12 clip val đầu, CPU."""
+    import warnings
+
+    import torch
+    import yaml
+
+    warnings.filterwarnings("ignore")
+    from vifasttts.data.dataset_v2 import SlotDataset, collate_slot_batch
+    from vifasttts.frontend.vocab import ComponentVocabs
+    from vifasttts.models.factory import build_model, load_model_state
+
+    try:
+        cfg = yaml.safe_load(Path(config).read_text(encoding="utf-8")) if config.endswith(".yaml") \
+            else json.loads(Path(config).read_text(encoding="utf-8"))
+        f0_stats = json.loads(Path(ROOT / "data/codelung/f0_stats_v2.json").read_text(encoding="utf-8"))
+        vocab = ComponentVocabs.default()
+        sizes = [len(vocab.onset), len(vocab.medial), len(vocab.nucleus), len(vocab.coda),
+                 len(vocab.tone), len(vocab.boundary), len(vocab.punctuation)]
+        model = build_model(cfg, sizes, arch="v2_slot5")
+        load_model_state(model, torch.load(ROOT / checkpoint, map_location="cpu", weights_only=False)["model"])
+        model.load_f0_stats(f0_stats)
+        model.eval()
+        dataset = SlotDataset(str(ROOT / VAL), cfg, f0_stats, cache_dir=str(ROOT / CACHE))
+
+        def delta(mel: torch.Tensor) -> float:
+            dt = (mel[:, 1:] - mel[:, :-1]).abs().mean()
+            df = (mel[:, :, 1:] - mel[:, :, :-1]).abs().mean()
+            return float(dt + df)
+
+        ratios = []
+        with torch.no_grad():
+            for index in range(min(clips, len(dataset))):
+                batch = collate_slot_batch([dataset[index]])
+                outputs = model(batch["features"], durations=batch["durations"],
+                                seg_durations=batch["seg_durations"], gaps=batch["gaps"],
+                                lead=batch["lead"])
+                frames = min(outputs["mel"].size(1), batch["mel"].size(1))
+                ratios.append(delta(outputs["mel"][:, :frames]) / max(delta(batch["mel"][:, :frames]), 1e-6))
+        return sum(ratios) / len(ratios)
+    except Exception as error:  # noqa: BLE001 — rough là thông tin phụ, không được làm sập bench
+        print(f"    ⚠ không tính lại được rough: {error}")
+        return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark đa tiêu chí cho 1 checkpoint (v2).")
     parser.add_argument("--run", help="thư mục run (tự suy config/checkpoint + history)")
@@ -180,45 +291,36 @@ def main() -> None:
         "creak_djitter_nga": creak_nga.get("jitter"),
         "creak_dhnr_nga": creak_nga.get("hnr"),
     }
-    gates: dict[str, object] = {}
-    if args.baseline:
-        base = json.loads(Path(args.baseline).read_text(encoding="utf-8")).get("summary", {})
-        hard = {
-            "mel_l1_z<=1.16": (row["mel_l1_z"] or 9e9) <= 1.16,
-            "mel_db<=8.7": (row["mel_db_speech"] or 9e9) <= 8.7,
-            "rough>=0.40": (row["rough"] or -1) >= 0.40,
-            "tone_C>=0.79": (row["tone_C"] or -1) >= 0.79,
-            "cer<=base+0.03": (row["cer"] is None or base.get("cer") is None
-                               or row["cer"] <= base["cer"] + 0.03),
-        }
-        guard = {
-            "mel_gap không tăng": (row["mel_gap"] is None or base.get("mel_gap") is None
-                                   or row["mel_gap"] <= base["mel_gap"] + 1e-6),
-            "mel_l1_z<=base*1.01": (row["mel_l1_z"] or 9e9) <= (base.get("mel_l1_z") or 0) * 1.01,
-            "tone_C>=base-0.01": (row["tone_C"] or -1) >= (base.get("tone_C") or 0) - 0.01,
-            "f0_nga<=base+5c": (row["f0_nga"] is None or base.get("f0_nga") is None
-                                or row["f0_nga"] <= base["f0_nga"] + 5.0),
-        }
-        target = {
-            "pause_f1_all>=base+0.073": (row["pause_f1_all"] is not None and base.get("pause_f1_all") is not None
-                                         and row["pause_f1_all"] >= base["pause_f1_all"] + 0.073),
-            "gap_sum_mae_all<=base*0.714": (row["gap_sum_mae_all"] is not None and base.get("gap_sum_mae_all") is not None
-                                            and row["gap_sum_mae_all"] <= base["gap_sum_mae_all"] * 0.714),
-            "length_ratio 1.00±0.05": (row["length_ratio"] is not None and abs(row["length_ratio"] - 1.0) <= 0.05),
-        }
-        gates = {"hard": hard, "guard": guard, "target": target}
-        print(f"\n== So với mốc {args.baseline} ==")
-        for group, block in gates.items():
-            label = {"hard": "CỔNG CỨNG", "guard": "RÀO CHẮN", "target": "MỤC TIÊU A2"}[group]
-            marks = " · ".join(f"{'✅' if ok else '❌'} {name}" for name, ok in block.items())
-            print(f"  {label}: {marks}")
-        print(f"  THEO DÕI: pause_precision {row['pause_precision']} · Δmel_z "
-              f"{(row['mel_l1_z'] or 0) - (base.get('mel_l1_z') or 0):+.4f}")
-
     import hashlib
     commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, check=False,
                             capture_output=True, text=True).stdout.strip()
     val_sha = hashlib.sha1(Path(ROOT / args.val_manifest).read_bytes()).hexdigest()
+    if row.get("rough") is None:
+        row["rough"] = rough_from_checkpoint(config, checkpoint)
+    if args.baseline:
+        baseline_path = Path(args.baseline)
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+        base = baseline.get("summary", {})
+        base_sha = baseline.get("val_manifest_sha1")
+        if base_sha and base_sha != val_sha:
+            raise SystemExit(
+                f"LỖI: hash val của mốc ({base_sha[:12]}…) khác hash val của run "
+                f"({val_sha[:12]}…) — không so được (chỉ so pause/mel_gap trên CÙNG bản val).")
+        gates = {"hard": hard_gates(row, base), "guard": guard_gates(row, base),
+                 "target": target_gates(row, base)}
+        print(f"\n== So với mốc {baseline_path} (val_sha {str(base_sha)[:12]}…) ==")
+        for group, label in (("hard", "CỔNG CỨNG"), ("guard", "RÀO CHẮN"), ("target", "CỔNG MỤC TIÊU")):
+            marks = " · ".join(f"{'✅' if ok else '❌'} {name} [{detail}]"
+                               for name, (ok, detail) in gates[group].items())
+            print(f"  {label}: {marks}")
+        print(f"  ngưỡng tuyệt đối suy ra: pause_f1_all ≥ "
+              f"{(base.get('pause_f1_all') or 0) + 0.073:.4f} · gap_sum_mae_all ≤ "
+              f"{(base.get('gap_sum_mae_all') or 0) * 0.714:.1f}")
+        print(f"  THAM KHẢO (bộ cũ, bỏ gap cuối dòng): pause_f1 {row['pause_f1']} [cổng cũ 0,60] · "
+              f"gap_sum_mae {row['gap_sum_mae']} [cổng cũ 85] · pause_precision {row['pause_precision']}")
+    else:
+        gates = {"hard": hard_gates(row, None)}
+
     report = {"tag": tag, "config": config, "checkpoint": checkpoint, "summary": row, "gates": gates,
               "git_commit": commit, "val_manifest": args.val_manifest, "val_manifest_sha1": val_sha,
               "seed": "deterministic (không lấy mẫu; bootstrap thước thanh seed cố định)",

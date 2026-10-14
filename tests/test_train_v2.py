@@ -180,3 +180,59 @@ def test_train_v2_ghi_danh_tinh_tap_val(tmp_path):
     assert state["validate_batches"] == 1
     early = json.loads((run_dir / "early_stop.json").read_text(encoding="utf-8"))
     assert early["val_manifest_hash"] == expected and early["validate_batches"] == 1
+
+
+def _run_tiny(tmp_path, name, val_manifest=None, steps=3, resume=None, reset=False):
+    """Train/resume 3 bước với manifest nhỏ; trả (run_dir, manifest_path)."""
+    rows = [_row(f"clip__{name}0", 0, [5, 6], [2], [[2, 0, 2, 1], [2, 0, 2, 2]])]
+    manifest = tmp_path / f"{name}.jsonl"
+    manifest.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows), encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir(exist_ok=True)
+    for row in rows:
+        _write_cache(cache_dir, row, CONFIG)
+    stats_path = tmp_path / "f0_stats.json"
+    stats_path.write_text(json.dumps(F0_STATS), encoding="utf-8")
+    config = {
+        **CONFIG,
+        "f0_stats_path": str(stats_path),
+        "training": {**CONFIG["training"], "cache_dir": str(cache_dir), "learning_rate": 0.0,
+                     "phase_a_steps": 0, "phase_b_warmup_steps": 1, "log_every": 100,
+                     "validate_every": 1, "validate_batches": 1, "save_every": 100,
+                     "early_stop_patience": 0},
+    }
+    run_dir = tmp_path / name
+    train_slot_v2(config, str(manifest), str(val_manifest or manifest), str(run_dir),
+                  max_steps=steps, resume=resume, reset_val_state=reset, device="cpu")
+    return run_dir, manifest
+
+
+def test_x3_chan_khi_val_hash_khac_va_khong_co_co(tmp_path):
+    """X3 (0.1): resume bằng tập val KHÁC mà không có cờ ⇒ lỗi, không ghi gì."""
+    run_dir, manifest = _run_tiny(tmp_path, "x3a", steps=3)
+    # khác hash nhưng nội dung hàng y hệt: thêm 1 dòng trắng (dataset bỏ qua dòng trắng)
+    other = tmp_path / "val_khac.jsonl"
+    other.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="tập val KHÁC"):
+        _run_tiny(tmp_path, "x3a", val_manifest=other, steps=5, resume=run_dir / "last.pt")
+
+
+def test_x3_reset_val_state_va_ghi_chu_history(tmp_path):
+    """X3 (0.1): có cờ ⇒ chạy tiếp, best_val = inf, history có dòng resume_note."""
+    run_dir, manifest = _run_tiny(tmp_path, "x3b", steps=3)
+    other = tmp_path / "val_khac.jsonl"
+    other.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    new_dir, _ = _run_tiny(tmp_path, "x3b_new", val_manifest=other, steps=5,
+                           resume=run_dir / "last.pt", reset=True)
+    state = torch.load(new_dir / "last.pt", map_location="cpu", weights_only=False)
+    assert state["step"] == 5
+    first_line = (new_dir / "history.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert first_line.startswith("# X3 resume: resumed_from=")
+    assert "val_hash_old=" in first_line and "val_hash_new=" in first_line
+
+
+def test_x3_reset_val_state_cung_thu_muc_nguon_thi_loi(tmp_path):
+    """X3 (0.1): có cờ mà thư mục run trùng thư mục nguồn ⇒ lỗi."""
+    run_dir, _manifest = _run_tiny(tmp_path, "x3c", steps=3)
+    with pytest.raises(ValueError, match="trùng thư mục nguồn"):
+        _run_tiny(tmp_path, "x3c", steps=5, resume=run_dir / "last.pt", reset=True)

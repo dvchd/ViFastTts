@@ -1211,3 +1211,46 @@ trọng số 0,5) — cần điều tra vì sao model vẫn hụt (target? slot 
   `question_boost` trên `f0_mask` — **không** dựng prior theo dấu câu (chỉ 178 row train kết thúc `?`).
 
 ### 43.3 Thứ tự cập nhật: **B1 (sửa thước) → A1 (loss pause) → A2 (manifest) → E4 tone → E2 texture → E5 adv**
+
+## 44. Quyết định vận hành A2 (fixgap) — chốt 14/10/2026
+
+### 44.1 Ground-truth nhịp nghỉ đến từ MANIFEST, không phải VAD/audio
+- `eval_acoustic --mode free` lấy vị trí/kích thước pause từ **trường `gaps` của manifest** (qua
+  `dataset_v2`), không đọc lại audio. Vì vậy khi train dùng nhãn fixgap thì **val/holdout BẮT BUỘC sửa
+  đồng bộ** (nếu không, model tốt lên nhưng số vẫn xấu vì nhãn val thiếu 46,5% khối lượng pause).
+- **Giữ bản cũ** (`*_slot4.jsonl`) để nối lịch sử §31–§43; bản mới `*_slot4_fixgap.jsonl` là **thang đo
+  KHÁC** cho pause/`mel_gap` ⇒ **chỉ so pause trên cùng một bản val** (bench tự chặn nếu hash val khác).
+
+### 44.2 Thứ tự thí nghiệm: **A2 → A1**
+- **A2** = fixgap + **loss pause CŨ** (0,5/0,5; `pause_pos_weight 1,0`, `pause_mass_scale 0`) — *một biến*.
+- **A1** (pos_weight + phạt theo khối lượng + trọng số 2,0) **chỉ chạy nếu A2 trượt cổng mục tiêu pause**
+  (để không trộn hai biến; A1 đã code sẵn, bật bằng `configs/small_codelung_v2_base_pause.yaml`).
+
+### 44.3 Cổng (bench_checkpoint.py, `--baseline eval/baselines/base40k_fixgap.json`)
+- **CỔNG CỨNG** (None = TRƯỢT, in "thiếu dữ liệu"; `rough` thiếu trong `history.csv` ⇒ **tính lại từ
+  checkpoint** trước khi kết luận): `mel_l1_z ≤ 1,16` · `mel_db ≤ 8,7` · `rough ≥ 0,40` · `tone_C ≥ 0,79`
+  · `cer ≤ cer_mốc + 0,03`.
+- **RÀO CHẮN** (so mốc): `mel_gap` không tăng · `mel_l1_z ≤ mốc×1,01` · `tone_C ≥ mốc−0,01` ·
+  `F0 trung vị NGÃ ≤ mốc+5 cent`.
+- **CỔNG MỤC TIÊU A2** (tương đối): `pause_f1_all ≥ mốc_f1_all + 0,073` ·
+  `gap_sum_mae_all ≤ mốc_gap_all × 0,714` · `length_ratio 1,00 ± 0,05`. None = "chưa đo".
+- **THEO DÕI** (không phải cổng): `pause_precision`; tỉ số BCE pause val/train (mốc ≈ 20 lần; < 5 là tốt);
+  bộ metric cũ (bỏ gap cuối dòng) in kèm nhãn **tham khảo** (cổng cũ 0,60 / 85).
+
+### 44.4 `--reset-val-state` + quy tắc thư mục run
+- `train-v2 --reset-val-state`: cho phép resume khi **hash val khác**; nạp xong model/optimizer/step thì
+  đặt `best_val = inf`, `no_improve = 0`; ghi dòng `# X3 resume: resumed_from=…, val_hash_old=…,
+  val_hash_new=…` **trước header** `history.csv`.
+- **Không có cờ** mà hash val khác ⇒ **raise lỗi dừng, trước mọi thao tác ghi tệp** (không để `best_val`
+  của tập cũ âm thầm quyết định `best.pt` của tập mới).
+- Có cờ mà `Path(output).resolve() == Path(resume).parent.resolve()` ⇒ lỗi (phải dùng thư mục run MỚI).
+- Run A2: `runs/acoustic_v2_A2_fixgap`, resume `runs/acoustic_v2_base/last.pt@40000`,
+  `max_steps = lr_decay_steps = 60000` (LR phụ thuộc `max_steps`), `patience 0`, `save_every 5000`.
+
+### 44.5 Đóng/hoãn các nhánh khác
+- **Ngữ điệu câu hỏi**: ĐÓNG — không có bằng chứng model làm sai (§42.3 là **lỗi thước đo**, đã sửa B1);
+  chỉ còn nghi vấn `QUESTION|NGANG` cần n ≥ 149 cặp mới kết luận.
+- **GTA Vocos**: xếp lại khỏi đường chính (§41 trượt cổng).
+- **Vocoder có điều kiện phonation/F0** (HiFi-Glot/DSM): roadmap dài hạn (hop 256 ⇒ mel không chứa jitter
+  mức chu kỳ — muốn hết rung phải thêm kênh vào vocoder).
+- **Lịch**: A2 → (A1 nếu cần) → chẩn đoán coda tắc → E4 (tone_disc + K=6) → E2 (LapMixture) → E5 (adv@b8).

@@ -1,0 +1,1206 @@
+{
+ "status": "ok",
+ "created": "2026-10-14 10:37:13",
+ "tool": "artifacts/tone_path/pipeline_abc_ruler.py",
+ "ruler": {
+  "model": "artifacts/tone_path/tone_ruler.pt",
+  "val_accuracy_train": 0.7623,
+  "spec_version": "tone-ruler-v1",
+  "self_check_note": "tự kiểm chứng trước: tools/tone_ruler.py --score-real → 0.7623 val"
+ },
+ "config": {
+  "manifest": "data/codelung/val_clean_v2_dur_seg_slot4.jsonl",
+  "clips": 60,
+  "device": "cpu",
+  "checkpoint": "runs/acoustic_v2_base/last.pt",
+  "arch": "v2_slot5",
+  "vocoder": "artifacts/pretrained/vocos-mel-24khz/pytorch_model.bin",
+  "cache_dir": "cache/codelung_v2",
+  "f0_stats": "data/codelung/f0_stats_v2.json",
+  "A": "audio thật (cache f0/vuv/phonation v3, cửa sổ seg_durations manifest)",
+  "B": "mel THẬT → Vocos b8 → wav → features_from_wav (cửa sổ seg_durations THẬT)",
+  "C": "features → model b8 (free-run, speed=1) → mel+slot_durations → Vocos → wav → features_from_wav (cửa sổ theo model)"
+ },
+ "paths": {
+  "A": {
+   "n_total": 1462,
+   "n_scored": 1252,
+   "n_skipped": 210,
+   "skip_reasons": {
+    "ngắn": 206,
+    "ít hữu thanh": 4
+   },
+   "n_correct": 996,
+   "accuracy": 0.7955,
+   "accuracy_drop_as_error": 0.6813,
+   "drop_rate": 0.1436,
+   "mean_prob_true": 0.7142,
+   "per_tone": {
+    "NGANG": {
+     "n": 385,
+     "correct": 292,
+     "accuracy": 0.7584
+    },
+    "HUYEN": {
+     "n": 301,
+     "correct": 247,
+     "accuracy": 0.8206
+    },
+    "SAC": {
+     "n": 289,
+     "correct": 215,
+     "accuracy": 0.7439
+    },
+    "HOI": {
+     "n": 102,
+     "correct": 95,
+     "accuracy": 0.9314
+    },
+    "NGA": {
+     "n": 70,
+     "correct": 68,
+     "accuracy": 0.9714
+    },
+    "NANG": {
+     "n": 105,
+     "correct": 79,
+     "accuracy": 0.7524
+    }
+   },
+   "confusion": [
+    [
+     292,
+     26,
+     45,
+     4,
+     12,
+     6
+    ],
+    [
+     18,
+     247,
+     16,
+     11,
+     3,
+     6
+    ],
+    [
+     33,
+     18,
+     215,
+     1,
+     8,
+     14
+    ],
+    [
+     3,
+     2,
+     0,
+     95,
+     1,
+     1
+    ],
+    [
+     0,
+     0,
+     0,
+     1,
+     68,
+     1
+    ],
+    [
+     2,
+     3,
+     15,
+     1,
+     5,
+     79
+    ]
+   ],
+   "tones": [
+    "NGANG",
+    "HUYEN",
+    "SAC",
+    "HOI",
+    "NGA",
+    "NANG"
+   ]
+  },
+  "B": {
+   "n_total": 1462,
+   "n_scored": 1251,
+   "n_skipped": 211,
+   "skip_reasons": {
+    "ngắn": 206,
+    "ít hữu thanh": 5
+   },
+   "n_correct": 989,
+   "accuracy": 0.7906,
+   "accuracy_drop_as_error": 0.6765,
+   "drop_rate": 0.1443,
+   "mean_prob_true": 0.7064,
+   "per_tone": {
+    "NGANG": {
+     "n": 383,
+     "correct": 292,
+     "accuracy": 0.7624
+    },
+    "HUYEN": {
+     "n": 301,
+     "correct": 237,
+     "accuracy": 0.7874
+    },
+    "SAC": {
+     "n": 289,
+     "correct": 221,
+     "accuracy": 0.7647
+    },
+    "HOI": {
+     "n": 102,
+     "correct": 92,
+     "accuracy": 0.902
+    },
+    "NGA": {
+     "n": 71,
+     "correct": 64,
+     "accuracy": 0.9014
+    },
+    "NANG": {
+     "n": 105,
+     "correct": 83,
+     "accuracy": 0.7905
+    }
+   },
+   "confusion": [
+    [
+     292,
+     31,
+     46,
+     2,
+     7,
+     5
+    ],
+    [
+     23,
+     237,
+     17,
+     17,
+     1,
+     6
+    ],
+    [
+     24,
+     16,
+     221,
+     3,
+     9,
+     16
+    ],
+    [
+     2,
+     4,
+     1,
+     92,
+     1,
+     2
+    ],
+    [
+     0,
+     0,
+     2,
+     0,
+     64,
+     5
+    ],
+    [
+     3,
+     2,
+     13,
+     1,
+     3,
+     83
+    ]
+   ],
+   "tones": [
+    "NGANG",
+    "HUYEN",
+    "SAC",
+    "HOI",
+    "NGA",
+    "NANG"
+   ]
+  },
+  "C": {
+   "n_total": 1462,
+   "n_scored": 1379,
+   "n_skipped": 83,
+   "skip_reasons": {
+    "ngắn": 78,
+    "ít hữu thanh": 5
+   },
+   "n_correct": 1095,
+   "accuracy": 0.7941,
+   "accuracy_drop_as_error": 0.749,
+   "drop_rate": 0.0568,
+   "mean_prob_true": 0.6945,
+   "per_tone": {
+    "NGANG": {
+     "n": 424,
+     "correct": 297,
+     "accuracy": 0.7005
+    },
+    "HUYEN": {
+     "n": 334,
+     "correct": 286,
+     "accuracy": 0.8563
+    },
+    "SAC": {
+     "n": 324,
+     "correct": 258,
+     "accuracy": 0.7963
+    },
+    "HOI": {
+     "n": 109,
+     "correct": 100,
+     "accuracy": 0.9174
+    },
+    "NGA": {
+     "n": 77,
+     "correct": 70,
+     "accuracy": 0.9091
+    },
+    "NANG": {
+     "n": 111,
+     "correct": 84,
+     "accuracy": 0.7568
+    }
+   },
+   "confusion": [
+    [
+     297,
+     29,
+     62,
+     5,
+     29,
+     2
+    ],
+    [
+     12,
+     286,
+     17,
+     9,
+     7,
+     3
+    ],
+    [
+     19,
+     4,
+     258,
+     1,
+     19,
+     23
+    ],
+    [
+     0,
+     6,
+     0,
+     100,
+     2,
+     1
+    ],
+    [
+     0,
+     1,
+     6,
+     0,
+     70,
+     0
+    ],
+    [
+     1,
+     9,
+     7,
+     4,
+     6,
+     84
+    ]
+   ],
+   "tones": [
+    "NGANG",
+    "HUYEN",
+    "SAC",
+    "HOI",
+    "NGA",
+    "NANG"
+   ]
+  }
+ },
+ "accuracy_drop_vs_A": {
+  "B": 0.0049,
+  "C": 0.0014
+ },
+ "paired_abc": {
+  "n": 1212,
+  "paths": {
+   "A": {
+    "n": 1212,
+    "correct": 971,
+    "accuracy": 0.8012,
+    "mean_prob_true": 0.7203,
+    "per_tone": {
+     "NGANG": {
+      "n": 376,
+      "correct": 288
+     },
+     "HUYEN": {
+      "n": 295,
+      "correct": 242
+     },
+     "SAC": {
+      "n": 275,
+      "correct": 206
+     },
+     "HOI": {
+      "n": 99,
+      "correct": 94
+     },
+     "NGA": {
+      "n": 68,
+      "correct": 66
+     },
+     "NANG": {
+      "n": 99,
+      "correct": 75
+     }
+    }
+   },
+   "B": {
+    "n": 1212,
+    "correct": 966,
+    "accuracy": 0.797,
+    "mean_prob_true": 0.7111,
+    "per_tone": {
+     "NGANG": {
+      "n": 376,
+      "correct": 289
+     },
+     "HUYEN": {
+      "n": 295,
+      "correct": 232
+     },
+     "SAC": {
+      "n": 275,
+      "correct": 213
+     },
+     "HOI": {
+      "n": 99,
+      "correct": 92
+     },
+     "NGA": {
+      "n": 68,
+      "correct": 61
+     },
+     "NANG": {
+      "n": 99,
+      "correct": 79
+     }
+    }
+   },
+   "C": {
+    "n": 1212,
+    "correct": 975,
+    "accuracy": 0.8045,
+    "mean_prob_true": 0.7068,
+    "per_tone": {
+     "NGANG": {
+      "n": 376,
+      "correct": 272
+     },
+     "HUYEN": {
+      "n": 295,
+      "correct": 257
+     },
+     "SAC": {
+      "n": 275,
+      "correct": 217
+     },
+     "HOI": {
+      "n": 99,
+      "correct": 91
+     },
+     "NGA": {
+      "n": 68,
+      "correct": 62
+     },
+     "NANG": {
+      "n": 99,
+      "correct": 76
+     }
+    }
+   }
+  }
+ },
+ "paired_diffs": {
+  "B_minus_A": -0.0042,
+  "C_minus_B": 0.0075,
+  "C_minus_A": 0.0033
+ },
+ "pairwise_agreement": {
+  "AB": {
+   "n": 1249,
+   "agree": 1109,
+   "rate": 0.8879,
+   "by_tone_true": {
+    "NGANG": {
+     "n": 383,
+     "agree": 334
+    },
+    "HUYEN": {
+     "n": 301,
+     "agree": 269
+    },
+    "SAC": {
+     "n": 289,
+     "agree": 256
+    },
+    "HOI": {
+     "n": 102,
+     "agree": 95
+    },
+    "NGA": {
+     "n": 70,
+     "agree": 63
+    },
+    "NANG": {
+     "n": 104,
+     "agree": 92
+    }
+   }
+  },
+  "BC": {
+   "n": 1214,
+   "agree": 851,
+   "rate": 0.701,
+   "by_tone_true": {
+    "NGANG": {
+     "n": 376,
+     "agree": 238
+    },
+    "HUYEN": {
+     "n": 295,
+     "agree": 223
+    },
+    "SAC": {
+     "n": 275,
+     "agree": 176
+    },
+    "HOI": {
+     "n": 99,
+     "agree": 88
+    },
+    "NGA": {
+     "n": 69,
+     "agree": 58
+    },
+    "NANG": {
+     "n": 100,
+     "agree": 68
+    }
+   }
+  },
+  "AC": {
+   "n": 1215,
+   "agree": 855,
+   "rate": 0.7037,
+   "by_tone_true": {
+    "NGANG": {
+     "n": 378,
+     "agree": 236
+    },
+    "HUYEN": {
+     "n": 295,
+     "agree": 231
+    },
+    "SAC": {
+     "n": 275,
+     "agree": 174
+    },
+    "HOI": {
+     "n": 99,
+     "agree": 90
+    },
+    "NGA": {
+     "n": 68,
+     "agree": 61
+    },
+    "NANG": {
+     "n": 100,
+     "agree": 63
+    }
+   }
+  }
+ },
+ "old_ruler_crosscheck": {
+  "status": "ok",
+  "source": "artifacts/tone_path/diagnosis.json",
+  "old_own": {
+   "A": {
+    "accuracy": 0.4533,
+    "n_scored": 1200
+   },
+   "B": {
+    "accuracy": 0.4515,
+    "n_scored": 1207
+   },
+   "C": {
+    "accuracy": 0.4655,
+    "n_scored": 1319
+   }
+  },
+  "old_paired_own": {
+   "A": {
+    "accuracy": 0.4602,
+    "n": 1106
+   },
+   "B": {
+    "accuracy": 0.4629,
+    "n": 1106
+   },
+   "C": {
+    "accuracy": 0.481,
+    "n": 1106
+   }
+  },
+  "paired": {
+   "A": {
+    "n_paired": 1199,
+    "old_accuracy": 0.4537,
+    "new_accuracy": 0.7965,
+    "agreement_old_new": 0.4629,
+    "new_valid_old_unscored": 53
+   },
+   "B": {
+    "n_paired": 1206,
+    "old_accuracy": 0.4519,
+    "new_accuracy": 0.7902,
+    "agreement_old_new": 0.476,
+    "new_valid_old_unscored": 45
+   },
+   "C": {
+    "n_paired": 1271,
+    "old_accuracy": 0.4673,
+    "new_accuracy": 0.7915,
+    "agreement_old_new": 0.4233,
+    "new_valid_old_unscored": 108
+   }
+  }
+ },
+ "per_row": [
+  {
+   "row": "2b65WyiFC9k_0001__s00",
+   "n_syllables": 35,
+   "B_mel_frames": 809,
+   "B_wav_frames": 808,
+   "C_mel_frames": 796,
+   "C_slot_sum": 796,
+   "C_wav_frames": 795,
+   "C_length_ratio": 0.984
+  },
+  {
+   "row": "2b65WyiFC9k_0001__s01",
+   "n_syllables": 12,
+   "B_mel_frames": 402,
+   "B_wav_frames": 401,
+   "C_mel_frames": 379,
+   "C_slot_sum": 379,
+   "C_wav_frames": 378,
+   "C_length_ratio": 0.943
+  },
+  {
+   "row": "2b65WyiFC9k_0002__s00",
+   "n_syllables": 32,
+   "B_mel_frames": 896,
+   "B_wav_frames": 895,
+   "C_mel_frames": 635,
+   "C_slot_sum": 635,
+   "C_wav_frames": 634,
+   "C_length_ratio": 0.709
+  },
+  {
+   "row": "2b65WyiFC9k_0002__s01",
+   "n_syllables": 20,
+   "B_mel_frames": 508,
+   "B_wav_frames": 507,
+   "C_mel_frames": 446,
+   "C_slot_sum": 446,
+   "C_wav_frames": 445,
+   "C_length_ratio": 0.878
+  },
+  {
+   "row": "2b65WyiFC9k_0005__s00",
+   "n_syllables": 40,
+   "B_mel_frames": 864,
+   "B_wav_frames": 863,
+   "C_mel_frames": 638,
+   "C_slot_sum": 638,
+   "C_wav_frames": 637,
+   "C_length_ratio": 0.738
+  },
+  {
+   "row": "2b65WyiFC9k_0005__s01",
+   "n_syllables": 14,
+   "B_mel_frames": 217,
+   "B_wav_frames": 216,
+   "C_mel_frames": 231,
+   "C_slot_sum": 231,
+   "C_wav_frames": 230,
+   "C_length_ratio": 1.065
+  },
+  {
+   "row": "2b65WyiFC9k_0010__s00",
+   "n_syllables": 31,
+   "B_mel_frames": 806,
+   "B_wav_frames": 805,
+   "C_mel_frames": 630,
+   "C_slot_sum": 630,
+   "C_wav_frames": 629,
+   "C_length_ratio": 0.782
+  },
+  {
+   "row": "2b65WyiFC9k_0010__s01",
+   "n_syllables": 21,
+   "B_mel_frames": 543,
+   "B_wav_frames": 542,
+   "C_mel_frames": 387,
+   "C_slot_sum": 387,
+   "C_wav_frames": 386,
+   "C_length_ratio": 0.713
+  },
+  {
+   "row": "2b65WyiFC9k_0014__s00",
+   "n_syllables": 30,
+   "B_mel_frames": 753,
+   "B_wav_frames": 752,
+   "C_mel_frames": 691,
+   "C_slot_sum": 691,
+   "C_wav_frames": 690,
+   "C_length_ratio": 0.918
+  },
+  {
+   "row": "2b65WyiFC9k_0014__s01",
+   "n_syllables": 20,
+   "B_mel_frames": 521,
+   "B_wav_frames": 520,
+   "C_mel_frames": 570,
+   "C_slot_sum": 570,
+   "C_wav_frames": 569,
+   "C_length_ratio": 1.094
+  },
+  {
+   "row": "2b65WyiFC9k_0016__s00",
+   "n_syllables": 34,
+   "B_mel_frames": 841,
+   "B_wav_frames": 840,
+   "C_mel_frames": 674,
+   "C_slot_sum": 674,
+   "C_wav_frames": 673,
+   "C_length_ratio": 0.801
+  },
+  {
+   "row": "2b65WyiFC9k_0016__s01",
+   "n_syllables": 13,
+   "B_mel_frames": 236,
+   "B_wav_frames": 235,
+   "C_mel_frames": 207,
+   "C_slot_sum": 207,
+   "C_wav_frames": 206,
+   "C_length_ratio": 0.877
+  },
+  {
+   "row": "2b65WyiFC9k_0019__s00",
+   "n_syllables": 31,
+   "B_mel_frames": 716,
+   "B_wav_frames": 715,
+   "C_mel_frames": 747,
+   "C_slot_sum": 747,
+   "C_wav_frames": 746,
+   "C_length_ratio": 1.043
+  },
+  {
+   "row": "2b65WyiFC9k_0019__s01",
+   "n_syllables": 22,
+   "B_mel_frames": 515,
+   "B_wav_frames": 514,
+   "C_mel_frames": 566,
+   "C_slot_sum": 566,
+   "C_wav_frames": 565,
+   "C_length_ratio": 1.099
+  },
+  {
+   "row": "2b65WyiFC9k_0027__s00",
+   "n_syllables": 31,
+   "B_mel_frames": 711,
+   "B_wav_frames": 710,
+   "C_mel_frames": 645,
+   "C_slot_sum": 645,
+   "C_wav_frames": 644,
+   "C_length_ratio": 0.907
+  },
+  {
+   "row": "2b65WyiFC9k_0027__s01",
+   "n_syllables": 23,
+   "B_mel_frames": 388,
+   "B_wav_frames": 387,
+   "C_mel_frames": 463,
+   "C_slot_sum": 463,
+   "C_wav_frames": 462,
+   "C_length_ratio": 1.193
+  },
+  {
+   "row": "2b65WyiFC9k_0030__s00",
+   "n_syllables": 38,
+   "B_mel_frames": 850,
+   "B_wav_frames": 849,
+   "C_mel_frames": 822,
+   "C_slot_sum": 822,
+   "C_wav_frames": 821,
+   "C_length_ratio": 0.967
+  },
+  {
+   "row": "2b65WyiFC9k_0030__s01",
+   "n_syllables": 15,
+   "B_mel_frames": 426,
+   "B_wav_frames": 425,
+   "C_mel_frames": 335,
+   "C_slot_sum": 335,
+   "C_wav_frames": 334,
+   "C_length_ratio": 0.786
+  },
+  {
+   "row": "2b65WyiFC9k_0033__s00",
+   "n_syllables": 26,
+   "B_mel_frames": 561,
+   "B_wav_frames": 560,
+   "C_mel_frames": 540,
+   "C_slot_sum": 540,
+   "C_wav_frames": 539,
+   "C_length_ratio": 0.963
+  },
+  {
+   "row": "2b65WyiFC9k_0033__s01",
+   "n_syllables": 20,
+   "B_mel_frames": 398,
+   "B_wav_frames": 397,
+   "C_mel_frames": 522,
+   "C_slot_sum": 522,
+   "C_wav_frames": 521,
+   "C_length_ratio": 1.312
+  },
+  {
+   "row": "2b65WyiFC9k_0037__s00",
+   "n_syllables": 16,
+   "B_mel_frames": 559,
+   "B_wav_frames": 558,
+   "C_mel_frames": 437,
+   "C_slot_sum": 437,
+   "C_wav_frames": 436,
+   "C_length_ratio": 0.782
+  },
+  {
+   "row": "2b65WyiFC9k_0037__s01",
+   "n_syllables": 34,
+   "B_mel_frames": 801,
+   "B_wav_frames": 800,
+   "C_mel_frames": 765,
+   "C_slot_sum": 765,
+   "C_wav_frames": 764,
+   "C_length_ratio": 0.955
+  },
+  {
+   "row": "2b65WyiFC9k_0041__s00",
+   "n_syllables": 48,
+   "B_mel_frames": 924,
+   "B_wav_frames": 923,
+   "C_mel_frames": 776,
+   "C_slot_sum": 776,
+   "C_wav_frames": 775,
+   "C_length_ratio": 0.84
+  },
+  {
+   "row": "2b65WyiFC9k_0041__s01",
+   "n_syllables": 10,
+   "B_mel_frames": 501,
+   "B_wav_frames": 500,
+   "C_mel_frames": 220,
+   "C_slot_sum": 220,
+   "C_wav_frames": 219,
+   "C_length_ratio": 0.439
+  },
+  {
+   "row": "2b65WyiFC9k_0045__s00",
+   "n_syllables": 9,
+   "B_mel_frames": 134,
+   "B_wav_frames": 133,
+   "C_mel_frames": 201,
+   "C_slot_sum": 201,
+   "C_wav_frames": 200,
+   "C_length_ratio": 1.5
+  },
+  {
+   "row": "2b65WyiFC9k_0046__s00",
+   "n_syllables": 32,
+   "B_mel_frames": 799,
+   "B_wav_frames": 798,
+   "C_mel_frames": 915,
+   "C_slot_sum": 915,
+   "C_wav_frames": 914,
+   "C_length_ratio": 1.145
+  },
+  {
+   "row": "2b65WyiFC9k_0046__s01",
+   "n_syllables": 10,
+   "B_mel_frames": 221,
+   "B_wav_frames": 220,
+   "C_mel_frames": 280,
+   "C_slot_sum": 280,
+   "C_wav_frames": 279,
+   "C_length_ratio": 1.267
+  },
+  {
+   "row": "2b65WyiFC9k_0051__s00",
+   "n_syllables": 39,
+   "B_mel_frames": 916,
+   "B_wav_frames": 915,
+   "C_mel_frames": 606,
+   "C_slot_sum": 606,
+   "C_wav_frames": 605,
+   "C_length_ratio": 0.662
+  },
+  {
+   "row": "2b65WyiFC9k_0051__s01",
+   "n_syllables": 19,
+   "B_mel_frames": 477,
+   "B_wav_frames": 476,
+   "C_mel_frames": 668,
+   "C_slot_sum": 668,
+   "C_wav_frames": 667,
+   "C_length_ratio": 1.4
+  },
+  {
+   "row": "2b65WyiFC9k_0053__s00",
+   "n_syllables": 16,
+   "B_mel_frames": 852,
+   "B_wav_frames": 851,
+   "C_mel_frames": 534,
+   "C_slot_sum": 534,
+   "C_wav_frames": 533,
+   "C_length_ratio": 0.627
+  },
+  {
+   "row": "2b65WyiFC9k_0053__s01",
+   "n_syllables": 3,
+   "B_mel_frames": 34,
+   "B_wav_frames": 33,
+   "C_mel_frames": 193,
+   "C_slot_sum": 193,
+   "C_wav_frames": 192,
+   "C_length_ratio": 5.676
+  },
+  {
+   "row": "2b65WyiFC9k_0055__s00",
+   "n_syllables": 14,
+   "B_mel_frames": 293,
+   "B_wav_frames": 292,
+   "C_mel_frames": 737,
+   "C_slot_sum": 737,
+   "C_wav_frames": 736,
+   "C_length_ratio": 2.515
+  },
+  {
+   "row": "2b65WyiFC9k_0066__s00",
+   "n_syllables": 37,
+   "B_mel_frames": 904,
+   "B_wav_frames": 903,
+   "C_mel_frames": 700,
+   "C_slot_sum": 700,
+   "C_wav_frames": 699,
+   "C_length_ratio": 0.774
+  },
+  {
+   "row": "2b65WyiFC9k_0066__s01",
+   "n_syllables": 16,
+   "B_mel_frames": 493,
+   "B_wav_frames": 492,
+   "C_mel_frames": 484,
+   "C_slot_sum": 484,
+   "C_wav_frames": 483,
+   "C_length_ratio": 0.982
+  },
+  {
+   "row": "2b65WyiFC9k_0067__s00",
+   "n_syllables": 36,
+   "B_mel_frames": 918,
+   "B_wav_frames": 917,
+   "C_mel_frames": 628,
+   "C_slot_sum": 628,
+   "C_wav_frames": 627,
+   "C_length_ratio": 0.684
+  },
+  {
+   "row": "2b65WyiFC9k_0067__s01",
+   "n_syllables": 13,
+   "B_mel_frames": 521,
+   "B_wav_frames": 520,
+   "C_mel_frames": 259,
+   "C_slot_sum": 259,
+   "C_wav_frames": 258,
+   "C_length_ratio": 0.497
+  },
+  {
+   "row": "2b65WyiFC9k_0073__s00",
+   "n_syllables": 48,
+   "B_mel_frames": 862,
+   "B_wav_frames": 861,
+   "C_mel_frames": 943,
+   "C_slot_sum": 943,
+   "C_wav_frames": 942,
+   "C_length_ratio": 1.094
+  },
+  {
+   "row": "2b65WyiFC9k_0073__s01",
+   "n_syllables": 4,
+   "B_mel_frames": 131,
+   "B_wav_frames": 130,
+   "C_mel_frames": 60,
+   "C_slot_sum": 60,
+   "C_wav_frames": 59,
+   "C_length_ratio": 0.458
+  },
+  {
+   "row": "2b65WyiFC9k_0075__s00",
+   "n_syllables": 19,
+   "B_mel_frames": 757,
+   "B_wav_frames": 756,
+   "C_mel_frames": 527,
+   "C_slot_sum": 527,
+   "C_wav_frames": 526,
+   "C_length_ratio": 0.696
+  },
+  {
+   "row": "2b65WyiFC9k_0075__s01",
+   "n_syllables": 16,
+   "B_mel_frames": 527,
+   "B_wav_frames": 526,
+   "C_mel_frames": 394,
+   "C_slot_sum": 394,
+   "C_wav_frames": 393,
+   "C_length_ratio": 0.748
+  },
+  {
+   "row": "2b65WyiFC9k_0085__s00",
+   "n_syllables": 47,
+   "B_mel_frames": 895,
+   "B_wav_frames": 894,
+   "C_mel_frames": 820,
+   "C_slot_sum": 820,
+   "C_wav_frames": 819,
+   "C_length_ratio": 0.916
+  },
+  {
+   "row": "2b65WyiFC9k_0085__s01",
+   "n_syllables": 2,
+   "B_mel_frames": 120,
+   "B_wav_frames": 119,
+   "C_mel_frames": 47,
+   "C_slot_sum": 47,
+   "C_wav_frames": 46,
+   "C_length_ratio": 0.392
+  },
+  {
+   "row": "2b65WyiFC9k_0087__s00",
+   "n_syllables": 43,
+   "B_mel_frames": 870,
+   "B_wav_frames": 869,
+   "C_mel_frames": 792,
+   "C_slot_sum": 792,
+   "C_wav_frames": 791,
+   "C_length_ratio": 0.91
+  },
+  {
+   "row": "2b65WyiFC9k_0087__s01",
+   "n_syllables": 9,
+   "B_mel_frames": 144,
+   "B_wav_frames": 143,
+   "C_mel_frames": 173,
+   "C_slot_sum": 173,
+   "C_wav_frames": 172,
+   "C_length_ratio": 1.201
+  },
+  {
+   "row": "2b65WyiFC9k_0088__s00",
+   "n_syllables": 51,
+   "B_mel_frames": 882,
+   "B_wav_frames": 881,
+   "C_mel_frames": 806,
+   "C_slot_sum": 806,
+   "C_wav_frames": 805,
+   "C_length_ratio": 0.914
+  },
+  {
+   "row": "2b65WyiFC9k_0090__s00",
+   "n_syllables": 29,
+   "B_mel_frames": 640,
+   "B_wav_frames": 639,
+   "C_mel_frames": 694,
+   "C_slot_sum": 694,
+   "C_wav_frames": 693,
+   "C_length_ratio": 1.084
+  },
+  {
+   "row": "2b65WyiFC9k_0099__s00",
+   "n_syllables": 12,
+   "B_mel_frames": 301,
+   "B_wav_frames": 300,
+   "C_mel_frames": 366,
+   "C_slot_sum": 366,
+   "C_wav_frames": 365,
+   "C_length_ratio": 1.216
+  },
+  {
+   "row": "2b65WyiFC9k_0106__s00",
+   "n_syllables": 14,
+   "B_mel_frames": 603,
+   "B_wav_frames": 602,
+   "C_mel_frames": 354,
+   "C_slot_sum": 354,
+   "C_wav_frames": 353,
+   "C_length_ratio": 0.587
+  },
+  {
+   "row": "2b65WyiFC9k_0106__s01",
+   "n_syllables": 24,
+   "B_mel_frames": 770,
+   "B_wav_frames": 769,
+   "C_mel_frames": 447,
+   "C_slot_sum": 447,
+   "C_wav_frames": 446,
+   "C_length_ratio": 0.581
+  },
+  {
+   "row": "2b65WyiFC9k_0116__s00",
+   "n_syllables": 32,
+   "B_mel_frames": 853,
+   "B_wav_frames": 852,
+   "C_mel_frames": 833,
+   "C_slot_sum": 833,
+   "C_wav_frames": 832,
+   "C_length_ratio": 0.977
+  },
+  {
+   "row": "2b65WyiFC9k_0116__s01",
+   "n_syllables": 9,
+   "B_mel_frames": 186,
+   "B_wav_frames": 185,
+   "C_mel_frames": 245,
+   "C_slot_sum": 245,
+   "C_wav_frames": 244,
+   "C_length_ratio": 1.317
+  },
+  {
+   "row": "2b65WyiFC9k_0119__s00",
+   "n_syllables": 44,
+   "B_mel_frames": 835,
+   "B_wav_frames": 834,
+   "C_mel_frames": 741,
+   "C_slot_sum": 741,
+   "C_wav_frames": 740,
+   "C_length_ratio": 0.887
+  },
+  {
+   "row": "2b65WyiFC9k_0119__s01",
+   "n_syllables": 13,
+   "B_mel_frames": 193,
+   "B_wav_frames": 192,
+   "C_mel_frames": 189,
+   "C_slot_sum": 189,
+   "C_wav_frames": 188,
+   "C_length_ratio": 0.979
+  },
+  {
+   "row": "2b65WyiFC9k_0120__s00",
+   "n_syllables": 29,
+   "B_mel_frames": 845,
+   "B_wav_frames": 844,
+   "C_mel_frames": 616,
+   "C_slot_sum": 616,
+   "C_wav_frames": 615,
+   "C_length_ratio": 0.729
+  },
+  {
+   "row": "2b65WyiFC9k_0120__s01",
+   "n_syllables": 20,
+   "B_mel_frames": 735,
+   "B_wav_frames": 734,
+   "C_mel_frames": 554,
+   "C_slot_sum": 554,
+   "C_wav_frames": 553,
+   "C_length_ratio": 0.754
+  },
+  {
+   "row": "2b65WyiFC9k_0122__s00",
+   "n_syllables": 13,
+   "B_mel_frames": 809,
+   "B_wav_frames": 808,
+   "C_mel_frames": 401,
+   "C_slot_sum": 401,
+   "C_wav_frames": 400,
+   "C_length_ratio": 0.496
+  },
+  {
+   "row": "2b65WyiFC9k_0122__s01",
+   "n_syllables": 19,
+   "B_mel_frames": 846,
+   "B_wav_frames": 845,
+   "C_mel_frames": 484,
+   "C_slot_sum": 484,
+   "C_wav_frames": 483,
+   "C_length_ratio": 0.572
+  },
+  {
+   "row": "2b65WyiFC9k_0124__s00",
+   "n_syllables": 34,
+   "B_mel_frames": 825,
+   "B_wav_frames": 824,
+   "C_mel_frames": 680,
+   "C_slot_sum": 680,
+   "C_wav_frames": 679,
+   "C_length_ratio": 0.824
+  },
+  {
+   "row": "2b65WyiFC9k_0124__s01",
+   "n_syllables": 30,
+   "B_mel_frames": 817,
+   "B_wav_frames": 816,
+   "C_mel_frames": 755,
+   "C_slot_sum": 755,
+   "C_wav_frames": 754,
+   "C_length_ratio": 0.924
+  },
+  {
+   "row": "2b65WyiFC9k_0126__s00",
+   "n_syllables": 41,
+   "B_mel_frames": 590,
+   "B_wav_frames": 589,
+   "C_mel_frames": 628,
+   "C_slot_sum": 628,
+   "C_wav_frames": 627,
+   "C_length_ratio": 1.064
+  }
+ ],
+ "notes": [
+  "B/C trích f0/vuv/hnr/jitter/glottalization TỪ WAV TỔNG HỢP (features_from_wav) — không dùng seg_phonation pooled của dataset (giảm ~2 điểm nếu làm sai).",
+  "C chấm so thanh của features đầu vào; số âm tiết = N của features (model không đổi N).",
+  "Thước có trần 0,762 trên audio thật (weak label từ chính tả) — chênh lệch trong ±0,02 coi như nhiễu. A ở đây 0,7955 vì 60 row đầu dễ hơn mức trung bình val."
+ ],
+ "runtime_seconds": 41.1
+}

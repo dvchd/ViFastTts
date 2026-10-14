@@ -1,0 +1,1367 @@
+{
+ "mode": "free",
+ "arch": "v2_slot5",
+ "speed": 1.0,
+ "clips": 20,
+ "clip_ids": [
+  "2b65WyiFC9k_0004__s00",
+  "2b65WyiFC9k_0004__s01",
+  "2b65WyiFC9k_0006__s00",
+  "2b65WyiFC9k_0006__s01",
+  "2b65WyiFC9k_0007__s00",
+  "2b65WyiFC9k_0007__s01",
+  "2b65WyiFC9k_0008__s00",
+  "2b65WyiFC9k_0008__s01",
+  "2b65WyiFC9k_0009__s00",
+  "2b65WyiFC9k_0009__s01",
+  "2b65WyiFC9k_0013__s00",
+  "2b65WyiFC9k_0013__s01",
+  "2b65WyiFC9k_0017__s00",
+  "2b65WyiFC9k_0017__s01",
+  "2b65WyiFC9k_0018__s00",
+  "2b65WyiFC9k_0018__s01",
+  "2b65WyiFC9k_0020__s00",
+  "2b65WyiFC9k_0020__s01",
+  "2b65WyiFC9k_0021__s00",
+  "2b65WyiFC9k_0021__s01"
+ ],
+ "device": "mps",
+ "rtf_backend": "pytorch-cpu",
+ "mel_l1_z": {
+  "n": 20,
+  "mean": 2.7933,
+  "median": 2.1906
+ },
+ "mel_mae_db": {
+  "n": 20,
+  "mean": 32.3554,
+  "median": 25.386
+ },
+ "mel_mae_db_speech": {
+  "n": 20,
+  "mean": 18.1673,
+  "median": 18.214
+ },
+ "length_ratio": {
+  "n": 20,
+  "mean": 0.6437,
+  "median": 0.6989
+ },
+ "f0_rmse_cents_by_tone": {
+  "NGANG": {
+   "n": 1594,
+   "mean": 2220.9026,
+   "median": 273.6551
+  },
+  "HUYEN": {
+   "n": 1907,
+   "mean": 2051.1277,
+   "median": 255.0418
+  },
+  "SAC": {
+   "n": 1402,
+   "mean": 2744.4285,
+   "median": 338.0419
+  },
+  "HOI": {
+   "n": 511,
+   "mean": 2412.3377,
+   "median": 360.4155
+  },
+  "NGA": {
+   "n": 437,
+   "mean": 1920.1109,
+   "median": 333.4977
+  },
+  "NANG": {
+   "n": 749,
+   "mean": 2429.4946,
+   "median": 320.6733
+  }
+ },
+ "f0_note": "exp(outputs f0 log) vs f0 Hz trên frame hữu thanh (vuv>0.5) trong durations",
+ "vuv_accuracy": 0.9802,
+ "vuv_note": "slot-active (mask loss train) vs seg_vuv>=0.5; vuv_accuracy_nucleus = riêng cột nucleus",
+ "energy_mae": 0.8572,
+ "energy_note": "MAE seg_energy (thang loss train) trên slot active cấu trúc",
+ "duration_mae_frames": {
+  "n": 467,
+  "mean": 5.2505,
+  "median": 3.0
+ },
+ "rtf": 0.0043,
+ "ram_peak_gib": 0.82,
+ "gap_sum_mae_frames": {
+  "n": 20,
+  "mean": 132.25,
+  "median": 84.0
+ },
+ "gap_sum_mae_all_frames": {
+  "n": 20,
+  "mean": 218.6,
+  "median": 176.0
+ },
+ "gap_sum_pred_frames": {
+  "n": 20,
+  "mean": 130.0,
+  "median": 126.5
+ },
+ "gap_sum_true_frames": {
+  "n": 20,
+  "mean": 225.85,
+  "median": 209.5
+ },
+ "pause_f1": 0.5463,
+ "pause_precision": 0.6146,
+ "pause_recall": 0.4917,
+ "pause_f1_all": 0.5726,
+ "pause_counts": {
+  "tp": 59,
+  "fp": 37,
+  "fn": 61,
+  "tp_all": 71,
+  "fp_all": 37,
+  "fn_all": 69
+ },
+ "pause_note": "free-run: so theo vị trí frame (chưa align) ⇒ chỉ tin khi `length_ratio` ≈ 1; `pause_f1`/`gap_sum_mae_frames` **bỏ vị trí gap cuối row** (row cũ chỉ ghi N-1 gap, khớp `pause_mask` cũ) — manifest A2 ghi đủ gap ⇒ đọc `pause_f1_all`/`*_all_frames`",
+ "mel_gap": {
+  "n": 20,
+  "mean": 4.9157,
+  "median": 4.7231
+ },
+ "mel_gap_note": "L1 mel (z) CHỈ trên frame gap/lead THẬT, so theo vị trí (chưa align)",
+ "intonation": {
+  "slope_all": {
+   "true": {
+    "n": 20,
+    "mean": -1.1087,
+    "median": 1.2897
+   },
+   "model": {
+    "n": 20,
+    "mean": 0.9675,
+    "median": 7.5281
+   }
+  },
+  "slope_all_ngang": {
+   "true": {
+    "n": 19,
+    "mean": -101.8243,
+    "median": 7.895
+   },
+   "model": {
+    "n": 19,
+    "mean": -54.9999,
+    "median": -11.0113
+   }
+  },
+  "slope_final_question": {
+   "true": {
+    "n": 0
+   },
+   "model": {
+    "n": 0
+   }
+  },
+  "slope_final_question_any": {
+   "true": {
+    "n": 1,
+    "mean": -1214.478,
+    "median": -1214.478
+   },
+   "model": {
+    "n": 1,
+    "mean": -1641.1385,
+    "median": -1641.1385
+   }
+  },
+  "slope_final_period": {
+   "true": {
+    "n": 4,
+    "mean": -301.9623,
+    "median": -763.2458
+   },
+   "model": {
+    "n": 4,
+    "mean": -321.4216,
+    "median": -143.7091
+   }
+  },
+  "slope_final_period_any": {
+   "true": {
+    "n": 11,
+    "mean": 101.8732,
+    "median": 5.913
+   },
+   "model": {
+    "n": 11,
+    "mean": 87.7517,
+    "median": -4.9456
+   }
+  },
+  "ngang_declination_cents": {
+   "true": {
+    "n": 14,
+    "mean": -38.1364,
+    "median": -55.53
+   },
+   "model": {
+    "n": 14,
+    "mean": 38.9586,
+    "median": 51.995
+   }
+  }
+ },
+ "intonation_paired": {
+  "ngang_declination_cents": {
+   "n": 14,
+   "median_true": -55.53,
+   "median_model": 51.995,
+   "delta_median": 86.205,
+   "delta_mean": 77.095,
+   "frac_rising": 0.643,
+   "ci95": [
+    -84.43,
+    166.73
+   ]
+  },
+  "slope_all": {
+   "n": 20,
+   "median_true": 1.29,
+   "median_model": 7.528,
+   "delta_median": 0.802,
+   "delta_mean": 2.076,
+   "frac_rising": 0.5,
+   "ci95": [
+    -6.204,
+    19.765
+   ]
+  },
+  "slope_all_ngang": {
+   "n": 19,
+   "median_true": 7.895,
+   "median_model": -11.011,
+   "delta_median": -2.861,
+   "delta_mean": 46.824,
+   "frac_rising": 0.474,
+   "ci95": [
+    -56.436,
+    20.127
+   ]
+  },
+  "slope_final_period": {
+   "n": 4,
+   "median_true": -763.246,
+   "median_model": -143.709,
+   "delta_median": -35.597,
+   "delta_mean": -19.459,
+   "frac_rising": 0.5,
+   "ci95": [
+    -811.095,
+    804.451
+   ]
+  },
+  "slope_final_period_any": {
+   "n": 11,
+   "median_true": 5.913,
+   "median_model": -4.946,
+   "delta_median": -5.631,
+   "delta_mean": -14.121,
+   "frac_rising": 0.455,
+   "ci95": [
+    -31.401,
+    27.928
+   ]
+  },
+  "slope_final_question_any": {
+   "n": 1,
+   "median_true": -1214.478,
+   "median_model": -1641.138,
+   "delta_median": -426.66,
+   "delta_mean": -426.66,
+   "frac_rising": 0.0,
+   "ci95": null
+  }
+ },
+ "intonation_by_final": {
+  "punctuation": {
+   "NONE": {
+    "ngang_declination_cents": {
+     "n": 11,
+     "median_true": 15.74,
+     "median_model": 3.06,
+     "delta_median": 39.58,
+     "delta_mean": 29.406,
+     "frac_rising": 0.545,
+     "ci95": [
+      -95.5,
+      129.65
+     ]
+    },
+    "slope_all": {
+     "n": 16,
+     "median_true": 3.202,
+     "median_model": 7.528,
+     "delta_median": 3.83,
+     "delta_mean": 1.442,
+     "frac_rising": 0.562,
+     "ci95": [
+      -5.91,
+      23.174
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 15,
+     "median_true": -9.622,
+     "median_model": -15.566,
+     "delta_median": -2.861,
+     "delta_mean": 29.845,
+     "frac_rising": 0.467,
+     "ci95": [
+      -65.463,
+      24.512
+     ]
+    },
+    "slope_final_period_any": {
+     "n": 7,
+     "median_true": 13.763,
+     "median_model": -15.742,
+     "delta_median": -13.355,
+     "delta_mean": -85.545,
+     "frac_rising": 0.429,
+     "ci95": [
+      -139.859,
+      18.856
+     ]
+    },
+    "slope_final_question_any": {
+     "n": 1,
+     "median_true": -1214.478,
+     "median_model": -1641.138,
+     "delta_median": -426.66,
+     "delta_mean": -426.66,
+     "frac_rising": 0.0,
+     "ci95": null
+    }
+   },
+   "PERIOD": {
+    "ngang_declination_cents": {
+     "n": 3,
+     "median_true": -143.02,
+     "median_model": 54.29,
+     "delta_median": 192.72,
+     "delta_mean": 251.953,
+     "frac_rising": 1.0,
+     "ci95": [
+      141.96,
+      421.18
+     ]
+    },
+    "slope_all": {
+     "n": 4,
+     "median_true": -0.728,
+     "median_model": 10.766,
+     "delta_median": -6.011,
+     "delta_mean": 4.611,
+     "frac_rising": 0.25,
+     "ci95": [
+      -12.134,
+      42.602
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 4,
+     "median_true": 33.524,
+     "median_model": -8.221,
+     "delta_median": -5.075,
+     "delta_mean": 110.496,
+     "frac_rising": 0.5,
+     "ci95": [
+      -64.085,
+      516.22
+     ]
+    },
+    "slope_final_period": {
+     "n": 4,
+     "median_true": -763.246,
+     "median_model": -143.709,
+     "delta_median": -35.597,
+     "delta_mean": -19.459,
+     "frac_rising": 0.5,
+     "ci95": [
+      -811.095,
+      804.451
+     ]
+    },
+    "slope_final_period_any": {
+     "n": 4,
+     "median_true": 3.299,
+     "median_model": 27.951,
+     "delta_median": 11.149,
+     "delta_mean": 110.87,
+     "frac_rising": 0.5,
+     "ci95": [
+      -13.44,
+      434.623
+     ]
+    }
+   }
+  },
+  "tone": {
+   "NGA": {
+    "slope_all": {
+     "n": 1,
+     "median_true": 10.569,
+     "median_model": 21.004,
+     "delta_median": 10.435,
+     "delta_mean": 10.435,
+     "frac_rising": 1.0,
+     "ci95": null
+    },
+    "slope_all_ngang": {
+     "n": 1,
+     "median_true": -9.622,
+     "median_model": -1.628,
+     "delta_median": 7.995,
+     "delta_mean": 7.995,
+     "frac_rising": 1.0,
+     "ci95": null
+    }
+   },
+   "NGANG": {
+    "ngang_declination_cents": {
+     "n": 2,
+     "median_true": 90.08,
+     "median_model": 94.935,
+     "delta_median": 4.855,
+     "delta_mean": 4.855,
+     "frac_rising": 0.5,
+     "ci95": [
+      -119.94,
+      129.65
+     ]
+    },
+    "slope_all": {
+     "n": 4,
+     "median_true": -3.618,
+     "median_model": 13.694,
+     "delta_median": 36.07,
+     "delta_mean": 29.818,
+     "frac_rising": 0.75,
+     "ci95": [
+      -1.602,
+      48.731
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 4,
+     "median_true": -45.552,
+     "median_model": -87.198,
+     "delta_median": -6.304,
+     "delta_mean": 213.58,
+     "frac_rising": 0.5,
+     "ci95": [
+      -84.295,
+      951.222
+     ]
+    }
+   },
+   "NANG": {
+    "ngang_declination_cents": {
+     "n": 3,
+     "median_true": -143.02,
+     "median_model": 49.7,
+     "delta_median": 166.73,
+     "delta_mean": 91.673,
+     "frac_rising": 0.667,
+     "ci95": [
+      -84.43,
+      192.72
+     ]
+    },
+    "slope_all": {
+     "n": 4,
+     "median_true": -3.641,
+     "median_model": 2.122,
+     "delta_median": 3.83,
+     "delta_mean": 11.196,
+     "frac_rising": 0.75,
+     "ci95": [
+      -2.579,
+      39.702
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 3,
+     "median_true": 13.974,
+     "median_model": -5.43,
+     "delta_median": -19.404,
+     "delta_mean": -4.895,
+     "frac_rising": 0.333,
+     "ci95": [
+      -22.181,
+      26.9
+     ]
+    },
+    "slope_final_period": {
+     "n": 1,
+     "median_true": -1532.405,
+     "median_model": -727.954,
+     "delta_median": 804.451,
+     "delta_mean": 804.451,
+     "frac_rising": 1.0,
+     "ci95": null
+    },
+    "slope_final_period_any": {
+     "n": 3,
+     "median_true": 0.685,
+     "median_model": -4.946,
+     "delta_median": -5.631,
+     "delta_mean": -292.656,
+     "frac_rising": 0.333,
+     "ci95": [
+      -891.192,
+      18.856
+     ]
+    }
+   },
+   "SAC": {
+    "ngang_declination_cents": {
+     "n": 4,
+     "median_true": -55.53,
+     "median_model": 31.795,
+     "delta_median": 11.94,
+     "delta_mean": 14.543,
+     "frac_rising": 0.5,
+     "ci95": [
+      -107.67,
+      141.96
+     ]
+    },
+    "slope_all": {
+     "n": 5,
+     "median_true": 1.827,
+     "median_model": 22.477,
+     "delta_median": -6.497,
+     "delta_mean": 5.08,
+     "frac_rising": 0.4,
+     "ci95": [
+      -19.221,
+      42.602
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 5,
+     "median_true": 7.895,
+     "median_model": 28.022,
+     "delta_median": 9.254,
+     "delta_mean": 108.652,
+     "frac_rising": 0.8,
+     "ci95": [
+      -2.861,
+      516.22
+     ]
+    },
+    "slope_final_period": {
+     "n": 2,
+     "median_true": 1221.092,
+     "median_model": 1032.856,
+     "delta_median": -188.236,
+     "delta_mean": -188.236,
+     "frac_rising": 0.5,
+     "ci95": [
+      -811.095,
+      434.623
+     ]
+    },
+    "slope_final_period_any": {
+     "n": 3,
+     "median_true": 13.763,
+     "median_model": 60.847,
+     "delta_median": -13.44,
+     "delta_mean": 129.927,
+     "frac_rising": 0.333,
+     "ci95": [
+      -31.401,
+      434.623
+     ]
+    },
+    "slope_final_question_any": {
+     "n": 1,
+     "median_true": -1214.478,
+     "median_model": -1641.138,
+     "delta_median": -426.66,
+     "delta_mean": -426.66,
+     "frac_rising": 0.0,
+     "ci95": null
+    }
+   },
+   "HUYEN": {
+    "ngang_declination_cents": {
+     "n": 4,
+     "median_true": -168.16,
+     "median_model": 27.86,
+     "delta_median": 173.275,
+     "delta_mean": 207.983,
+     "frac_rising": 1.0,
+     "ci95": [
+      64.2,
+      421.18
+     ]
+    },
+    "slope_all": {
+     "n": 4,
+     "median_true": 5.326,
+     "median_model": -5.253,
+     "delta_median": -7.676,
+     "delta_mean": -7.497,
+     "frac_rising": 0.0,
+     "ci95": [
+      -11.715,
+      -2.918
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 4,
+     "median_true": 40.045,
+     "median_model": -13.289,
+     "delta_median": -60.26,
+     "delta_mean": -55.398,
+     "frac_rising": 0.0,
+     "ci95": [
+      -86.513,
+      -14.56
+     ]
+    },
+    "slope_final_period": {
+     "n": 1,
+     "median_true": -2117.629,
+     "median_model": -2623.445,
+     "delta_median": -505.816,
+     "delta_mean": -505.816,
+     "frac_rising": 0.0,
+     "ci95": null
+    },
+    "slope_final_period_any": {
+     "n": 4,
+     "median_true": 84.014,
+     "median_model": 28.049,
+     "delta_median": 22.819,
+     "delta_mean": 86.551,
+     "frac_rising": 0.75,
+     "ci95": [
+      -139.859,
+      440.426
+     ]
+    }
+   },
+   "HOI": {
+    "ngang_declination_cents": {
+     "n": 1,
+     "median_true": 195.61,
+     "median_model": 100.11,
+     "delta_median": -95.5,
+     "delta_mean": -95.5,
+     "frac_rising": 0.0,
+     "ci95": null
+    },
+    "slope_all": {
+     "n": 2,
+     "median_true": -9.196,
+     "median_model": -73.386,
+     "delta_median": -64.189,
+     "delta_mean": -64.189,
+     "frac_rising": 0.5,
+     "ci95": [
+      -147.258,
+      18.879
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 2,
+     "median_true": 59.064,
+     "median_model": -80.75,
+     "delta_median": -139.814,
+     "delta_mean": -139.814,
+     "frac_rising": 0.5,
+     "ci95": [
+      -304.14,
+      24.512
+     ]
+    },
+    "slope_final_period_any": {
+     "n": 1,
+     "median_true": -2.386,
+     "median_model": -15.742,
+     "delta_median": -13.355,
+     "delta_mean": -13.355,
+     "frac_rising": 0.0,
+     "ci95": null
+    }
+   }
+  },
+  "punctuation:tone": {
+   "NONE|NGA": {
+    "slope_all": {
+     "n": 1,
+     "median_true": 10.569,
+     "median_model": 21.004,
+     "delta_median": 10.435,
+     "delta_mean": 10.435,
+     "frac_rising": 1.0,
+     "ci95": null
+    },
+    "slope_all_ngang": {
+     "n": 1,
+     "median_true": -9.622,
+     "median_model": -1.628,
+     "delta_median": 7.995,
+     "delta_mean": 7.995,
+     "frac_rising": 1.0,
+     "ci95": null
+    }
+   },
+   "NONE|NGANG": {
+    "ngang_declination_cents": {
+     "n": 2,
+     "median_true": 90.08,
+     "median_model": 94.935,
+     "delta_median": 4.855,
+     "delta_mean": 4.855,
+     "frac_rising": 0.5,
+     "ci95": [
+      -119.94,
+      129.65
+     ]
+    },
+    "slope_all": {
+     "n": 4,
+     "median_true": -3.618,
+     "median_model": 13.694,
+     "delta_median": 36.07,
+     "delta_mean": 29.818,
+     "frac_rising": 0.75,
+     "ci95": [
+      -1.602,
+      48.731
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 4,
+     "median_true": -45.552,
+     "median_model": -87.198,
+     "delta_median": -6.304,
+     "delta_mean": 213.58,
+     "frac_rising": 0.5,
+     "ci95": [
+      -84.295,
+      951.222
+     ]
+    }
+   },
+   "PERIOD|NANG": {
+    "ngang_declination_cents": {
+     "n": 1,
+     "median_true": -143.02,
+     "median_model": 49.7,
+     "delta_median": 192.72,
+     "delta_mean": 192.72,
+     "frac_rising": 1.0,
+     "ci95": null
+    },
+    "slope_all": {
+     "n": 1,
+     "median_true": -2.209,
+     "median_model": -4.788,
+     "delta_median": -2.579,
+     "delta_mean": -2.579,
+     "frac_rising": 0.0,
+     "ci95": null
+    },
+    "slope_all_ngang": {
+     "n": 1,
+     "median_true": 13.974,
+     "median_model": -5.43,
+     "delta_median": -19.404,
+     "delta_mean": -19.404,
+     "frac_rising": 0.0,
+     "ci95": null
+    },
+    "slope_final_period": {
+     "n": 1,
+     "median_true": -1532.405,
+     "median_model": -727.954,
+     "delta_median": 804.451,
+     "delta_mean": 804.451,
+     "frac_rising": 1.0,
+     "ci95": null
+    },
+    "slope_final_period_any": {
+     "n": 1,
+     "median_true": 0.685,
+     "median_model": -4.946,
+     "delta_median": -5.631,
+     "delta_mean": -5.631,
+     "frac_rising": 0.0,
+     "ci95": null
+    }
+   },
+   "NONE|SAC": {
+    "ngang_declination_cents": {
+     "n": 3,
+     "median_true": -89.85,
+     "median_model": -57.16,
+     "delta_median": -15.7,
+     "delta_mean": -27.93,
+     "frac_rising": 0.333,
+     "ci95": [
+      -107.67,
+      39.58
+     ]
+    },
+    "slope_all": {
+     "n": 3,
+     "median_true": 1.827,
+     "median_model": 6.309,
+     "delta_median": -6.497,
+     "delta_mean": -1.689,
+     "frac_rising": 0.333,
+     "ci95": [
+      -19.221,
+      20.65
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 3,
+     "median_true": 7.895,
+     "median_model": 28.022,
+     "delta_median": 0.519,
+     "delta_mean": 5.928,
+     "frac_rising": 0.667,
+     "ci95": [
+      -2.861,
+      20.127
+     ]
+    },
+    "slope_final_period_any": {
+     "n": 1,
+     "median_true": 13.763,
+     "median_model": -17.638,
+     "delta_median": -31.401,
+     "delta_mean": -31.401,
+     "frac_rising": 0.0,
+     "ci95": null
+    },
+    "slope_final_question_any": {
+     "n": 1,
+     "median_true": -1214.478,
+     "median_model": -1641.138,
+     "delta_median": -426.66,
+     "delta_mean": -426.66,
+     "frac_rising": 0.0,
+     "ci95": null
+    }
+   },
+   "NONE|HUYEN": {
+    "ngang_declination_cents": {
+     "n": 3,
+     "median_true": -99.41,
+     "median_model": 1.43,
+     "delta_median": 108.21,
+     "delta_mean": 136.917,
+     "frac_rising": 1.0,
+     "ci95": [
+      64.2,
+      238.34
+     ]
+    },
+    "slope_all": {
+     "n": 3,
+     "median_true": 9.899,
+     "median_model": -1.816,
+     "delta_median": -5.91,
+     "delta_mean": -6.848,
+     "frac_rising": 0.0,
+     "ci95": [
+      -11.715,
+      -2.918
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 3,
+     "median_true": 39.221,
+     "median_model": -15.566,
+     "delta_median": -56.436,
+     "delta_mean": -52.503,
+     "frac_rising": 0.0,
+     "ci95": [
+      -86.513,
+      -14.56
+     ]
+    },
+    "slope_final_period_any": {
+     "n": 3,
+     "median_true": 203.713,
+     "median_model": 63.853,
+     "delta_median": 17.71,
+     "delta_mean": 106.092,
+     "frac_rising": 0.667,
+     "ci95": [
+      -139.859,
+      440.426
+     ]
+    }
+   },
+   "PERIOD|HUYEN": {
+    "ngang_declination_cents": {
+     "n": 1,
+     "median_true": -366.89,
+     "median_model": 54.29,
+     "delta_median": 421.18,
+     "delta_mean": 421.18,
+     "frac_rising": 1.0,
+     "ci95": null
+    },
+    "slope_all": {
+     "n": 1,
+     "median_true": 0.753,
+     "median_model": -8.69,
+     "delta_median": -9.443,
+     "delta_mean": -9.443,
+     "frac_rising": 0.0,
+     "ci95": null
+    },
+    "slope_all_ngang": {
+     "n": 1,
+     "median_true": 53.074,
+     "median_model": -11.011,
+     "delta_median": -64.085,
+     "delta_mean": -64.085,
+     "frac_rising": 0.0,
+     "ci95": null
+    },
+    "slope_final_period": {
+     "n": 1,
+     "median_true": -2117.629,
+     "median_model": -2623.445,
+     "delta_median": -505.816,
+     "delta_mean": -505.816,
+     "frac_rising": 0.0,
+     "ci95": null
+    },
+    "slope_final_period_any": {
+     "n": 1,
+     "median_true": -35.684,
+     "median_model": -7.756,
+     "delta_median": 27.928,
+     "delta_mean": 27.928,
+     "frac_rising": 1.0,
+     "ci95": null
+    }
+   },
+   "NONE|NANG": {
+    "ngang_declination_cents": {
+     "n": 2,
+     "median_true": -67.795,
+     "median_model": -26.645,
+     "delta_median": 41.15,
+     "delta_mean": 41.15,
+     "frac_rising": 0.5,
+     "ci95": [
+      -84.43,
+      166.73
+     ]
+    },
+    "slope_all": {
+     "n": 3,
+     "median_true": -5.074,
+     "median_model": 9.032,
+     "delta_median": 4.454,
+     "delta_mean": 15.787,
+     "frac_rising": 1.0,
+     "ci95": [
+      3.206,
+      39.702
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 2,
+     "median_true": -1.239,
+     "median_model": 1.12,
+     "delta_median": 2.359,
+     "delta_mean": 2.359,
+     "frac_rising": 0.5,
+     "ci95": [
+      -22.181,
+      26.9
+     ]
+    },
+    "slope_final_period_any": {
+     "n": 2,
+     "median_true": 815.613,
+     "median_model": 379.445,
+     "delta_median": -436.168,
+     "delta_mean": -436.168,
+     "frac_rising": 0.5,
+     "ci95": [
+      -891.192,
+      18.856
+     ]
+    }
+   },
+   "NONE|HOI": {
+    "ngang_declination_cents": {
+     "n": 1,
+     "median_true": 195.61,
+     "median_model": 100.11,
+     "delta_median": -95.5,
+     "delta_mean": -95.5,
+     "frac_rising": 0.0,
+     "ci95": null
+    },
+    "slope_all": {
+     "n": 2,
+     "median_true": -9.196,
+     "median_model": -73.386,
+     "delta_median": -64.189,
+     "delta_mean": -64.189,
+     "frac_rising": 0.5,
+     "ci95": [
+      -147.258,
+      18.879
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 2,
+     "median_true": 59.064,
+     "median_model": -80.75,
+     "delta_median": -139.814,
+     "delta_mean": -139.814,
+     "frac_rising": 0.5,
+     "ci95": [
+      -304.14,
+      24.512
+     ]
+    },
+    "slope_final_period_any": {
+     "n": 1,
+     "median_true": -2.386,
+     "median_model": -15.742,
+     "delta_median": -13.355,
+     "delta_mean": -13.355,
+     "frac_rising": 0.0,
+     "ci95": null
+    }
+   },
+   "PERIOD|SAC": {
+    "ngang_declination_cents": {
+     "n": 1,
+     "median_true": -21.21,
+     "median_model": 120.75,
+     "delta_median": 141.96,
+     "delta_mean": 141.96,
+     "frac_rising": 1.0,
+     "ci95": null
+    },
+    "slope_all": {
+     "n": 2,
+     "median_true": 15.715,
+     "median_model": 30.949,
+     "delta_median": 15.234,
+     "delta_mean": 15.234,
+     "frac_rising": 0.5,
+     "ci95": [
+      -12.134,
+      42.602
+     ]
+    },
+    "slope_all_ngang": {
+     "n": 2,
+     "median_true": 20.141,
+     "median_model": 282.878,
+     "delta_median": 262.737,
+     "delta_mean": 262.737,
+     "frac_rising": 1.0,
+     "ci95": [
+      9.254,
+      516.22
+     ]
+    },
+    "slope_final_period": {
+     "n": 2,
+     "median_true": 1221.092,
+     "median_model": 1032.856,
+     "delta_median": -188.236,
+     "delta_mean": -188.236,
+     "frac_rising": 0.5,
+     "ci95": [
+      -811.095,
+      434.623
+     ]
+    },
+    "slope_final_period_any": {
+     "n": 2,
+     "median_true": 40.1,
+     "median_model": 250.691,
+     "delta_median": 210.591,
+     "delta_mean": 210.591,
+     "frac_rising": 0.5,
+     "ci95": [
+      -13.44,
+      434.623
+     ]
+    }
+   }
+  }
+ },
+ "intonation_note": "logF0 hồi quy theo vị trí frame, chỉ frame hữu thanh (≥ 8 frame; 2 âm tiết cuối ≥ 12) — đơn vị cent/giây; đọc **median** (mean bị vài cửa sổ dốc đứng kéo lệch); tag `true` = timeline thật, `model` = timeline model tự sinh. **B1/§43.2**: `slope_final_question|period` chỉ tính khi dấu ở **âm tiết CUỐI row**; bản cũ (mọi vị trí — trộn `?` giữa câu) giữ nguyên dưới tên `*_any`. Đọc Δ ở `intonation_paired` (ghép cặp model−thật, median + CI 95% bootstrap 1000 lần) và `intonation_by_final` (Δ tách theo nhãn âm tiết cuối, gồm `punctuation:tone` = `QUESTION|NGANG`) — **đừng** so median rời (n nhỏ, mất cặp).",
+ "per_clip": [
+  {
+   "id": "2b65WyiFC9k_0004__s00",
+   "frames": 1007,
+   "pred_frames": 503,
+   "length_ratio": 0.5,
+   "mel_l1_z": 4.5882,
+   "mel_l1_raw": 6.0746,
+   "mel_mae_db": 52.764,
+   "mel_mae_db_speech": 19.644,
+   "cer": 0.1351,
+   "whisper": "phải có 1 cái nơi để mà chưa cốt này, nu chữ cốt này.  Này, hoặc là nu chữ..."
+  },
+  {
+   "id": "2b65WyiFC9k_0004__s01",
+   "frames": 597,
+   "pred_frames": 496,
+   "length_ratio": 0.831,
+   "mel_l1_z": 2.0479,
+   "mel_l1_raw": 2.7475,
+   "mel_mae_db": 23.865,
+   "mel_mae_db_speech": 17.392,
+   "cer": 0.137,
+   "whisper": "sau đó phải có một nơi để mà triển khai các cốt mình đã cốt lên."
+  },
+  {
+   "id": "2b65WyiFC9k_0006__s00",
+   "frames": 994,
+   "pred_frames": 906,
+   "length_ratio": 0.911,
+   "mel_l1_z": 1.7545,
+   "mel_l1_raw": 2.3613,
+   "mel_mae_db": 20.511,
+   "mel_mae_db_speech": 16.385,
+   "cer": 0.2275,
+   "whisper": "Mỗi lúc mọi lơi, khi chúng ta đã có thể bếp bếp coding ở trên điện thoại rồi, thì đúng là mỗi lúc mọi lơi thật ví dụ đi.  Bởi xin cần điện thoại vào cũng vừa bếp coding chư... chư... được."
+  },
+  {
+   "id": "2b65WyiFC9k_0006__s01",
+   "frames": 302,
+   "pred_frames": 221,
+   "length_ratio": 0.732,
+   "mel_l1_z": 1.2597,
+   "mel_l1_raw": 1.6952,
+   "mel_mae_db": 14.724,
+   "mel_mae_db_speech": 14.724,
+   "cer": 4.4286,
+   "whisper": "Hãy subscribe cho kênh Ghiền Mì Gõ Để không bỏ lỡ những video hấp dẫn"
+  },
+  {
+   "id": "2b65WyiFC9k_0007__s00",
+   "frames": 829,
+   "pred_frames": 627,
+   "length_ratio": 0.756,
+   "mel_l1_z": 2.2005,
+   "mel_l1_raw": 2.945,
+   "mel_mae_db": 25.581,
+   "mel_mae_db_speech": 16.805,
+   "cer": 0.1842,
+   "whisper": "Chế ở đây mình sẽ hư dẫn là...  Nhưng nào ở đây mình sẽ hư dẫn là...  Đầu tiên là chúng ta sẽ triển 2 chân VPS."
+  },
+  {
+   "id": "2b65WyiFC9k_0007__s01",
+   "frames": 925,
+   "pred_frames": 472,
+   "length_ratio": 0.51,
+   "mel_l1_z": 1.8237,
+   "mel_l1_raw": 2.4375,
+   "mel_mae_db": 21.172,
+   "mel_mae_db_speech": 16.093,
+   "cer": 0.1758,
+   "whisper": "Sau đó là để điểm thoải trí cất được vào VPS thì thương thương là sẽ cần phải cai các..."
+  },
+  {
+   "id": "2b65WyiFC9k_0008__s00",
+   "frames": 911,
+   "pred_frames": 727,
+   "length_ratio": 0.798,
+   "mel_l1_z": 4.5119,
+   "mel_l1_raw": 6.0091,
+   "mel_mae_db": 52.195,
+   "mel_mae_db_speech": 24.997,
+   "cer": 0.2755,
+   "whisper": "Cái gọi là terminal của Lion.  Sau đó là terminal của Lion xong thì chúng ta phải hát vào.  Nó."
+  },
+  {
+   "id": "2b65WyiFC9k_0008__s01",
+   "frames": 925,
+   "pred_frames": 616,
+   "length_ratio": 0.666,
+   "mel_l1_z": 2.961,
+   "mel_l1_raw": 3.9368,
+   "mel_mae_db": 34.195,
+   "mel_mae_db_speech": 18.145,
+   "cer": 0.1062,
+   "whisper": "biết ở trong thăng điện thoại này thì sẽ có công cụ như kiểu là tế mắt.  Nhưng mà như thế thì khi đấy thì mình"
+  },
+  {
+   "id": "2b65WyiFC9k_0009__s00",
+   "frames": 984,
+   "pred_frames": 767,
+   "length_ratio": 0.779,
+   "mel_l1_z": 2.1808,
+   "mel_l1_raw": 2.9001,
+   "mel_mae_db": 25.191,
+   "mel_mae_db_speech": 13.793,
+   "cer": 0.1497,
+   "whisper": "Nếu mà mình cốt ngày ở trên điện thoại thì phần cưỡng của điện thoại này có dưới hạn vậy nên mình tìm cách làm thế nào để kết nối trực tiếp từ điện thoại sang VPS này."
+  },
+  {
+   "id": "2b65WyiFC9k_0009__s01",
+   "frames": 338,
+   "pred_frames": 61,
+   "length_ratio": 0.18,
+   "mel_l1_z": 0.9297,
+   "mel_l1_raw": 1.2459,
+   "mel_mae_db": 10.821,
+   "mel_mae_db_speech": 10.821,
+   "cer": 1.0,
+   "whisper": ""
+  },
+  {
+   "id": "2b65WyiFC9k_0013__s00",
+   "frames": 916,
+   "pred_frames": 525,
+   "length_ratio": 0.573,
+   "mel_l1_z": 4.5156,
+   "mel_l1_raw": 6.0063,
+   "mel_mae_db": 52.171,
+   "mel_mae_db_speech": 22.068,
+   "cer": 0.1881,
+   "whisper": "Cốt cái open code này có cả phim bảng web  khi đấy chúng ta sẽ triển khai open code rồi từ điện thoại."
+  },
+  {
+   "id": "2b65WyiFC9k_0013__s01",
+   "frames": 952,
+   "pred_frames": 354,
+   "length_ratio": 0.372,
+   "mel_l1_z": 5.876,
+   "mel_l1_raw": 7.7817,
+   "mel_mae_db": 67.592,
+   "mel_mae_db_speech": 22.234,
+   "cer": 0.3125,
+   "whisper": "chúng ta sẽ thi cập vào VX thông qua bản quét này."
+  },
+  {
+   "id": "2b65WyiFC9k_0017__s00",
+   "frames": 926,
+   "pred_frames": 724,
+   "length_ratio": 0.782,
+   "mel_l1_z": 3.2626,
+   "mel_l1_raw": 4.3654,
+   "mel_mae_db": 37.918,
+   "mel_mae_db_speech": 19.577,
+   "cer": 0.1034,
+   "whisper": "sẽ phải cần một cái ID thì chúng ta chỉ cần cốt trên vết này này phai cũng có này mọi người có thể xem được cả anh đây.  Viết ở đây là cái càng..."
+  },
+  {
+   "id": "2b65WyiFC9k_0017__s01",
+   "frames": 542,
+   "pred_frames": 303,
+   "length_ratio": 0.559,
+   "mel_l1_z": 2.0907,
+   "mel_l1_raw": 2.7826,
+   "mel_mae_db": 24.169,
+   "mel_mae_db_speech": 16.357,
+   "cer": 0.3404,
+   "whisper": "mà khi mà mình tết xong, mình bảo..."
+  },
+  {
+   "id": "2b65WyiFC9k_0018__s00",
+   "frames": 929,
+   "pred_frames": 741,
+   "length_ratio": 0.798,
+   "mel_l1_z": 1.6401,
+   "mel_l1_raw": 2.2237,
+   "mel_mae_db": 19.315,
+   "mel_mae_db_speech": 18.283,
+   "cer": 0.1183,
+   "whisper": "AI chụp lại ảnh ác ứng dụng của mình.  Thì nó cũng chụp lại ảnh. Mình ở đây mình cũng mở được luôn.  Thì cái trang web này, máy thuy cập bằng máy tính ra mình cũng có thể thuy cập."
+  },
+  {
+   "id": "2b65WyiFC9k_0018__s01",
+   "frames": 259,
+   "pred_frames": 115,
+   "length_ratio": 0.444,
+   "mel_l1_z": 3.1158,
+   "mel_l1_raw": 4.1607,
+   "mel_mae_db": 36.14,
+   "mel_mae_db_speech": 22.319,
+   "cer": 0.2222,
+   "whisper": "mang điện."
+  },
+  {
+   "id": "2b65WyiFC9k_0020__s00",
+   "frames": 718,
+   "pred_frames": 659,
+   "length_ratio": 0.918,
+   "mel_l1_z": 3.0637,
+   "mel_l1_raw": 4.0875,
+   "mel_mae_db": 35.504,
+   "mel_mae_db_speech": 18.807,
+   "cer": 0.1101,
+   "whisper": "Kỳ vào mình với cái cơ đình như mình thường nhưng mà mỗi lúc mọi nơi.  Đấy, là ní thuyết.  Còn về phần trực hành thì..."
+  },
+  {
+   "id": "2b65WyiFC9k_0020__s01",
+   "frames": 593,
+   "pred_frames": 494,
+   "length_ratio": 0.833,
+   "mel_l1_z": 1.5492,
+   "mel_l1_raw": 2.0962,
+   "mel_mae_db": 18.208,
+   "mel_mae_db_speech": 17.634,
+   "cer": 0.2644,
+   "whisper": "Không trước mình đã ra video để mà luôn dẫn mọi người sử dụng miễn khí qualifier."
+  },
+  {
+   "id": "2b65WyiFC9k_0021__s00",
+   "frames": 945,
+   "pred_frames": 626,
+   "length_ratio": 0.662,
+   "mel_l1_z": 2.069,
+   "mel_l1_raw": 2.774,
+   "mel_mae_db": 24.095,
+   "mel_mae_db_speech": 18.775,
+   "cer": 0.119,
+   "whisper": "nhưng mà làm thế nào để kết nối thì mình cũng chưa hướng dẫn kỹ bữa hôm nay, nhưng tiện mình mới được bên Việt Ních."
+  },
+  {
+   "id": "2b65WyiFC9k_0021__s01",
+   "frames": 787,
+   "pred_frames": 212,
+   "length_ratio": 0.269,
+   "mel_l1_z": 4.4262,
+   "mel_l1_raw": 5.8689,
+   "mel_mae_db": 50.977,
+   "mel_mae_db_speech": 18.492,
+   "cer": 0.5143,
+   "whisper": "Hầu trợ, đại trợ, mềm, kỹ phần, mềm, mềm, mềm."
+  }
+ ],
+ "cer": {
+  "n": 20,
+  "mean": 0.4556,
+  "median": 0.1861
+ },
+ "checkpoint": "runs/acoustic_v2_base/last.pt",
+ "manifest": "data/codelung/holdout_clean_v2_dur_seg_slot4_fixgap.jsonl"
+}

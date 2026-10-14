@@ -247,12 +247,19 @@ def train_slot_v2(
     start_step = 0
     best_val = float("inf")
     no_improve = 0
+    resume_note: str | None = None
     if resume:
         state = torch.load(resume, map_location=resolved_device, weights_only=False)
         if arch_of_checkpoint(state) != ARCH_V2:
             raise ValueError(f"Resume cần checkpoint {ARCH_V2}, nhận {arch_of_checkpoint(state)!r}")
         from vifasttts.models.factory import load_model_state
 
+        old_val_hash = state.get("val_manifest_hash")
+        new_val_hash = val_meta["val_manifest_hash"]
+        if old_val_hash and old_val_hash != new_val_hash and not reset_val_state:
+            raise ValueError(
+                f"X3: tập val KHÁC checkpoint (hash cũ {old_val_hash[:12]}… vs mới {new_val_hash[:12]}…). "
+                "Dùng --reset-val-state nếu cố ý đổi tập val (best_val/early-stop cũ sẽ bị reset).")
         load_model_state(model, state["model"])
         model.load_f0_stats(f0_stats)  # buffer suy từ stats (tone_prior_z) — nạp lại sau resume
         if "optimizer" in state:
@@ -265,6 +272,13 @@ def train_slot_v2(
             # vô nghĩa với tập mới; reset để best.pt/early-stop tính lại từ đầu.
             print(f"X3: reset val state (best_val {best_val:.4f} → inf · no_improve {no_improve} → 0)")
             best_val, no_improve = float("inf"), 0
+        if reset_val_state and Path(output).resolve() == Path(resume).parent.resolve():
+            raise ValueError(
+                f"X3: --reset-val-state nhưng thư mục run trùng thư mục nguồn ({output}) — "
+                "phải dùng thư mục run MỚI để không ghi đè checkpoint/history của run cũ.")
+        if reset_val_state:
+            resume_note = (f"# X3 resume: resumed_from={resume}@{start_step}, "
+                           f"val_hash_old={old_val_hash or '-'}, val_hash_new={new_val_hash}")
         print(f"Tiếp tục từ {resume} (bước {start_step}, best_val {best_val:.4f})")
 
     # ── T4.1: adversarial train-only (mel sau postnet; D tách khỏi checkpoint/ONNX) ──
@@ -337,6 +351,8 @@ def train_slot_v2(
     with history_path.open("a" if append_history else "w", encoding="utf-8", newline="") as history:
         writer = csv.writer(history)
         if not append_history:
+            if resume_note:
+                history.write(resume_note + "\n")  # X3: dấu vết resume đổi tập val (trước header)
             writer.writerow(["step", "phase", "train_total", "train_mel", "mel_gap", "mel_voiced",
                              "val_total", "val_mel_voiced", "val_rough", "lr"])
         while step < steps:

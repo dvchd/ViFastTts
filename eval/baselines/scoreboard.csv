@@ -1,0 +1,2 @@
+tag,step,mel_l1_z,mel_db_speech,vuv,dur_mae,rough,tone_C,cer,pause_f1,gap_sum_mae,length_ratio,mel_gap,mel_gap_z,pause_f1_all,gap_sum_mae_all,pause_precision,f0_nga,creak_djitter_nga,creak_dhnr_nga
+base40k_fixgap,40000,1.6218,12.3247,0.9821,4.9866,,0.8045,0.4556,0.5274,119.1246,0.6481,3.1442,,0.5559,245.15,0.6058,180.1663,0.03721089568716707,-2.745237842667848

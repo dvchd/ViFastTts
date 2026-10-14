@@ -66,21 +66,21 @@ training:
   batch_size: 8           # gộp **cùng N** bằng SameNBatchSampler (đo §29: 0,0375 s/mẫu)
   learning_rate: 0.0002
   weight_decay: 0.0001
-  max_steps: 40000
+  max_steps: 60000
   phase_a_steps: 0           # train từ đầu → KHÔNG đóng băng; warm-up 0,25×→1 trong phase B
   phase_a_lr_scale: 0.25
   phase_b_warmup_steps: 2000 # §11: mở khóa → warm-up LR lên base rồi cosine
   warmup_steps: 6000         # (v1) — train-v2 không dùng
   lr_schedule: cosine
   min_lr_ratio: 0.05
-  lr_decay_steps: 40000   # mốc cuối TOÀN CỤC cho cosine (khớp --max-steps khi chạy)
+  lr_decay_steps: 60000   # mốc cuối TOÀN CỤC cho cosine (khớp --max-steps khi chạy)
   grad_clip: 1.0
   log_every: 50
   validate_every: 1000
   validate_batches: 300  # val 300 clip → SE chọn best ≈ ±0,0046 (40 clip: ±0,0126 — nhiễu che mất cải thiện)
   early_stop_patience: 0 # TẮT cho lịch cosine dài: val chững ở 45% schedule (LR còn 1,2e-4) là
                          # BÌNH THƯỜNG, phải để cosine chạy hết mới biết best (bài học §32)
-  save_every: 1000
+  save_every: 5000   # A2: checkpoint mỗi 5k để bench 45/50/55/60k
   num_workers: 0         # batch 1 + cache đọc trực tiếp; nhiều worker dễ trùng đọc cache
   mixed_precision: false
   device: auto
@@ -157,5 +157,7 @@ loss_weights:
   energy: 0.5
   phonation: 0.5  # v2: L1 trên segment hữu thanh (cache v3, R6)
   tone: 0.1       # F3: hạ từ 0.25 (aux nhẹ; mask bỏ SIL khi có SIL ở bước 4)
-  pause_gate: 0.5     # v2: BCE gate (gap ≥ 3 frame)
+  pause_gate: 0.5     # A2 giữ loss CŨ (A1 mới dùng pos_weight/khối lượng)
   pause_gap: 0.5      # v2: MSE log1p(gap) chỉ khi gate = 1
+  pause_pos_weight: 1.0  # 1,0 = tắt pos_weight (A2 = loss cũ)
+  pause_mass_scale: 0    # 0 = tắt phạt theo khối lượng (A2 = loss cũ)
