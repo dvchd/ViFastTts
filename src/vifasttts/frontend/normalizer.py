@@ -294,7 +294,25 @@ def normalize_text(text: str, dialect: str | Dialect = Dialect.NORTH, *, options
     text = _DATE_RE.sub(lambda m: _date_to_words(m, options.dialect), text)
     text = _TIME_RE.sub(lambda m: _time_to_words(m, options.dialect), text)
     # Số điện thoại đọc từng chữ số: 0977123456, +84977123456.
+    # Đặt TRƯỚC khối ký hiệu để dấu "+" của "+84" không bị đọc thành "cộng".
     text = re.sub(r"(?<!\w)(?:\+84\d{9,10}|0\d{9,10})(?!\w)", _phone_to_words, text)
+    # Email: đọc "a còng" và "chấm" (V11/P0.2: trước đây "email@abc.com" đọc sót "@").
+    text = re.sub(
+        r"(?<![\w.+-])([A-Za-z0-9][\w.+-]*?)@([\w-]+(?:\.[\w-]+)+)(?![\w-])",
+        lambda m: m.group(1).replace(".", " chấm ") + " a còng " + m.group(2).replace(".", " chấm "),
+        text,
+    )
+    # Ký hiệu toán học & liên từ: chỉ thay khi nằm GIỮA chữ/số để không phá trang trí
+    # (">>", "C++", "<3") hay đuôi phiên bản. V11/P0.2: "2+2=4" trước đây mất dấu.
+    text = re.sub(r"(?<=\d)\s*\+\s*(?=\d)", " cộng ", text)
+    text = re.sub(r"(?<=\d)\s*[x×]\s*(?=\d)", " nhân ", text)
+    text = re.sub(r"(?<=\d)\s*÷\s*(?=\d)", " chia ", text)
+    text = re.sub(r"(?<=[\w])\s*(?<![=<>!])=(?!=)\s*(?=[\w])", " bằng ", text)
+    text = re.sub(r"(?<=[\w])\s*&\s*(?=[\w])", " và ", text)
+    text = re.sub(r"(?<=[\w%])\s*(?:>=|≥)\s*(?=[\w])", " lớn hơn hoặc bằng ", text)
+    text = re.sub(r"(?<=[\w%])\s*(?:<=|≤)\s*(?=[\w])", " nhỏ hơn hoặc bằng ", text)
+    text = re.sub(r"(?<=[\w%])\s*>\s*(?=[\w])", " lớn hơn ", text)
+    text = re.sub(r"(?<=[\w%])\s*<\s*(?=[\w])", " nhỏ hơn ", text)
     # Tiền tệ: 50.000đ / 1000VND / $5 / 5$ → "… đồng" / "… đô la".
     # Chạy trước số thường để không khớp một phần.
     # Chữ "d" ASCII là cách viết tắt phổ biến của "đồng", nhưng chỉ với số ≥1000
