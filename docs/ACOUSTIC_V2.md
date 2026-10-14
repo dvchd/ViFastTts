@@ -1496,3 +1496,39 @@ Vocos **pretrained zero-shot giữ nguyên** làm vocoder production. Giữ chec
 nhưng **đổi theo hướng xấu ở pitch** (octave +9,6%) và **tăng tương phản creak** (+3,8%) — tức "bám mel
 hơn" ≠ "đúng hơn" (khớp bài học GTA §41); (c) nếu muốn theo hướng này phải sweep `stft_weight` {0,25…2}
 + D pretrained — xếp roadmap, không làm tiếp trong vòng rè (ưu tiên E4a phía acoustic).
+
+### 45.5 E4a (làm sạch F0 vùng creak) — **TRƯỢT CỔNG CỨNG** (val cũ mel), nhưng lộ ra cơ chế thật
+
+Run `runs/acoustic_v2_E4a` (A2 best@42k → 50k, cosine mới, 8k bước, 0,43–0,48 s/bước, MPS 9–12 GB).
+Chấm: `artifacts/bench/E4a_50000.json` + `artifacts/eval_acoustic/creak_E4a_50k.json` +
+`artifacts/creak25/free_E4a_50k.json` + `artifacts/tone_path/abc_E4a_50k.json`.
+
+| Cổng / thước | Kết quả E4a | Base 40k (đo lại cùng phiên) | Đọc |
+|---|---|---|---|
+| mel_l1_z (val **CŨ**) | **1,1826** (giới hạn 1,1715) ❌ | 1,1599 ✅ | trượt **+2,0%** = đúng "hiệu ứng extension" đã biết (§§41–44) |
+| mel_db (val cũ) | **9,1955** (giới hạn 9,0547) ❌ | 8,9547 ✅ | như trên (+0,14 dB) |
+| rough (60 clip) | **0,3727** ✅ | 0,3679 | ✓ nhỉnh hơn |
+| tone_C | **0,8152** ✅ | 0,8045 | ✓ **hơn base +1,3%** |
+| CER (holdout) | **0,1950** ✅ | 0,2332 | ✓ hơn rõ |
+| f0_nga · mel_gap · syl_z | 180,55 · 3,0867 · 0,6656 ✅ | 180,17 · 3,1272 · 0,6621 | ✓ đạt |
+| **mel cùng nhãn** (fixtail) | 1,3343 · 9,9233 ✅ | 1,3311 · 9,8790 | ✓ đạt (mốc×1,01) |
+| tone paths (60 clip) | Δ(C−A) **+0,0149** | +0,0033 | ✓ **không làm phẳng đường thanh** |
+| rè NẶNG (Δhnr · Δjitter) | −1,04 · **+0,0069** | −1,17 · +0,0192 | ✓ **jitter −64%** |
+| rè NGÃ (Δhnr · Δjitter) | −2,58 · +0,0451 | −2,42 · +0,0370 | ≈ trong nhiễu (n=49 âm tiết) |
+| creak ratio (CreaPy, 25 clip) | **2,785** | 2,725 | ≈ không đổi (nhiễu ±3–5%) |
+
+**Kết luận**: theo cây V11.A4 ⇒ **TỪ CHỐI** (2 cổng mel val CŨ trượt) — nhưng **đây là hiệu ứng
+extension, không phải tác hại của E4a** (mọi lần train tiếp 40k→x đều +1,4–2% trên val cũ; cùng nhãn
+vẫn đạt ✓). E4a **không sửa được rè ở tầng waveform** — đúng như phân tích cơ chế dưới đây.
+
+**PHÁT HIỆN CƠ CHẾ (đo trực tiếp, 25 clip creak, base 40k)** — đây là phần đáng giá nhất:
+
+| Trong frame CREAK | mel THẬT | mel DỰ ĐOÁN | Δ |
+|---|---|---|---|
+| nhám **thời gian** (|Δ mel| giữa 2 frame) | 0,3681 | 0,2144 | **−41,7%** |
+| nhám **tần số** (|Δ mel| giữa 2 bin) | 0,2748 | 0,1050 | **−61,8%** |
+| L1 mel | — | — | creak **thấp hơn** 7% so frame thường |
+
+⇒ **mel dự đoán vùng creak bị XOÁ MỜ (đỉnh hài mất sắc)** ⇒ Vocos — vốn học trên mel THẬT (sắc) —
+gặp mel mờ thì render thành **ồn/rè** (khớp §39: copy-synth ≈ thật, free-run vọt creak). Vậy đòn đúng
+là **làm nét mel vùng creak** (`mel_sharp` ×(1+3·c_t) — E4c), không phải sửa nhãn F0.

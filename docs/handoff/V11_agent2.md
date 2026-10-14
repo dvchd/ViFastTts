@@ -236,3 +236,18 @@ Chấm bằng `tools/vocoder_gate.sh` (mốc 0 pretrained vs fine-tune 5k, cùng
 mel_l1 **−11,3%** ✓ · nhưng **logf0_rmse_no_oct −0,36%** (cổng cần −3%) ✗ · octave_rate **+9,6%** ✗ ·
 creak ratio **2,390 → 2,481 (+3,8%)** ✗ (đích là về 1,717) · `hnr_creak_delta` +0,098 → −0,005 dB ≈.
 ⇒ Theo luật §45.3: **`stft_weight=0`, giữ Vocos pretrained** (checkpoint giữ làm đối chứng).
+
+### V11S3 — E4a: TỪ CHỐI cổng cứng + TÌM RA CƠ CHẾ RÈ (22:43)
+
+**E4a** (A2@42k→50k, làm sạch F0 creak): bench **TỪ CHỐI** — chỉ 2 cổng mel val CŨ trượt (1,1826 > 1,1715 ·
+9,1955 > 9,0547 = hiệu ứng extension +2,0% như mọi lần train tiếp); **9 cổng còn lại ĐẠT**, trong đó
+**tone_C 0,8152 > base 0,8045**, rough 0,3727 ✓, CER 0,1950 ✓, **mel cùng nhãn ĐẠT** ✓, tone paths
+Δ(C−A) +0,0149 ✓ (không phẳng hoá). Rè: NẶNG jitter −64% ✓ · NGÃ ≈ không đổi · creak ratio 2,785 vs 2,725 ≈.
+⇒ **E4a không sửa rè tầng waveform** ✓ (đúng như dự đoán trước khi có số).
+
+**CƠ CHẾ (đo, không suy đoán)**: trong frame creak, **mel dự đoán mượt hơn mel thật −41,7% (thời gian)
+/ −61,8% (tần số)** ⇒ đỉnh hài bị xoá mờ ⇒ Vocos render thành ồn/rè. ⇒ Đòn đúng = **làm nét mel vùng
+creak** = E4c (`mel_sharp_creak_boost: 3.0`, code + config + test xong, commit `0dcf217`) — đang cắm
+chuỗi: đo E4b → re-bench A2 42k (cổng mới) → chạy E4c → đo E4c.
+**Bench base fresh tái lập mốc CHÍNH XÁC từng số** (1,1599 · 8,9547 · 0,3679 · 0,8045 · 0,2332) ⇒ mốc/hash
+và quy trình đo ổn định ✓.
