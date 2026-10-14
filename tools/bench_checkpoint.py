@@ -406,8 +406,8 @@ def check_baseline_pin(path: str, readme: str | Path = "eval/README.md") -> None
     name = Path(path).name
     pinned = readme_sha256(name, readme)
     if pinned is None:
-        print(f"    ⚠ chưa ghim sha256 cho {name} trong {readme} — bỏ qua kiểm")
-        return
+        raise SystemExit(f"LỖI: {name} CHƯA được ghim sha256 trong {readme} — "
+                         "ghim trước khi dùng làm mốc (V09.A4).")
     actual = hashlib.sha256(Path(ROOT / path).read_bytes()).hexdigest()
     if actual != pinned:
         raise SystemExit(f"LỖI: sha256 của {path} ({actual[:12]}…) khác giá trị ghim trong {readme} "

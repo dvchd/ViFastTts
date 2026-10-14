@@ -1,8 +1,8 @@
 # TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, Agent 2 cập nhật mỗi vòng)
 
 **Vòng hiện hành**: V08 · **Tệp đặc tả**: `docs/handoff/V08_agent0.md`
-**Commit gốc của vòng** (trước khi sửa): `ab42b06` · **Commit cuối**: `c3fc66c`
-**Trạng thái**: ĐANG LÀM (B9 sinh mốc fixtail + B10 probe lại) → sẽ chuyển **DỪNG, CHỜ ĐỌC** khi xong.
+**Commit gốc của vòng** (trước khi sửa): `ab42b06` · **Commit cuối**: `<xem commit cuối cùng của vòng>`
+**Trạng thái**: **DỪNG, CHỜ ĐỌC** (B5–B10 xong; B10 có 1 điểm lạ `f0p` — chờ Agent 0 quyết; chưa chạy thật A2).
 
 > Agent 1 đọc vòng này theo thông tin ở đầu tệp (không cần hash gửi kèm): diff `ab42b06..<commit cuối>`,
 > câu hỏi Y1–Y6 ở mục C của tệp đặc tả. Agent 1 **chỉ đọc, không ghi tệp** vào repo.
@@ -36,10 +36,10 @@
 | Mã | Việc | Trạng thái |
 |---|---|---|
 | V08.B1–B4, B7, B8 | trần fixtail + manifest + watchdog/script + §44.8 + test | ✅ commit `64a47ff` |
-| V08.B5 | bench kiểm sha256 mốc vs README + ghim lại `base40k_old.json` | ⏳ chờ |
-| V08.B6 | `--validate-at-stop` cho train-v2 | ⏳ chờ |
-| V08.B9 | sinh mốc `base40k_fixtail.json` (MPS) + kiểm H1 | ⏳ chờ |
-| V08.B10 | probe lại trên fixtail | ⏳ chờ |
+| V08.B5 | bench kiểm sha256 mốc vs README + ghim lại `base40k_old.json` | ✅ `c3fc66c` |
+| V08.B6 | `--validate-at-stop` | ✅ `c3fc66c` |
+| V08.B9 | mốc `base40k_fixtail.json` + H1 (0,14%) | ✅ ghim `7be6fcff…` |
+| V08.B10 | probe fixtail | ✅ cơ chế đạt · `f0p` lạ (−18,9%) ⇒ DỪNG |
 | V08.C1 | Agent 1 đọc diff `ab42b06..64a47ff` (Y1–Y6) | ⏳ chờ |
 | V08.D1 | người dùng nghe 6 cặp AB sh25 | ✅ đã có kết luận (giữ sh25 toàn cục) |
 

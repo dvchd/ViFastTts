@@ -1308,7 +1308,7 @@ giảm mạnh, vùng âm tiết không xấu quá +1%).
   99,2% → **71,4%** · T max 1.799 → **1.293**; val tương ứng (303,0 · 74,0% · 1.216). Hash mới:
   train `965b4798…`, val `cdbbd659…`. Mốc `base40k_fixgap.json` thay bằng `base40k_fixtail.json`;
   `base40k_old.json` giữ nguyên (val cũ không đổi).
-- **Lỗi chặn W5 đã sửa**: `watch_train_v2.sh` nhận `INIT_RESUME`/`INIT_RESET_VAL_STATE` **chỉ dùng khi
+- **Lỗi chặn W5 — TRẠNG THÁI THỰC (sửa V09.A3, bản V08 ghi sai là "đã sửa")**: bản V08 **chưa** sửa được (patch không áp; watchdog vẫn 2 nhánh cũ, dry-run ở `run_A2_fixgap.sh` in chuỗi mô tả riêng). Sửa ở **V09.B3**: `watch_train_v2.sh` nhận `INIT_RESUME`/`INIT_RESET_VAL_STATE` **chỉ dùng khi
   `OUT/last.pt` chưa có** (khởi động lại sau sự cố ⇒ resume `OUT/last.pt`, KHÔNG reset val);
   `run_A2_fixgap.sh` chế độ `run` truyền `INIT_RESUME=runs/acoustic_v2_base/last.pt` +
   `INIT_RESET_VAL_STATE=1`; thêm `--dry-run` (in đúng lệnh train-v2). Kiểm sau 1 phút: dòng đầu
