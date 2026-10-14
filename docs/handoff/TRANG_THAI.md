@@ -1,7 +1,7 @@
 # TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, Agent 2 cập nhật mỗi vòng)
 
 **Vòng hiện hành**: V10 · **Tệp đặc tả**: `docs/handoff/V10_agent0.md`
-**Commit gốc của vòng** (trước khi sửa): `06b5f10` · **Commit cuối**: `<commit hồ sơ B9>`
+**Commit gốc của vòng** (trước khi sửa): `06b5f10` · **Commit cuối**: `403969e`
 **Trạng thái**: **A2 ĐANG CHẠY, CHỜ ĐỌC** — A2 khởi động 12:35 14/10 (`runs/acoustic_v2_A2_fixtail`, resume base@40000,
 60k, ~0,43 s/bước ⇒ tới 60k ≈ 2,3 giờ); đủ 6 điều kiện V10.A11; B10 (bench 45/50/55/60k) chờ A2 xong.
 
