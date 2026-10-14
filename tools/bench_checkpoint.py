@@ -150,6 +150,17 @@ def _relative_gate(key: str, row_value: float | None, base_value: float | None) 
     return (PASS if ok else FAIL), f"{row_value:.4f} vs {limit}"
 
 
+def conclusion(hard: dict, target: dict) -> str:
+    """Kết luận cuối theo thứ tự ưu tiên (§44/A4): cứng NO_BASE coi như TRƯỢT."""
+    if any(state in (FAIL, NO_BASE) for state, _ in hard.values()):
+        return "TỪ CHỐI"
+    if any(state == FAIL for state, _ in target.values()):
+        return "ĐẠT CỨNG, TRƯỢT MỤC TIÊU"
+    if any(state in (NO_DATA, NO_BASE) for state, _ in target.values()):
+        return "ĐẠT CỨNG, MỤC TIÊU CHƯA ĐỦ SỐ"
+    return "CHẤP NHẬN"
+
+
 def hard_gates(row_old: dict, base_old: dict | None, row_fix: dict, base_fix: dict | None,
                rough_old: float | None) -> dict[str, tuple[str, str]]:
     """CỔNG CỨNG tương đối (§44): mel/dB/rough/tone_C/CER/F0 NGÃ theo val CŨ; mel_gap theo val FIXGAP."""
@@ -338,6 +349,7 @@ def main() -> None:
               "val_manifest_old": args.val_manifest_old, "val_manifest_hash_old": _sha1_file(args.val_manifest_old),
               "holdout_manifest": args.holdout_manifest, "holdout_manifest_hash": _sha1_file(args.holdout_manifest),
               "summary_old": row_old, "summary_fixgap": row_fix, "gates": gates,
+              "conclusion": conclusion(gates["hard"], gates["target"]),
               "history_rough_thamkhao": _rough_from_history(run_dir, args.step),
               "raw": {"old": raw_old, "fixgap": raw_fix, "tone": tone, "creak": creak}}
     report_path = args.out_dir / f"{tag}.json"
@@ -370,6 +382,8 @@ def main() -> None:
                                          if (ROOT / path).exists() else None) for name, path in raw_paths.items()}}
         Path(args.emit_baseline).write_text(json.dumps(compact, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"→ tệp mốc gọn: {args.emit_baseline}")
+    verdict = conclusion(gates["hard"], gates["target"])
+    print(f"\n== KẾT LUẬN: {verdict} ==")
     print(f"→ {report_path} · scoreboard: {scoreboard}")
 
 

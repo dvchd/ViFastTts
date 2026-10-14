@@ -136,6 +136,7 @@ def train_slot_v2(
     max_steps: int | None = None,
     resume: str | None = None,
     reset_val_state: bool = False,
+    stop_at_step: int | None = None,
     device: str | None = None,
     adversarial_flag: bool | None = None,
 ) -> None:
@@ -491,9 +492,9 @@ def train_slot_v2(
                         torch.save({"discriminator": discriminator.state_dict(),
                                     "d_optimizer": d_optimizer.state_dict(), "step": step},
                                    out / "d_last.pt")
-                if step >= steps or early_stopped:
+                if step >= steps or early_stopped or (stop_at_step is not None and step >= stop_at_step):
                     break
-            if early_stopped:
+            if early_stopped or (stop_at_step is not None and step >= stop_at_step):
                 break
     torch.save({
         "model": model.state_dict(), "optimizer": optimizer.state_dict(),

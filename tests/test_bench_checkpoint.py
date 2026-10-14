@@ -68,3 +68,20 @@ def test_cong_muc_tieu_thieu_du_lieu_la_chua_do():
     bad = target_gates(_row_fix(pause_f1_all=0.55, gap_sum_mae_all=150.0, length_ratio=1.2,
                                 mel_gap_z=2.6), BASE_FIX)
     assert all(state == FAIL for state, _ in bad.values())
+
+
+def test_ket_luan_bon_truong_hop():
+    """A4: thứ tự ưu tiên TỪ CHỐI → TRƯỢT MỤC TIÊU → CHƯA ĐỦ SỐ → CHẤP NHẬN."""
+    from tools.bench_checkpoint import conclusion
+
+    hard_pass = {"mel_l1_z": (PASS, "")}
+    hard_fail = {"mel_l1_z": (FAIL, "")}
+    hard_nobase = {"mel_l1_z": (NO_BASE, "chưa có mốc")}
+    target_pass = {"pause_f1_all≥mốc+0.073": (PASS, "")}
+    target_fail = {"pause_f1_all≥mốc+0.073": (FAIL, "")}
+    target_pending = {"pause_f1_all≥mốc+0.073": (NO_DATA, "chưa đo")}
+    assert conclusion(hard_fail, target_pass) == "TỪ CHỐI"
+    assert conclusion(hard_nobase, target_pass) == "TỪ CHỐI"  # thiếu mốc = coi như trượt
+    assert conclusion(hard_pass, target_fail) == "ĐẠT CỨNG, TRƯỢT MỤC TIÊU"
+    assert conclusion(hard_pass, target_pending) == "ĐẠT CỨNG, MỤC TIÊU CHƯA ĐỦ SỐ"
+    assert conclusion(hard_pass, target_pass) == "CHẤP NHẬN"

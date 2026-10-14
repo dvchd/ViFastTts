@@ -251,3 +251,34 @@ def test_x3_loi_resume_khong_de_lai_dau_vet(tmp_path):
         _run_tiny(tmp_path, "x3d_target", val_manifest=other, steps=5, resume=run_dir / "last.pt")
     assert not target.exists() or not any(target.iterdir()), "đường lỗi đã để lại dấu vết trên đĩa"
     assert hashlib.sha256(src_cfg.read_bytes()).hexdigest() == sha_before
+
+
+def test_stop_at_step_dung_dung_buoc_va_khong_cham_lr(tmp_path):
+    """C1: --stop-at-step dừng ở bước TUYỆT ĐỐI; LR từng bước khớp lr_at với max_steps=60000."""
+    import math
+
+    run_dir, manifest = _run_tiny(tmp_path, "sas", steps=3)
+    state = torch.load(run_dir / "last.pt", map_location="cpu", weights_only=False)
+    state["step"] = 40000
+    torch.save(state, run_dir / "last.pt")
+    config = {
+        **CONFIG,
+        "f0_stats_path": str(tmp_path / "f0_stats.json"),
+        "training": {**CONFIG["training"], "cache_dir": str(tmp_path / "cache"),
+                     "learning_rate": 2e-4, "phase_a_steps": 0, "phase_b_warmup_steps": 1,
+                     "log_every": 100, "validate_every": 1, "validate_batches": 1,
+                     "save_every": 100, "early_stop_patience": 0},
+    }
+    out = tmp_path / "sas_stop"
+    train_slot_v2(config, str(manifest), str(manifest), str(out), max_steps=60000,
+                  resume=str(run_dir / "last.pt"), stop_at_step=40003, device="cpu")
+    saved = torch.load(out / "last.pt", map_location="cpu", weights_only=False)
+    assert saved["step"] == 40003  # dừng đúng bước tuyệt đối
+    rows = [line.split(",") for line in (out / "history.csv").read_text(encoding="utf-8").splitlines()
+            if line and not line.startswith("step")]
+    lr_col = [float(row[-1]) for row in rows]
+    assert len(lr_col) == 3
+    for step, lr in zip((40001, 40002, 40003), lr_col):
+        progress = min(1.0, (step - 0 - 1) / (60000 - 0 - 1))
+        expected = 2e-4 * (0.05 + 0.95 * 0.5 * (1.0 + math.cos(math.pi * progress)))
+        assert abs(lr - expected) / expected < 1e-3  # LR không bị --stop-at-step chạm vào
