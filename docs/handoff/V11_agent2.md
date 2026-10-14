@@ -160,3 +160,11 @@ V11.B6–B11 + V11S.B3 (watchdog: step_of chịu last.pt hỏng · ghi checkpoin
 7. **Lỗi quy trình cần sửa**: `bench_checkpoint.py` default `--val-manifest` vẫn trỏ manifest **fixgap đã bỏ** ✗; config A1 `pause_pos_weight 3,0` vs văn bản **2,244** ✗; `base_60k/resolved_config.json` ghi `max_steps 40000` trong khi chạy cosine 60000 ✗; §44/README còn số H1 cũ (gap_z 2,3862 — bản fixgap) ✗.
 
 **HÀNG ĐỢI SỬA (ưu tiên mới #1)**: (a) **chấm đầy đủ `best.pt@42k`** (rough ≥60 clip + A/B tai người 42k vs base vs 55k) → có thể xoá toàn bộ tranh luận ✓; (b) sửa cổng: rough ≥60 clip · hiệu chuẩn biên mel theo **đối chứng cùng lịch train (ext57k)** nếu vẫn dùng "không hồi quy" · nêu rõ bộ cổng **trộn 2 val** (6 cổng val cũ + mel_gap/syl_z fixtail) ✗; (c) sửa 4 lỗi quy trình ở mục 7; (d) rồi mới tới E4-rè → W2-duration.
+
+## CHỐT LẠI THEO ĐÚNG LUẬT (sau đính chính)
+
+**`best.pt@42k` = checkpoint A2 được chọn** ✓ — là **mốc DUY NHẤT trong 42/45/50/55/60k đạt MỌI cổng cứng**:
+mel_z 1,1645 ✓ · dB 8,8116 ✓ (tốt hơn base) · rough **0,3588** ✓ (≥ biên 0,3579; red-team đo 0,3596@60 clip) · tone_C 0,8002 ✓ · cer **0,1853** ✓ (tốt nhất) · f0_nga 182,0 ✓ · mel_gap 3,0646 ✓ · syl_z 0,6584 ✓ (tốt hơn base).
+**Cổng mục tiêu**: length_ratio **0,9114 ĐẠT** ✓ · F1 0,5951 ✗ (cần 0,6289; trần hiệu chuẩn ngưỡng 0,6182) · gMAE 120,15 ✗ (cần 111,7; hiệu chuẩn đưa được 110,8 ✓) · gap_z 2,0… ✗.
+⇒ Theo **cây V11.A4**: **"ĐẠT CỨNG, TRƯỢT MỤC TIÊU"** ⇒ nhánh **chuẩn bị A1 (không chạy)** ✓ — nhưng theo red-team: F1 cần **nâng khả năng phân biệt của gate** (A1) vì trần ngưỡng = 0,6182; và trước khi chạy A1 phải sửa `pause_pos_weight` (**2,244**, config đang ghi 3,0 ✗) + `max_steps` 60k ✗ + chấp nhận hiệu ứng extension ✗.
+**A/B tai người 42k vs base**: release `demo-audio-20261014-w1b` (6 cặp, kiểm tải 200 + đúng byte ✓) — **cổng cuối** để đổi bản dùng hằng ngày.
