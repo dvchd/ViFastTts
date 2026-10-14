@@ -166,6 +166,25 @@ def train_slot_v2(
 
     training: dict[str, Any] = dict(config.get("training", {}))
     set_seed(int(config.get("seed", 42)))
+    # X3/A1 (§44): MỌI kiểm tra resume phải chạy TRƯỚC out.mkdir + ghi resolved_config.json —
+    # đường lỗi không được để lại dấu vết trên đĩa (đúng loại lỗi "ghi đè run cũ" mà X2 chặn).
+    new_val_hash = hashlib.sha1(Path(val_manifest).read_bytes()).hexdigest()
+    resume_state: dict | None = None
+    old_val_hash: str | None = None
+    if resume:
+        resume_state = torch.load(resume, map_location="cpu", weights_only=False)
+        if arch_of_checkpoint(resume_state) != ARCH_V2:
+            raise ValueError(
+                f"Resume cần checkpoint {ARCH_V2}, nhận {arch_of_checkpoint(resume_state)!r}")
+        old_val_hash = resume_state.get("val_manifest_hash")
+        if old_val_hash and old_val_hash != new_val_hash and not reset_val_state:
+            raise ValueError(
+                f"X3: tập val KHÁC checkpoint (hash cũ {old_val_hash[:12]}… vs mới {new_val_hash[:12]}…). "
+                "Dùng --reset-val-state nếu cố ý đổi tập val (best_val/early-stop cũ sẽ bị reset).")
+        if reset_val_state and Path(output).resolve() == Path(resume).parent.resolve():
+            raise ValueError(
+                f"X3: --reset-val-state nhưng thư mục run trùng thư mục nguồn ({output}) — "
+                "phải dùng thư mục run MỚI để không ghi đè checkpoint/history của run cũ.")
     out = Path(output)
     out.mkdir(parents=True, exist_ok=True)
     for path in (train_manifest, val_manifest):
@@ -249,17 +268,9 @@ def train_slot_v2(
     no_improve = 0
     resume_note: str | None = None
     if resume:
-        state = torch.load(resume, map_location=resolved_device, weights_only=False)
-        if arch_of_checkpoint(state) != ARCH_V2:
-            raise ValueError(f"Resume cần checkpoint {ARCH_V2}, nhận {arch_of_checkpoint(state)!r}")
         from vifasttts.models.factory import load_model_state
 
-        old_val_hash = state.get("val_manifest_hash")
-        new_val_hash = val_meta["val_manifest_hash"]
-        if old_val_hash and old_val_hash != new_val_hash and not reset_val_state:
-            raise ValueError(
-                f"X3: tập val KHÁC checkpoint (hash cũ {old_val_hash[:12]}… vs mới {new_val_hash[:12]}…). "
-                "Dùng --reset-val-state nếu cố ý đổi tập val (best_val/early-stop cũ sẽ bị reset).")
+        state = resume_state  # đã nạp + kiểm tra ở đầu hàm (trước mọi ghi tệp)
         load_model_state(model, state["model"])
         model.load_f0_stats(f0_stats)  # buffer suy từ stats (tone_prior_z) — nạp lại sau resume
         if "optimizer" in state:
@@ -272,10 +283,6 @@ def train_slot_v2(
             # vô nghĩa với tập mới; reset để best.pt/early-stop tính lại từ đầu.
             print(f"X3: reset val state (best_val {best_val:.4f} → inf · no_improve {no_improve} → 0)")
             best_val, no_improve = float("inf"), 0
-        if reset_val_state and Path(output).resolve() == Path(resume).parent.resolve():
-            raise ValueError(
-                f"X3: --reset-val-state nhưng thư mục run trùng thư mục nguồn ({output}) — "
-                "phải dùng thư mục run MỚI để không ghi đè checkpoint/history của run cũ.")
         if reset_val_state:
             resume_note = (f"# X3 resume: resumed_from={resume}@{start_step}, "
                            f"val_hash_old={old_val_hash or '-'}, val_hash_new={new_val_hash}")

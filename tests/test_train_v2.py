@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 import pytest
@@ -236,3 +237,17 @@ def test_x3_reset_val_state_cung_thu_muc_nguon_thi_loi(tmp_path):
     run_dir, _manifest = _run_tiny(tmp_path, "x3c", steps=3)
     with pytest.raises(ValueError, match="trùng thư mục nguồn"):
         _run_tiny(tmp_path, "x3c", steps=5, resume=run_dir / "last.pt", reset=True)
+
+
+def test_x3_loi_resume_khong_de_lai_dau_vet(tmp_path):
+    """A1 (Lượt 1b): đường lỗi (hash val khác, không cờ) KHÔNG được tạo/ghi tệp trong thư mục đích."""
+    run_dir, manifest = _run_tiny(tmp_path, "x3d", steps=3)
+    src_cfg = run_dir / "resolved_config.json"
+    sha_before = hashlib.sha256(src_cfg.read_bytes()).hexdigest()
+    other = tmp_path / "val_khac.jsonl"
+    other.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    target = tmp_path / "x3d_target"
+    with pytest.raises(ValueError, match="tập val KHÁC"):
+        _run_tiny(tmp_path, "x3d_target", val_manifest=other, steps=5, resume=run_dir / "last.pt")
+    assert not target.exists() or not any(target.iterdir()), "đường lỗi đã để lại dấu vết trên đĩa"
+    assert hashlib.sha256(src_cfg.read_bytes()).hexdigest() == sha_before
