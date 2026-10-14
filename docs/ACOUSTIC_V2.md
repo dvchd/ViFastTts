@@ -1470,3 +1470,29 @@ tone-aware-vocos 2026 (weighted MR-STFT ≤1 kHz ×3 ⇒ F0 RMSE −4,5%, p_holm
   `mel_z_fix`/`mel_db_fix` (val fixtail; mốc base 1,3311/9,879 — 42k 1,3257/9,5965 **ĐẠT**);
   `rough` 12 clip **lệch +6%** và **lật phán quyết** ⇒ nâng **60 clip** + đo lại mốc
   (val cũ 0,3919→**0,3679** · fixtail 0,3651→**0,3419**).
+
+### 45.4 E4-C (vocoder, weighted MR-STFT) — KẾT QUẢ: **TRƯỢT CỔNG** (14/10 tối)
+
+Fine-tune Vocos pretrained trên **mel THẬT** codelung_v2 (7.342 clip), 5.000 bước, MPS, 0,7 s/bước
+(`runs/vocoder_vocos_stftc`; `stft_weight=1,0`, ≤1 kHz ×3, FFT 512/1024/2048 hop 256, d_warmup 0).
+Chấm bằng `tools/vocoder_gate.sh` — **cùng manifest `val.jsonl`, 50 clip, cùng CPU**:
+
+| Chỉ số | mốc 0 (pretrained) | E4-C 5k | Δ% | Cổng |
+|---|---|---|---|---|
+| mel_l1 (roundtrip) | 0,1531 | **0,1359** | **−11,3%** | (không đặt) ✓ hơn |
+| **logf0_rmse_cents_no_oct** | 85,667 | 85,358 | **−0,36%** | **cần ↓≥3% ⇒ ✗ TRƯỢT** |
+| logf0_rmse_cents (kèm octave) | 202,06 | 209,68 | **+3,8%** | ✗ xấu |
+| octave_rate | 0,0272 | 0,0298 | **+9,6%** | ✗ xấu |
+| vuv_err | 0,0433 | 0,0447 | +3,2% | ✗ nhẹ |
+| vuv_err_unvoiced | 0,1342 | **0,1131** | −15,7% | ✓ hơn |
+| **creak ratio (25 clip ngã/nặng)** | 2,390 | 2,481 | **+3,8%** | ✗ ngược đích (về 1,717) |
+| `hnr_creak_delta` (voice_quality) | +0,098 dB | −0,005 dB | — | ≈ (cả hai ≪ 2 dB) |
+
+**Kết luận theo luật đã đăng ký (§45.3: "trượt ⇒ `stft_coeff=0`)**: **KHÔNG nhận** bản fine-tune;
+Vocos **pretrained zero-shot giữ nguyên** làm vocoder production. Giữ checkpoint + config để làm
+đối chứng (`runs/vocoder_vocos_stftc`, `configs/small_codelung_v2_vocos_stftc.yaml`).
+**Bài học**: (a) công bố tone-aware-vocos (F0 RMSE −4,5%, p_holm=9,9e-5) **không tái lập** trên dữ liệu
++ recipe của ta (5k bước, D random, mel codelung); (b) fine-tune **cải thiện độ trung thực mel (−11%)**
+nhưng **đổi theo hướng xấu ở pitch** (octave +9,6%) và **tăng tương phản creak** (+3,8%) — tức "bám mel
+hơn" ≠ "đúng hơn" (khớp bài học GTA §41); (c) nếu muốn theo hướng này phải sweep `stft_weight` {0,25…2}
++ D pretrained — xếp roadmap, không làm tiếp trong vòng rè (ưu tiên E4a phía acoustic).

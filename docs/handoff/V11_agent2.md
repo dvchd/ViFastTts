@@ -229,3 +229,10 @@ Nguyên nhân nghi: nhánh xử lý **chữ cái đơn / viết tắt có dấu 
 - Loss train/val của E4a **không so trực tiếp** với history A2 (F0 loss bị hạ trọng số ~5% ⇒ tổng loss thấp hơn một chút).
 - Eval (`bench`, `eval_acoustic`, `eval_creak`) dùng f0 **THÔ** từ cache ⇒ vẫn so được với mọi mốc cũ (không tự chấm bằng chính target đã làm sạch).
 - Kỳ vọng: contour F0 dự đoán êm hơn ở ngã/nặng ⇒ **Δjitter/Δhnr ngã-nặng về gần mốc thật** (§39: free-run −1,02 dB HNR; mục tiêu thu hẹp khoảng đó), `rough` không xấu, CER không tăng.
+
+### V11S3 — KẾT QUẢ E4-C (vocoder) — TRƯỢT, không đổi vocoder
+
+Chấm bằng `tools/vocoder_gate.sh` (mốc 0 pretrained vs fine-tune 5k, cùng 50 clip `val.jsonl`, CPU):
+mel_l1 **−11,3%** ✓ · nhưng **logf0_rmse_no_oct −0,36%** (cổng cần −3%) ✗ · octave_rate **+9,6%** ✗ ·
+creak ratio **2,390 → 2,481 (+3,8%)** ✗ (đích là về 1,717) · `hnr_creak_delta` +0,098 → −0,005 dB ≈.
+⇒ Theo luật §45.3: **`stft_weight=0`, giữ Vocos pretrained** (checkpoint giữ làm đối chứng).
