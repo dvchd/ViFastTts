@@ -39,7 +39,7 @@
     "pause_precision": 0.6058,
     "length_ratio": 0.6481,
     "mel_gap": 3.1442,
-    "mel_gap_z": null,
+    "mel_gap_z": 2.3862,
     "syl_z": 0.6608,
     "syl_db": 7.6735,
     "tone_C": 0.8045,
@@ -61,12 +61,13 @@
     "pause_precision": 0.6058,
     "length_ratio": 0.6481,
     "mel_gap": 3.1442,
-    "mel_gap_z": null,
+    "mel_gap_z": 2.3862,
     "syl_z": 0.6608,
     "syl_db": 7.6735,
     "tone_C": 0.8045,
     "creak_djitter_nga": 0.03721089568716707,
     "creak_dhnr_nga": -2.745237842667848,
     "rough": 0.33672131389603316
-  }
+  },
+  "mel_gap_z_note": "từ tf (khối gap), không phải free — sửa theo 5f630e3"
 }
