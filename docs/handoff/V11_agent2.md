@@ -115,3 +115,17 @@ V11.B6–B11 + V11S.B3 (watchdog: step_of chịu last.pt hỏng · ghi checkpoin
 
 **Release A/B (đã kiểm tải HTTP 200 + đúng byte)**: `demo-audio-20261014-w1` — 6 cặp câu giàu ngã/nặng, `w1_<i>_{base40k,A2_55k}.wav`
 → `https://github.com/dvchd/ViFastTts/releases/download/demo-audio-20261014-w1/w1_1_base40k.wav` (và 11 file cùng dạng)
+
+## PHẢN BIỆN NGOÀI (sub-agent 2, model mặc định — nghiên cứu E4: creak/F0/vocoder)
+
+**Đã tìm ra nguồn V11.A13 nhắc**: repo **`iamdinhthuan/tone-aware-vocos`** (paper 2026 *under review*, ẩn danh ✗ — mọi số phải đo lại). Số gốc + hệ số cụ thể:
+- **C — MR-STFT tăng trọng số ≤1 kHz (w=3×, FFT 512/1024/2048, hop 256, Hann)**: F0 RMSE **3,498→3,340 Hz (−4,5%)**, so baseline **p_holm=9,9e-5** ✓ (bằng chứng MẠNH). Objective Vocos của họ: `45·mel + 0,1·mrd + 1,0·weighted_mrstft` ⇒ **phải tune lại tỉ lệ** cho trainer ta (đề xuất quét {0,25; 0,5; 1; 2}).
+- **B — CQT critic 80–320 Hz** (fmin 80, 48 bins @24/oct, log-mag, adv 0,1 + fm 0,1): 3,340→3,271 nhưng **p_holm=0,626 KHÔNG ý nghĩa** ✗ ⇒ **công lao chính là C, không phải B**.
+- **A — feature-matching của classifier thanh = ablation ÂM** ✗: thêm A làm F0 RMSE **3,271→3,402** (p=3,7e-5 hướng xấu) ⇒ **không làm**; nếu muốn "tone-aware" thật thì đi **CTC/tone-unit** hoặc **CE trên s_k** (đã có), không feature-matching.
+- **F0 vùng creak**: gốc là **Ninh & Yamashita IS 2015 + IEICE 2015** — không phải nội suy thô mà **lan truyền pitch mark** với ngưỡng cụ thể (`MinPR=0,4 · MaxPR=2,7 · CorrThs=0,4 · cửa sổ L=min(P,15 ms)`; C1/B2 tìm tiến, C2 tìm cả hai; >25 ms coi là vô thanh). VME 14,5%→6,8% (test) **nhưng RMSE có tính vòng tròn** ✗ (reference tạo bằng chính phương pháp đó) ⇒ đừng lấy làm mốc.
+- **Khuyến nghị cho kiến trúc slot-DCT**: **nội suy có trọng số** hợp hơn mask (DCT cần contour xác định toàn slot) — **lai**: target = contour lan truyền, loss nhân `w_t = 1 − 0,5·c_t` (c_t = xác suất creak/frame) ✓.
+- **Thước F0 phân bố (mới)**: bộ 3 tầng — (1) `flatness_T = std_T(model)/std_T(thật)` theo **từng thanh** (<0,9 = xẹp); (2) **W₂** (công thức đóng 1-D) / **JSD** histogram 20–24 bin + bootstrap **theo ÂM TIẾT**; (3) phân bố slope/onset/offset theo rime (ViTone). Đơn vị = âm tiết (không frame ✗); cần **≥200–450 âm tiết/thanh**; phải **kiểm thước trước**: thật-vs-thật ≈0 + xếp đúng cặp 40k>18k ✓.
+- **Cảnh báo đúng điểm mù của dự án**: (a) **mọi detector creak tốt hơn trên giọng NỮ** (White JASA 2022) ✗ ta là nam; (b) classifier thanh trên thật chỉ ~58–68% và **recall NGÃ chỉ 6,4%** (ViTone 2026) ✗ ⇒ đừng biến creak/ngã thành cổng cứng, chỉ trọng số mềm ✓.
+- **Xếp hạng 5 việc**: 1) C (weighted MR-STFT) · 2) kiểm gate creak vs gán tay ~100 âm tiết · 3) bộ thước F0 phân bố · 4) A/B MASK vs NỘI SUY vs LAI cho target F0 creak · 5) B (CQT) chỉ nếu p_holm<0,05.
+
+**Quyết định tinh chỉnh của phiên chính**: giữ nguyên "cắt B (CQT critic) + không thêm A" ✓; **C chuyển từ "cắt" sang ứng viên rẻ có bằng chứng mạnh** (chỉ-train, 0 chi phí suy luận; cổng: F0 RMSE per-tone giảm ≥3% + `val_rough`/`eval_creak` trong ±5%, nếu trượt ⇒ `stft_coeff=0`) — xếp **sau W1/W2**, cùng đợt với E4; **E4 = nội suy có trọng số (lai) thay vì mask**; thêm **bộ thước F0 phân bố** vào danh sách thước (làm sau khi W1 xong, phải kiểm thước trước ✓).
