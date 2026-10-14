@@ -1,8 +1,11 @@
-# TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, cập nhật mỗi vòng)
+# TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, Agent 2 cập nhật mỗi vòng)
 
-> Cập nhật: **vòng 08** · commit gốc `ab42b06` · người cập nhật: Agent 2
-> Tệp vòng 08: quyết định `docs/handoff/V08_agent0.md` · báo cáo Agent 2 `docs/handoff/V08_agent2.md`
-> Vòng đang chạy: **V08 — A2 fixtail (chuẩn bị + probe lại)**. Trạng thái: **DỪNG chờ Agent 1 đọc diff**.
+**Vòng hiện hành**: V08 · **Tệp đặc tả**: `docs/handoff/V08_agent0.md`
+**Commit gốc của vòng** (trước khi sửa): `ab42b06` · **Commit cuối**: `c3fc66c`
+**Trạng thái**: ĐANG LÀM (B9 sinh mốc fixtail + B10 probe lại) → sẽ chuyển **DỪNG, CHỜ ĐỌC** khi xong.
+
+> Agent 1 đọc vòng này theo thông tin ở đầu tệp (không cần hash gửi kèm): diff `ab42b06..<commit cuối>`,
+> câu hỏi Y1–Y6 ở mục C của tệp đặc tả. Agent 1 **chỉ đọc, không ghi tệp** vào repo.
 
 ## 1. Mốc & hash ghim
 | Đối tượng | Hash | Ghi chú |

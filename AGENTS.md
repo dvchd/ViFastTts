@@ -116,8 +116,12 @@ trước khi dùng nó để quyết định — bài học §34.3→§36.4); m�
   lỗi thật: probe no-op, lệnh train từ số 0, sha256 ghim sai, tệp thô lọt git).
 - **Tệp quyết định nằm trong repo**: `docs/handoff/V<NN>_agent0.md` — Agent 2 lưu nguyên văn quyết định
   (kèm mã câu hỏi `V<NN>.B<k>` / `V<NN>.C<k>`), rồi báo commit hash. Agent 1 được nhắn đúng hash đó.
-- **Mỗi vòng chỉ một tệp còn hiệu lực** + `docs/handoff/TRANG_THAI.md` là **nguồn duy nhất** về mốc/hash
-  ghim/cổng/việc đang chờ (Agent 2 cập nhật mỗi vòng).
+- **Mỗi vòng chỉ một tệp còn hiệu lực** + `docs/handoff/TRANG_THAI.md` là **nguồn duy nhất** (Agent 2
+  cập nhật mỗi vòng). **Đầu tệp TRANG_THAI luôn ghi**: vòng hiện hành · tệp đặc tả · **commit gốc của vòng**
+  (trước khi sửa) · **commit cuối** · **trạng thái** (ĐANG LÀM / DỪNG, CHỜ ĐỌC) — Agent 1 tự tìm vòng để đọc
+  từ đây, **không cần hash gửi kèm**.
+- **Agent 1 chỉ đọc, KHÔNG ghi tệp vào repo** (không có `V0x_agent1.md`); báo cáo đọc của Agent 1 do người
+  dùng chuyển cho Agent 0. Agent 2 ghi `docs/handoff/V<NN>_agent2.md` (báo cáo + mục TỰ QUYẾT KHÁC ĐẶC TẢ).
 - **Đầu tệp chuẩn**: `VÒNG <NN> | Commit gốc: <hash> | Thay thế: …` + dòng `Agent 2 THỰC THI: Phần B |
   Agent 1 ĐỌC: Phần C | Người dùng: Phần D`.
 - **Quyết định trước 3 nhánh** cho mỗi bước có rủi ro: đạt ⇒ làm X · trượt ⇒ dừng+báo · **kết quả lạ**
