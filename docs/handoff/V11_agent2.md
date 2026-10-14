@@ -95,3 +95,23 @@ V11.B6–B11 + V11S.B3 (watchdog: step_of chịu last.pt hỏng · ghi checkpoin
 7. **3 tuần**: W1 chốt ứng viên (không train) + hiệu chuẩn `gate_threshold` trên val_calib · W2 sửa rẻ nhất còn lại (duration/prosody, hạn chế đụng core) · W3 đóng gói + niêm phong eval + đóng băng E4-vocoder/flow-matching thành roadmap.
 
 **Quyết định của phiên chính (tự quản lý)**: ÁP DỤNG 1–7. Cụ thể: cắt phần vocoder của E4 (ghi roadmap) · A1 đóng · thêm **cổng "cùng nhãn" (val fixtail)** cho bench (việc kế tiếp) · W1 = chốt A2-55k bằng A/B mù + CreaPy free-run + eval_creak (không train) · đưa **duration** vào B9 thành chẩn đoán chính · không mở vòng train acoustic/vocoder mới tới khi W1 xong.
+
+## W1 — chốt ứng viên A2-55k (không train) — số đo
+
+**CreaPy 4 bản (25 clip giàu ngã/nặng, 384 âm tiết ngã+nặng / 402 ngang+huyền):**
+
+| bản | ngã+nặng | ngang+huyền | tỉ số |
+|---|---|---|---|
+| thật | 0,1772 | 0,1026 | 1,73× |
+| copy-synth (mel thật → Vocos) | 0,1894 | 0,0794 | 2,38× |
+| free-run **base 40k** | 0,3235 | 0,1187 | 2,72× |
+| free-run **A2-55k** | 0,3320 | 0,1184 | **2,80×** |
+
+- **Cổng Muse #3 ĐẠT**: tỉ số A2-55k (2,80×) **không thấp hơn** base (2,72×) ✓
+- **Phát hiện mới**: free-run creak **cao hơn hẳn thật** (0,32 vs 0,18) trong khi copy-synth ≈ thật (0,19) ⇒ phần creak thừa đến từ **mel DỰ ĐOÁN của acoustic** (cả base lẫn A2), không chỉ từ Vocos — bổ sung cho §39 (jitter +39% ở copy-synth là chuyện khác, thang khác). ⇒ đích E4 phía **acoustic** đúng hơn là phía vocoder (khớp quyết định cắt vocoder-E4).
+
+**Cổng W1 khác**: cer_prod A2-55k **0,2322 ≤ base 0,2385** ✓ (nhưng 60k tốt hơn nhiều: 0,2013) · Δjitter A2-55k 0,0409 ≤ base+0,01 = 0,0472 ✓ · **A/B tai người = cổng còn lại**.
+**Đánh đổi 55k vs 60k**: 55k tốt hơn ở mel_z (1,1848 vs 1,1954), pF1 (0,5884), gMAE (123,35), gap_z (2,1462), Δjit (0,0409) · 60k tốt hơn ở CER (0,1961), cer_prod (0,2013), tone_C (0,8180), length_ratio (0,9007). Có thể sinh thêm cặp A/B cho 60k nếu tai bạn muốn so 3 bản.
+
+**Release A/B (đã kiểm tải HTTP 200 + đúng byte)**: `demo-audio-20261014-w1` — 6 cặp câu giàu ngã/nặng, `w1_<i>_{base40k,A2_55k}.wav`
+→ `https://github.com/dvchd/ViFastTts/releases/download/demo-audio-20261014-w1/w1_1_base40k.wav` (và 11 file cùng dạng)
