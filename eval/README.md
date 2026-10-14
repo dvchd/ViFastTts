@@ -11,6 +11,10 @@ Thư mục này **ghim** đúng các hàng đó + hash manifest, để máy/ngư
 | **train fixgap (A2 §43)** | `data/codelung/train_clean_v2_dur_seg_slot4_fixgap.jsonl` | `fdb622940e0de9560a83050f0c8467cd34dea445` | – |
 | **val300 fixgap (A2)** | `data/codelung/val_clean_v2_dur_seg_slot4_fixgap.jsonl` | `5ec5f139ce56…` (đầy đủ trong `artifacts/dataset_v2/verify_gaps_val_fixgap.json`) | – |
 | ~~holdout20 fixgap (A2)~~ **KHÔNG DÙNG** | `data/codelung/holdout_clean_v2_dur_seg_slot4_fixgap.jsonl` | `aa418147f314…` | – |
+| **train fixtail (A2 §44.8)** | `data/codelung/train_clean_v2_dur_seg_slot4_fixtail.jsonl` | `965b4798b23266c6006be658dd1e93e13d8072ac` | – |
+| **val300 fixtail (A2)** | `data/codelung/val_clean_v2_dur_seg_slot4_fixtail.jsonl` | `cdbbd659116ae9f948c56152be5b08ea7fa08115` | `eval/val300_ids.txt` |
+| **val_calib (V11.A6 — hiệu chuẩn)** | `data/codelung/val_clean_v2_dur_seg_slot4_fixtail_calib.jsonl` | `147f4b7c117f6d54ee573fcc2fa537a0188fa89f` | hàng 301–1773 chia theo clip cha, ~nửa |
+| **val_lock (V11.A6 — KHÓA)** | `data/codelung/val_clean_v2_dur_seg_slot4_fixtail_lock.jsonl` | `f6db096aa9edea1d9eca33171e00c592d065e31d` | chỉ dùng đánh giá CUỐI mỗi dòng; mỗi lần dùng ghi §44 |
 | stats F0 | `data/codelung/f0_stats_v2.json` | `505604ebf0356560fb3348691668a687c2096c51` | – |
 
 **Quy ước**: tool luôn lấy `--clips N` = **N hàng đầu** của manifest ⇒ `--clips 300` + manifest trên
