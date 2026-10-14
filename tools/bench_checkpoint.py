@@ -103,6 +103,7 @@ def main() -> None:
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--no-cer", action="store_true", help="bỏ CER (nhanh; dùng khi chỉ soi acoustic)")
     parser.add_argument("--out-dir", default="artifacts/bench")
+    parser.add_argument("--baseline", help="JSON bench mốc (so Δ + cổng cứng/rào chắn/mục tiêu A2 §44)")
     args = parser.parse_args()
 
     if args.run:
@@ -169,10 +170,50 @@ def main() -> None:
         "gap_sum_mae": _mean(free, "gap_sum_mae_frames"),
         "length_ratio": _mean(free, "length_ratio"),
         "mel_gap": _mean(free, "mel_gap"),
+        "mel_gap_z": _mean(free, "mel_gap_z"),
+        "pause_f1_all": _mean(free, "pause_f1_all"),
+        "gap_sum_mae_all": _mean(free, "gap_sum_mae_all_frames"),
+        "pause_precision": _mean(free, "pause_precision"),
+        "f0_nga": (((tf or {}).get("f0_rmse_cents_by_tone") or {}).get("NGA") or {}).get("median"),
         "creak_djitter_nga": creak_nga.get("jitter"),
         "creak_dhnr_nga": creak_nga.get("hnr"),
     }
-    report = {"tag": tag, "config": config, "checkpoint": checkpoint, "summary": row,
+    gates: dict[str, object] = {}
+    if args.baseline:
+        base = json.loads(Path(args.baseline).read_text(encoding="utf-8")).get("summary", {})
+        hard = {
+            "mel_l1_z<=1.16": (row["mel_l1_z"] or 9e9) <= 1.16,
+            "mel_db<=8.7": (row["mel_db_speech"] or 9e9) <= 8.7,
+            "rough>=0.40": (row["rough"] or -1) >= 0.40,
+            "tone_C>=0.79": (row["tone_C"] or -1) >= 0.79,
+            "cer<=base+0.03": (row["cer"] is None or base.get("cer") is None
+                               or row["cer"] <= base["cer"] + 0.03),
+        }
+        guard = {
+            "mel_gap không tăng": (row["mel_gap"] is None or base.get("mel_gap") is None
+                                   or row["mel_gap"] <= base["mel_gap"] + 1e-6),
+            "mel_l1_z<=base*1.01": (row["mel_l1_z"] or 9e9) <= (base.get("mel_l1_z") or 0) * 1.01,
+            "tone_C>=base-0.01": (row["tone_C"] or -1) >= (base.get("tone_C") or 0) - 0.01,
+            "f0_nga<=base+5c": (row["f0_nga"] is None or base.get("f0_nga") is None
+                                or row["f0_nga"] <= base["f0_nga"] + 5.0),
+        }
+        target = {
+            "pause_f1_all>=base+0.073": (row["pause_f1_all"] is not None and base.get("pause_f1_all") is not None
+                                         and row["pause_f1_all"] >= base["pause_f1_all"] + 0.073),
+            "gap_sum_mae_all<=base*0.714": (row["gap_sum_mae_all"] is not None and base.get("gap_sum_mae_all") is not None
+                                            and row["gap_sum_mae_all"] <= base["gap_sum_mae_all"] * 0.714),
+            "length_ratio 1.00±0.05": (row["length_ratio"] is not None and abs(row["length_ratio"] - 1.0) <= 0.05),
+        }
+        gates = {"hard": hard, "guard": guard, "target": target}
+        print(f"\n== So với mốc {args.baseline} ==")
+        for group, block in gates.items():
+            label = {"hard": "CỔNG CỨNG", "guard": "RÀO CHẮN", "target": "MỤC TIÊU A2"}[group]
+            marks = " · ".join(f"{'✅' if ok else '❌'} {name}" for name, ok in block.items())
+            print(f"  {label}: {marks}")
+        print(f"  THEO DÕI: pause_precision {row['pause_precision']} · Δmel_z "
+              f"{(row['mel_l1_z'] or 0) - (base.get('mel_l1_z') or 0):+.4f}")
+
+    report = {"tag": tag, "config": config, "checkpoint": checkpoint, "summary": row, "gates": gates,
               "raw": {"tf": tf, "free": free, "cer": cer, "tone": tone, "creak": creak}}
     (out_dir / f"{tag}.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 

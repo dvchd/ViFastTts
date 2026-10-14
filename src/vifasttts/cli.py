@@ -188,6 +188,8 @@ def train_v2(
     warm_start: str | None = typer.Option(None, help="Checkpoint v1 (B0) để warm-start (§11)"),
     max_steps: int | None = typer.Option(None, help="Ghi đè số bước tối đa (chạy thử nhanh)"),
     resume: str | None = typer.Option(None, help="Checkpoint v2 .pt để tiếp tục (resume)"),
+    reset_val_state: bool = typer.Option(False, "--reset-val-state",
+                                         help="X3: resume bằng tập val KHÁC ⇒ reset best_val/no_improve"),
     device: str | None = typer.Option(None, help="Ghi đè device (auto|cpu|mps|cuda)"),
     adversarial: bool | None = typer.Option(None, "--adversarial/--no-adversarial",
                                             help="T4.1: bật/tắt mel discriminator (train-only)"),
@@ -196,7 +198,8 @@ def train_v2(
     from vifasttts.train_v2 import train_slot_v2
 
     train_slot_v2(load_config(config), train_manifest, val_manifest, output,
-                  warm_start=warm_start, max_steps=max_steps, resume=resume, device=device,
+                  warm_start=warm_start, max_steps=max_steps, resume=resume,
+                  reset_val_state=reset_val_state, device=device,
                   adversarial_flag=adversarial)
 
 

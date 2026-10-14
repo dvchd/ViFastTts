@@ -135,6 +135,7 @@ def train_slot_v2(
     warm_start: str | None = None,
     max_steps: int | None = None,
     resume: str | None = None,
+    reset_val_state: bool = False,
     device: str | None = None,
     adversarial_flag: bool | None = None,
 ) -> None:
@@ -259,6 +260,11 @@ def train_slot_v2(
         start_step = int(state.get("step", 0))
         best_val = float(state.get("best_val", float("inf")))
         no_improve = int(state.get("no_improve", 0))
+        if reset_val_state:
+            # X3 (§43): resume bằng TẬP VAL KHÁC (vd manifest fixgap) ⇒ best_val/no_improve cũ
+            # vô nghĩa với tập mới; reset để best.pt/early-stop tính lại từ đầu.
+            print(f"X3: reset val state (best_val {best_val:.4f} → inf · no_improve {no_improve} → 0)")
+            best_val, no_improve = float("inf"), 0
         print(f"Tiếp tục từ {resume} (bước {start_step}, best_val {best_val:.4f})")
 
     # ── T4.1: adversarial train-only (mel sau postnet; D tách khỏi checkpoint/ONNX) ──
