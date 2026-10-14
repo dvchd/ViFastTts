@@ -408,3 +408,22 @@ def test_evaluate_free_v2_them_nhip_nghi_va_ngu_dieu(setup):
     # nhóm
     assert set(report["groups"]) == {"coda", "tone"}
     json.dumps(report)
+
+
+def test_syl_gap_masks_bu_nhau_va_bo_lead():
+    """§44/B2: syl ∪ gap phủ đúng [lead, frames), không trùng; đổi gaps ⇒ chỉ vùng gap đổi."""
+    from tools.eval_acoustic import _syl_gap_masks
+
+    durations = [4, 5, 6]          # 3 âm tiết
+    gaps = [2, 3, 7]               # gap giữa (2,3) + gap đuôi (7)
+    lead = 2
+    gap_valid, syl_valid = _syl_gap_masks(durations, gaps, lead, frames=29)  # = lead+syl+gap
+    assert not (gap_valid & syl_valid).any()                    # không trùng
+    covered = gap_valid | syl_valid
+    assert covered[2:].all() and not covered[:2].any()          # phủ đúng [lead, T)
+    assert int(gap_valid.sum()) == 2 + 3 + 7                    # đúng khối lượng gap
+    assert int(syl_valid.sum()) == 4 + 5 + 6                    # đúng khối lượng âm tiết
+    # target fixgap: chỉ gap đuôi dài thêm ⇒ vùng âm tiết KHÔNG đổi
+    gap2, syl2 = _syl_gap_masks(durations, [2, 3, 20], lead, frames=42)
+    assert int(syl2.sum()) == int(syl_valid.sum())
+    assert int(gap2.sum()) == int(gap_valid.sum()) + 13

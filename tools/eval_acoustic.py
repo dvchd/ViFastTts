@@ -424,6 +424,22 @@ def _group_report(store: dict, vuv_store: dict, group_by: list[str]) -> dict:
 
 
 # ── nhịp nghỉ (free-run) ──────────────────────────────────────────────────────
+def _syl_gap_masks(durations: list[int], gaps: list[int], lead: int,
+                   frames: int) -> tuple[np.ndarray, np.ndarray]:
+    """(gap_valid, syl_valid) cho `frames` khung đầu: bỏ vùng lead; hai mask BÙ NHAU (§44/B2).
+
+    `syl_valid` = khung âm tiết (ngoài mặt nạ gap, trừ lead) — dùng để tách lỗi mel khi target
+    có thêm lặng (val fixgap) thành phần "âm tiết" vs phần "gap".
+    """
+    import numpy as np
+
+    gap_mask = _gap_frame_mask_from(durations, gaps, lead, frames)
+    lo = min(int(lead), int(frames))
+    inside = np.arange(int(frames)) >= lo
+    gap_valid = gap_mask & inside
+    return gap_valid, (inside & ~gap_valid)
+
+
 def _gap_frame_mask_from(durations, gaps, lead: int, frames: int) -> np.ndarray:
     """Mask [frames] True ở frame thuộc `G_lead` hoặc slot G (gap) — như `train_v2._gap_frame_mask`."""
     mask = np.zeros(int(frames), dtype=bool)
@@ -675,6 +691,8 @@ def evaluate_tf_v2(model, dataset, config: dict, *, use_seg: bool,
     duration_errors: list[float] = []
     slot_sum_errors: list[float] = []
     gap_z_errors: list[float] = []
+    syl_z_errors: list[float] = []
+    syl_db_errors: list[float] = []
     gap_db_errors: list[float] = []
     count = len(dataset) if limit is None else min(limit, len(dataset))
 
@@ -766,9 +784,8 @@ def evaluate_tf_v2(model, dataset, config: dict, *, use_seg: bool,
                                    float(cents.mean()))
 
         # Mel trên frame gap/lead thật (như `train_v2._mel_split`): model có "im lặng" đúng chỗ?
-        gap_mask = _gap_frame_mask_from(item["durations"].tolist(), item["gaps"].tolist(),
-                                        lead_frames, frames)
-        gap_valid = gap_mask & (np.arange(frames) >= lo)
+        gap_valid, syl_valid = _syl_gap_masks(item["durations"].tolist(), item["gaps"].tolist(),
+                                              lead_frames, frames)
         gap_z = gap_db = None
         if bool(gap_valid.any()):
             gap_error = (pred_mel[:frames] - target_mel[:frames]).abs().mean(dim=-1)[gap_valid]
@@ -776,6 +793,14 @@ def evaluate_tf_v2(model, dataset, config: dict, *, use_seg: bool,
             gap_db = float((raw_pred[:frames] - raw_target[:frames]).abs().mean(dim=-1)[gap_valid].mean() * 8.686)
             gap_z_errors.append(gap_z)
             gap_db_errors.append(gap_db)
+        # §44/B2: vùng ÂM TIẾT (ngoài gap, bỏ lead) — kỳ vọng ≈ mel_l1_z @ val cũ khi H1 đúng.
+        syl_z = syl_db = None
+        if bool(syl_valid.any()):
+            syl_error = (pred_mel[:frames] - target_mel[:frames]).abs().mean(dim=-1)[syl_valid]
+            syl_z = float(syl_error.mean())
+            syl_db = float((raw_pred[:frames] - raw_target[:frames]).abs().mean(dim=-1)[syl_valid].mean() * 8.686)
+            syl_z_errors.append(syl_z)
+            syl_db_errors.append(syl_db)
 
         # Tổng slot model sinh ra so Σ thật (tf_syl: đo sai số B2; tf_seg: ≈ 0).
         true_total = lead_frames + sum(item["durations"].tolist()) + sum(item["gaps"].tolist())
@@ -790,6 +815,8 @@ def evaluate_tf_v2(model, dataset, config: dict, *, use_seg: bool,
             "duration_mae_frames": round(float((predicted_duration - item["durations"]).abs().mean()), 3),
             "slot_sum_err_frames": round(slot_sum_errors[-1], 3),
             "mel_gap_z": round(gap_z, 4) if gap_z is not None else None,
+            "syl_z": round(syl_z, 4) if syl_z is not None else None,
+            "syl_db": round(syl_db, 4) if syl_db is not None else None,
             "mel_gap_db": round(gap_db, 3) if gap_db is not None else None,
         })
 
@@ -814,6 +841,8 @@ def evaluate_tf_v2(model, dataset, config: dict, *, use_seg: bool,
         "duration_mae_ms": round(float(np.mean(duration_errors)) * frame_ms, 2) if duration_errors else None,
         "slot_sum_mae_frames": round(float(np.mean(slot_sum_errors)), 3) if slot_sum_errors else None,
         "mel_gap_z": _quantiles(gap_z_errors),
+        "syl_z": _quantiles(syl_z_errors),
+        "syl_db": _quantiles(syl_db_errors),
         "mel_gap_db": _quantiles(gap_db_errors),
         "mel_gap_note": ("L1 mel CHỈ frame gap/lead THẬT (như `train_v2._mel_split`) — "
                          "model được cho gap thật ở chế độ tf nên đây là 'im lặng đúng chỗ'"),

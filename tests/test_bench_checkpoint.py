@@ -6,7 +6,8 @@ from tools.bench_checkpoint import FAIL, NO_BASE, NO_DATA, PASS, hard_gates, tar
 
 BASE_OLD = {"mel_l1_z": 1.14, "mel_db_speech": 8.9, "rough": 0.42, "tone_C": 0.80,
             "cer": 0.23, "f0_nga": 177.0}
-BASE_FIX = {"mel_gap": 3.1, "pause_f1_all": 0.50, "gap_sum_mae_all": 200.0}
+BASE_FIX = {"mel_gap": 3.1, "pause_f1_all": 0.50, "gap_sum_mae_all": 200.0,
+            "syl_z": 1.16, "mel_gap_z": 3.0}
 
 
 def _row_old(**over):
@@ -16,9 +17,22 @@ def _row_old(**over):
 
 
 def _row_fix(**over):
-    row = {"mel_gap": 3.0, "pause_f1_all": 0.58, "gap_sum_mae_all": 140.0, "length_ratio": 1.02}
+    row = {"mel_gap": 3.0, "pause_f1_all": 0.58, "gap_sum_mae_all": 140.0, "length_ratio": 1.02,
+           "syl_z": 1.16, "mel_gap_z": 2.5}
     row.update(over)
     return row
+
+
+def test_cong_cung_co_syl_z_va_muc_tieu_gap_z():
+    """§44/B3: syl_z là cổng cứng (≤ mốc×1.01); gap_z là mục tiêu (≤ mốc×0.85)."""
+    base_fix = {**BASE_FIX, "syl_z": 1.16, "mel_gap_z": 3.0}
+    row_fix = {**_row_fix(), "syl_z": 1.17, "mel_gap_z": 2.5}
+    hard = hard_gates(_row_old(), BASE_OLD, row_fix, base_fix, rough_old=0.42)
+    assert hard["syl_z"][0] == PASS
+    bad = hard_gates(_row_old(), BASE_OLD, {**row_fix, "syl_z": 1.19}, base_fix, rough_old=0.42)
+    assert bad["syl_z"][0] == FAIL
+    assert target_gates(row_fix, base_fix)["gap_z≤mốc×0.85"][0] == PASS
+    assert target_gates({**row_fix, "mel_gap_z": 2.6}, base_fix)["gap_z≤mốc×0.85"][0] == FAIL
 
 
 def test_cong_cung_tuong_doi_dung_chieu():
@@ -51,5 +65,6 @@ def test_cong_muc_tieu_thieu_du_lieu_la_chua_do():
     assert gates["pause_f1_all≥mốc+0.073"] == (NO_DATA, "chưa đo")
     assert gates["gap_sum_mae_all≤mốc×0.714"][0] == PASS
     assert gates["length_ratio 1.00±0.05"][0] == PASS
-    bad = target_gates(_row_fix(pause_f1_all=0.55, gap_sum_mae_all=150.0, length_ratio=1.2), BASE_FIX)
+    bad = target_gates(_row_fix(pause_f1_all=0.55, gap_sum_mae_all=150.0, length_ratio=1.2,
+                                mel_gap_z=2.6), BASE_FIX)
     assert all(state == FAIL for state, _ in bad.values())

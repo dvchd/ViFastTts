@@ -38,7 +38,8 @@ REFERENCE_ABSOLUTE = {"mel_l1_z": 1.16, "mel_db": 8.7, "rough": 0.40, "tone_C": 
 #: Ngưỡng TƯƠNG ĐỐI của cổng cứng (so mốc cùng bản val).
 RELATIVE_HARD = {"mel_l1_z": ("mul", 1.01), "mel_db": ("add", 0.10), "rough": ("sub", -0.01),
                  "tone_C": ("sub", -0.01), "cer": ("add", 0.03), "f0_nga": ("add", 5.0),
-                 "mel_gap": ("add", 0.0)}  # mel_gap ≤ mốc (giảm mới tốt)
+                 "mel_gap": ("add", 0.0),  # mel_gap ≤ mốc (giảm mới tốt)
+                 "syl_z": ("mul", 1.01)}  # §44/B3: vùng âm tiết @ fixgap không xấu quá 1%
 PASS, FAIL, NO_BASE, NO_DATA = "pass", "fail", "nobase", "nodata"
 SYMBOL = {PASS: "✅", FAIL: "❌", NO_BASE: "🚫", NO_DATA: "⏳"}
 
@@ -162,6 +163,7 @@ def hard_gates(row_old: dict, base_old: dict | None, row_fix: dict, base_fix: di
         "cer": (row_old.get("cer"), base_old.get("cer")),
         "f0_nga": (row_old.get("f0_nga"), base_old.get("f0_nga")),
         "mel_gap": (row_fix.get("mel_gap"), base_fix.get("mel_gap")),
+        "syl_z": (row_fix.get("syl_z"), base_fix.get("syl_z")),
     }
     return {key: _relative_gate(key, value, limit) for key, (value, limit) in values.items()}
 
@@ -184,6 +186,9 @@ def target_gates(row_fix: dict, base_fix: dict | None) -> dict[str, tuple[str, s
                                           lambda r, b: r <= b * 0.714),
         "length_ratio 1.00±0.05": gate(row_fix.get("length_ratio"), 1.0,
                                        lambda r, _b: abs(r - 1.0) <= 0.05),
+        # §44/B3: A2 có nhãn cho các khung gap ⇒ vùng gap phải giảm ≥ 15% (ước lượng đầu, chỉnh sau).
+        "gap_z≤mốc×0.85": gate(row_fix.get("mel_gap_z"), base.get("mel_gap_z"),
+                               lambda r, b: r <= b * 0.85),
     }
 
 
@@ -217,6 +222,7 @@ def _eval_block(config: str, checkpoint: str, val_manifest: str, holdout: str | 
         "pause_precision": _mean(free, "pause_precision"),
         "length_ratio": _mean(free, "length_ratio"),
         "mel_gap": _mean(free, "mel_gap"), "mel_gap_z": _mean(free, "mel_gap_z"),
+        "syl_z": _mean(tf, "syl_z"), "syl_db": _mean(tf, "syl_db"),
     }
     return row, {"tf": tf, "free": free, "cer": cer}
 
@@ -265,11 +271,13 @@ def main() -> None:
                                    with_cer=False)
     tone = _run_tool(
         ["tools/eval_tone_paths.py", "--config", config, "--checkpoint", checkpoint,
-         "--clips", str(args.tone_clips), "--out", str(args.out_dir / f"{tag}_tone.json")],
+         "--manifest", args.val_manifest_old, "--clips", str(args.tone_clips),
+         "--out", str(args.out_dir / f"{tag}_tone.json")],
         args.out_dir / f"{tag}_tone.json", "thanh A/B/C (tone_ruler)")
     creak = _run_tool(
         ["tools/eval_creak.py", "--config", config, "--checkpoint", checkpoint,
-         "--clips", str(args.creak_clips), "--out", str(args.out_dir / f"{tag}_creak.json")],
+         "--manifest", args.val_manifest_old, "--clips", str(args.creak_clips),
+         "--out", str(args.out_dir / f"{tag}_creak.json")],
         args.out_dir / f"{tag}_creak.json", "rè creak (ngã/nặng)")
     tone_c = None
     if tone:
@@ -309,7 +317,10 @@ def main() -> None:
           f"pause_f1_all {row_fix['pause_f1_all']} · gap_mae_all {row_fix['gap_sum_mae_all']} · "
           f"precision {row_fix['pause_precision']} · len_ratio {row_fix['length_ratio']} · "
           f"mel_gap {row_fix['mel_gap']} · rough {row_fix['rough']}")
-    print(f"  rè ngã: Δjitter {row_fix['creak_djitter_nga']} · Δhnr {row_fix['creak_dhnr_nga']}")
+    print(f"  rè ngã: Δjitter {row_fix['creak_djitter_nga']} · Δhnr {row_fix['creak_dhnr_nga']}"
+          f" · (thanh+rè chấm @ val CŨ, manifest tường minh)")
+    print(f"  vùng (tf @ fixgap): syl_z {row_fix['syl_z']} · syl_db {row_fix['syl_db']} · "
+          f"gap_z {row_fix['mel_gap_z']}")
     if base_fix:
         f1_base, gap_base = base_fix.get("summary", {}).get("pause_f1_all"), base_fix.get("summary", {}).get("gap_sum_mae_all")
         if f1_base is not None and gap_base is not None:
