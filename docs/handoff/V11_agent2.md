@@ -182,3 +182,19 @@ mel_z 1,1645 ✓ · dB 8,8116 ✓ (tốt hơn base) · rough **0,3588** ✓ (≥
 **Đã sửa trong phiên**: sh25 promote vào source + luật AGENTS.md ✓ · bench default `--val-manifest` → fixtail ✓ · config A1 `pause_pos_weight` → **2,244** ✓ · README H1 → số fixtail (gap_z 2,1529) ✓.
 **Còn nợ (ghi rõ)**: (a) `rough` 12 clip lật phán quyết ⇒ phải nâng cỡ mẫu + hiệu chuẩn lại mốc rough ✗ (chưa làm); (b) `base_60k/resolved_config.json` ghi sai `max_steps` ✗ (tệp local cũ, chỉ ghi chú); (c) biên mel ±1% ≈ 1–2σ nhiễu ⇒ nêu trong docs khi bàn cổng ✗.
 **Hàng đợi**: E4-rè (nội suy có trọng số + loss C) → chẩn đoán lỗi phát âm chung (cần câu lỗi từ user; nếu không có thì tự soát frontend trên bộ câu khó) → W2-duration → B10 → bộ 30 câu.
+
+## P0.2 — TỰ SOÁT LỖI PHÁT ÂM (frontend) — tìm ra 5 lỗi thật (14/10)
+
+Soát 6 câu demo (parse 1:1 từ→âm tiết ✓) + bộ câu khó → **5 lỗi rõ** ✗:
+
+| Input | Hiện tại | Đúng ra phải |
+|---|---|---|
+| `TP.HCM` | **"a a"** ✗✗ (mất hết chữ!) | "thành phố hồ chí minh" hoặc đọc chữ cái |
+| `file wav` | **"phây a"** ✗✗ ("wav" mất) | "phai uây-ê-vê" (hoặc giữ tiếng Anh) |
+| `COVID-19` | **"a mười chín"** ✗✗ ("COVID" mất) | "cô-vít mười chín" |
+| `anh A và chị B` | "anh **a** và chị **a**" ✗ (B→a) | "anh a và chị **bê**" |
+| `2+2=4` | "hai hai bốn" ✗ (mất "+") | "hai **cộng** hai **bằng** bốn" |
+
+Nguyên nhân nghi: nhánh xử lý **chữ cái đơn / viết tắt có dấu chấm / gạch nối** rơi về mặc định "a" ✗ (chưa có test phủ ✗).
+**Phát hiện thêm (quan trọng, giải thích "lỗi giống nhau ở cả 2 model")**: text trong manifest **đã chuẩn hoá sẵn** và **chứa lỗi từ nguồn** — ví dụ câu 2 có **"thư dục"** (đúng là "thư mục") ✗ ⇒ model **đọc đúng cái sai của transcript** ✓ — đây là **lỗi dữ liệu**, không phải checkpoint ⇒ đúng như user nói "lỗi giống nhau" ✗.
+**Việc kế tiếp**: (1) sửa 5 lỗi frontend + test khóa; (2) rà transcript (tìm các từ sai chính tả phổ biến kiểu "dục/mục", "ây ai") — có thể sửa bằng bộ override + lọc tự động; (3) rồi E4-rè.
