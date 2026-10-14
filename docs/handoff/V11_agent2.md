@@ -17,6 +17,11 @@
 ## Phần B-II (sau khi A2 tới 60k) — chưa làm
 V11.B6–B11 + V11S.B3 (watchdog: step_of chịu last.pt hỏng · ghi checkpoint nguyên tử · chặn nhánh đầu khi có history.csv — **KHÔNG sửa watch_train_v2.sh khi A2 đang chạy**, đúng V11S.A2).
 
+**Phát hiện + xử lý trước B6 (TỰ QUYẾT #4)**: trainer chỉ ghi `last.pt` (save_every 5000 **ghi đè**, không giữ checkpoint theo mốc)
+⇒ B6 cần 45k/50k/55k sẽ **mất** nếu không sao lưu. Đã phóng watcher CPU (`/private/tmp/opencode/ckpt_saver.py`, chỉ đọc log +
+`last.pt`, thử lại khi đọc lỗi) sao lưu `runs/acoustic_v2_A2_fixtail/ckpt_{45,50,55}k.pt` khi A2 qua mốc (A2 ở 43.750 lúc phóng
+⇒ 45k chưa qua ✓). 60k = `last.pt` cuối. Kế hoạch B6: bench 4 mốc × (`ckpt_45k/50k/55k/last.pt`) + `cer_prod` base 40k.
+
 ## TỰ QUYẾT KHÁC ĐẶC TẢ (tạm)
 1. UTMOSv2 cài từ GitHub + tải trọng số bằng `curl` (đặc tả không nói cách; `wget` thiếu trên máy).
 2. Test gate_threshold: kỳ vọng "số frame không tăng" thay vì "bằng nhau" (ngưỡng cao hơn cắt bớt gap là đúng chức năng — test đầu tiên của tôi sai kỳ vọng, đã sửa).
