@@ -52,7 +52,8 @@ def _load_creapy(source: str):
 
 def measure(clips_path: str | Path, synth_dir: str | Path, *, creapy_src: str = "~/creapy-src",
             gender: str = "male", threshold: float = 0.8, ste_percentile: float = 30.0,
-            real: bool = False, windows_path: str | Path | None = None) -> dict:
+            real: bool = False, windows_path: str | Path | None = None,
+            bootstrap: int = 0) -> dict:
     """Tính tỉ lệ block creak theo nhóm thanh trên `synth_dir/<parent>.wav`.
 
     `real=True` (mốc đối chứng): đọc chính `row["audio_path"]` cắt theo `frame_range`
@@ -121,6 +122,24 @@ def measure(clips_path: str | Path, synth_dir: str | Path, *, creapy_src: str = 
 
     groups = {name: {"n": len(values), "mean": float(np.mean(values)), "median": float(np.median(values))}
               for name, values in sorted(store.items())}
+    # V11S3 (đề xuất phản biện Muse): CI bootstrap theo ÂM TIẾT — biết ngưỡng nhiễu thật,
+    # tránh đọc chênh lệch 2–5% thành "tiến bộ" khi cỡ mẫu ~400 âm tiết/nhóm.
+    if bootstrap > 0 and "ngã+nặng" in store and "ngang+huyền" in store:
+        rng = np.random.default_rng(1234)
+        a = np.asarray(store["ngã+nặng"], dtype=np.float64)
+        b = np.asarray(store["ngang+huyền"], dtype=np.float64)
+        means_a, means_b, ratios = [], [], []
+        for _ in range(bootstrap):
+            sample_a = a[rng.integers(0, a.size, a.size)]
+            sample_b = b[rng.integers(0, b.size, b.size)]
+            means_a.append(sample_a.mean())
+            means_b.append(sample_b.mean())
+            ratios.append(sample_a.mean() / max(sample_b.mean(), 1e-9))
+        def _ci(values: list[float]) -> list[float]:
+            return [float(np.percentile(values, 2.5)), float(np.percentile(values, 97.5))]
+        groups["ngã+nặng"]["ci95"] = _ci(means_a)
+        groups["ngang+huyền"]["ci95"] = _ci(means_b)
+        groups["ratio_ci95"] = _ci(ratios)
     ratio = None
     if "ngã+nặng" in groups and "ngang+huyền" in groups:
         ratio = groups["ngã+nặng"]["mean"] / max(groups["ngang+huyền"]["mean"], 1e-9)
@@ -148,6 +167,8 @@ def main() -> None:
     parser.add_argument("--gender", default="male")
     parser.add_argument("--threshold", type=float, default=0.8)
     parser.add_argument("--ste-percentile", type=float, default=30.0)
+    parser.add_argument("--bootstrap", type=int, default=0,
+                        help="số lần bootstrap theo âm tiết cho CI 95% (0 = tắt)")
     parser.add_argument("--real", action="store_true",
                         help="Mốc đối chứng: đọc audio gốc theo frame_range thay vì wav tổng hợp")
     parser.add_argument("--windows", default=None,
@@ -155,13 +176,16 @@ def main() -> None:
     args = parser.parse_args()
     result = measure(args.clips, args.synth_dir, creapy_src=args.creapy_src, gender=args.gender,
                      threshold=args.threshold, ste_percentile=args.ste_percentile, real=args.real,
-                     windows_path=args.windows)
+                     windows_path=args.windows, bootstrap=args.bootstrap)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"clip dùng {result['n_clips'] - len(result['clips_loi'])}/{result['n_clips']}"
           f"{' (lỗi: ' + ', '.join(result['clips_loi'][:3]) + '…)' if result['clips_loi'] else ''}")
     for name, values in result["groups"].items():
-        print(f"  {name:<12} n={values['n']:>5}  mean={values['mean']:.4f}  median={values['median']:.4f}")
+        if not isinstance(values, dict) or "mean" not in values:
+            continue
+        ci = f"  CI95 [{values['ci95'][0]:.4f}, {values['ci95'][1]:.4f}]" if "ci95" in values else ""
+        print(f"  {name:<12} n={values['n']:>5}  mean={values['mean']:.4f}  median={values['median']:.4f}{ci}")
     if result["ratio"] is not None:
         print(f"  tỉ lệ ngã+nặng / ngang+huyền = {result['ratio']:.3f} (thật 1,73)")
     print(f"→ {args.out}")
