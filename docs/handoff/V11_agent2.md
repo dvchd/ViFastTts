@@ -24,6 +24,22 @@
 | V11S2.B4 | CreaPy | ✅ **ĐẠT kiểm chứng — chuyển thành thước THEO DÕI** (Agent 0; free-run 4 bản sau B6) — cài vào `~/creapy-venv` (clone `SPSC-TUGraz/creapy` về `~/creapy-src`, KHÔNG vào repo, không thêm dependency — GPL-3.0); tham số theo A4: **min creak 60 ms · ngưỡng 0,8 · STE phân vị 30 mỗi clip**, `gender_model=male` (F0 trung vị giọng user **122 Hz ⇒ nam**). Trên audio THẬT (25 clip giàu ngã/nặng, 786 âm tiết): **ngã+nặng 0,1774 vs ngang+huyền 0,1023 = 1,73× ⇒ creak rõ hơn ⇒ ĐẠT** (ngưỡng 1,15×). Copy-synth 25 clip **xong**: mel thật → Vocos base: **ngã+nặng 0,1893 vs ngang+huyền 0,0792 (2,39×)** — Vocos GIỮ (chí rõ hơn) tương phản creak so với audio thật (1,73×) ⇒ không phải nguồn làm mất creak; **free-run base 40k để sau B6** (cần MPS) |
 | V11S2.B5 | hàng val thiếu | ✅ hàng **`4ITcvEa_Acc_0186__s01`** (parent `4ITcvEa_Acc_0186` **có trong val300**) ⇒ bị loại để chống rò rỉ đúng như dự đoán (đã ghi §44) |
 
+## Phần B-II — A2 ĐÃ XONG 60k (15:40) — số theo dõi (báo theo V11S2.A2)
+
+**A2 kết thúc sạch**: step 60000 · best.pt @42000 (best_val 0,5886) · last.pt @60000 · no_improve 18 · watchdog đóng đúng.
+`ckpt_45k/50k/55k` ✓ (sha 45k `db37bbe6…`, 55k `9e44e9f7…`) · sự cố 55.850 → resume 55.000 đã xử lý ✓.
+
+| mốc | val f0p | vs base (0,41400) | train_pause_gate | val_pause_gate | val/train | val_pause_frac |
+|---|---|---|---|---|---|---|
+| 45000 | 0,4326 | **+4,50%** | 0,1038 | 0,9855 | 9,5× | 0,122 |
+| 50000 | 0,4678 | **+12,99%** ⚠ | 0,0787 | 1,0934 | 13,9× | 0,127 |
+| 55000 | 0,4710 | **+13,77%** ⚠ | 0,0586 | 1,1796 | 20,1× | 0,131 |
+| 60000 | 0,4987 | **+20,47%** ⚠ | 0,0479 | 1,2996 | 27,2× | 0,137 |
+
+**⚠ TRIGGER (V11S2.A2)**: val f0p **3+ mốc liên tiếp > +5% VÀ xu hướng tăng rõ** (4,50 → 12,99 → 13,77 → 20,47%) ⇒ **báo ngay**.
+Lưu ý kỹ thuật: f0p là loss **kéo contour về prior trung bình của thanh** — nó TĂNG có thể do model học contour **riêng biệt hơn** (xa prior), chưa chắc là F0 xấu đi; **quyết định cuối theo cổng cứng F0 NGÃ (+5 cent) + tone_C** ở B6 (đang chạy).
+**⚠ Thêm**: BCE pause val **tăng** (0,986→1,300) trong khi train giảm (0,104→0,048) ⇒ tỉ số val/train **xấu dần** (9,5×→27,2×; base ~20×) — cần bench xác nhận recall/f1 thật.
+
 ## Phần B-II (sau khi A2 tới 60k) — chưa làm
 V11.B6–B11 + V11S.B3 (watchdog: step_of chịu last.pt hỏng · ghi checkpoint nguyên tử · chặn nhánh đầu khi có history.csv — **KHÔNG sửa watch_train_v2.sh khi A2 đang chạy**, đúng V11S.A2).
 
