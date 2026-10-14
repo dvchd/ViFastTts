@@ -75,3 +75,42 @@ Chi tiết: `docs/handoff/V11S3_giong_tong_hop.md`. Tóm tắt:
 2. Train lại với **manifest typo1** (đã sửa 114 row) — kiểm CER có giảm không.
 3. Thu 60 câu → thêm vào train với trọng số cao cho ô hiếm.
 4. Bộ thước F0 phân bố (queue cũ) + `rough` hiệu chuẩn lại.
+
+---
+
+## 8. KẾT QUẢ CUỐI ĐÊM (E4b/E4c) + CHẨN ĐOÁN KIẾN TRÚC (trả lời câu hỏi "do đâu?")
+
+### 8.1 Số cuối (creak TUYỆT ĐỐI ngã+nặng · mốc THẬT 0,1893 · nhiễu ±9% từ bootstrap)
+
+| Bản | creak tuyệt đối | ratio | Bench |
+|---|---|---|---|
+| THẬT (Vocos-render) | 0,1893 | 2,390 | — |
+| base 40k | 0,3235 | 2,725 | ĐẠT CỨNG ✓ |
+| **A2 42k (đang dùng)** | **0,3302** | 2,587 | **ĐẠT CỨNG ✓** (re-bench cổng mới) |
+| A2 55k | 0,3320 | 2,804 | — |
+| E4a 50k (làm sạch nhãn F0) | 0,3295 (≈) | 2,785 | TỪ CHỐI ✗ |
+| **E4b 50k (oversample ô hiếm)** | **0,2818** ✓✓ (−13%) | 3,217 | TỪ CHỐI ✗ (3 cổng mel; mel_db_fix +1,25%) |
+| E4c 50k (làm nét mel lúc train) | 0,3218 (≈) | 2,529 | TỪ CHỐI ✗ |
+
+**So sánh SẠCH**: E4a và E4b cùng base (A2@42k) + cùng lịch cosine → 50k ⇒ **biến số duy nhất là oversample**
+⇒ **rè −13% quy được về oversample** ✓; E4c (làm nét *lúc train*) **không** ăn thua ⇒ sửa **post-hoc**
+(sh25) hiệu quả hơn sửa lúc train ✗✓. Kiểm liều–đáp ứng: làm nét mel model α=3,0 ⇒ creak 0,2775→**0,1804**
+(về sát mốc thật 0,1893) ⇒ **demo α=1,5 (đang dùng) vs α=3,0** để tai user quyết.
+
+### 8.2 Chẩn đoán: nút cổng nằm ở đâu? (xếp theo bằng chứng)
+
+| Nghi vấn | Bằng chứng đo được | Kết luận |
+|---|---|---|
+| **Training chưa đủ?** | 1 epoch = 1.209 bước (batch 8) ⇒ 40k bước ≈ **33 epoch**; val mel hữu thanh **phẳng từ ~18k** (tốt nhất 0,5777@18k vs 0,5910@40k); train tiếp 40k→60k còn **xấu** | ✗ **Không** — đã bão hoà, còn nhích overfit |
+| **Tham số chưa đủ?** | small→base: mel −1,7% (1,1603→1,1411) + tách thanh tốt hơn ✓; nhưng base **phẳng**; ước lượng "large cần ≥40h" | ✗ ở quy mô hiện tại — thêm tham số một mình vô ích |
+| **Kiến trúc thiếu?** | (a) mel model **mờ hơn thật 63%** (rough 0,37) và liều–đáp ứng **chứng minh độ nét điều khiển creak**; (b) acoustic chiếm **~11×** sai số so vocoder (mel 1,36 vs roundtrip 0,12) | ✓✓ **Đòn lớn nhất còn lại** (mục tiêu L1 + decoder, không phải vocoder) |
+| **Data trần thấp?** | duration label noise ~18 ms (lỗi model 53 ms = 3× ⇒ chưa chạm trần); typo 129 cặp (~1,2% row); trần **representation** (hop 256 không chứa jitter chu kỳ) | ✓ một phần (nhỏ) + trần kỹ thuật đã biết |
+| **Data chưa đủ (lượng)?** | 17,1h · 1 giọng; model bão hoà ở 17h ⇒ muốn to hơn phải thêm giờ | ✓ cho bước scale kế tiếp (≥40h) |
+| **Thiếu data đặc thù/chất lượng cao?** | ô hiếm: NGÃ 4,5% · NẶNG 9,7% · coda tắc 1–5% · **M:NGÃ = 2/222.737**; **E4b (oversample đúng ô đó) → rè −13%** trong khi E4a (cùng bước, không oversample) → 0% | ✓✓ **Chốt số 1** |
+
+### 8.3 Việc nên làm (theo hiệu quả/giá)
+1. **Thu 60 câu** (`resources/cau_thu_am_v1.md`) → thêm vào train nhắm ô hiếm (bằng chứng E4b −13%).
+2. **Demo làm nét α=3,0 vs 1,5** (không cần train) — nếu tai user ưng ⇒ thêm mức α vào runtime.
+3. Nâng `mel_sharp` **toàn cục** (hiện 1,0; E4c chỉ thử *cục bộ* và không ăn thua) — 1 run 1h.
+4. Dài hạn: thêm ≥40h để nuôi model lớn; adversarial/diffusion cho mel (đã park).
+5. **Không** nên: train dài thêm (đã 33 epoch) · tăng tham số một mình.
