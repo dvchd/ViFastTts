@@ -1,6 +1,7 @@
 # E4b (V11S3): E4a + **oversample nhóm hiếm** (NGÃ ×2 · NẶNG ×1,5 · coda tắc ×1,5) —
 # phân tích bao phủ: NGÃ chỉ 4,5% âm tiết, ô M:NGA 2/222.737 ⇒ đúng nhóm model yếu (rè ngã).
-# Chạy: resume từ checkpoint E4a (50k) với cosine mới tới 58k (LR ~2e-5).
+# Chạy: resume từ A2 best@42k với cosine mới tới 50k (LR ~2e-5) — CÙNG lịch với E4a,
+# chỉ khác biến số oversample ⇒ so được trực tiếp.
 # E4a (docs/ACOUSTIC_V2.md §45): bản A2 + **làm sạch F0 vùng creak** (nội suy log-F0 + trọng số w_t = 1 − 0,5·c_t, `data/v2_targets.py`).
 # Chạy: resume từ A2 best@42k, cosine mới tới 50k (LR ~2e-5) — so cùng mốc bench.
 # A2 = fixgap + loss cũ (MỘT biến): nhãn nhịp nghỉ đủ (gap cuối đoạn + lặng đuôi clip),
@@ -75,14 +76,14 @@ training:
     nga: 2.0
     nang: 1.5
     checked_coda: 1.5
-  max_steps: 58000
+  max_steps: 50000
   phase_a_steps: 0           # train từ đầu → KHÔNG đóng băng; warm-up 0,25×→1 trong phase B
   phase_a_lr_scale: 0.25
   phase_b_warmup_steps: 2000 # §11: mở khóa → warm-up LR lên base rồi cosine
   warmup_steps: 6000         # (v1) — train-v2 không dùng
   lr_schedule: cosine
   min_lr_ratio: 0.05
-  lr_decay_steps: 58000   # mốc cuối TOÀN CỤC cho cosine (khớp --max-steps khi chạy)
+  lr_decay_steps: 50000   # mốc cuối TOÀN CỤC cho cosine (khớp --max-steps khi chạy)
   grad_clip: 1.0
   log_every: 50
   validate_every: 1000
