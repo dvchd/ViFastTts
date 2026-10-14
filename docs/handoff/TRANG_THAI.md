@@ -19,8 +19,8 @@
 | manifest val fixtail | `cdbbd659…` | Σgap/row 303,0 · phủ 74,0% |
 | manifest val CŨ | `19b6e117…` | dùng cho CỔNG CỨNG (không đổi) |
 | holdout CŨ (CER) | `3ca7c79b…` | clip-level 842 hàng |
-| mốc `eval/baselines/base40k_old.json` | `92e90dad…` | val cũ — CỔNG CỨNG (pin theo byte git) |
-| mốc `base40k_fixtail.json` | `a8b74d2e…` | sinh lại bằng code mới (B7) + `length_ratio_speech/pause` |
+| mốc `eval/baselines/base40k_old.json` | `2bc3ca93…` | val cũ — CỔNG CỨNG (pin theo byte git); rough 60 clip 0,3679 |
+| mốc `base40k_fixtail.json` | `e29509d7…` | sinh lại (B7) + `length_ratio_speech/pause`; rough 60 clip 0,3679/0,3419; mel_z_fix 1,3311 · dB_fix 9,879 |
 | `base40k_fixgap.json` | `cf770864…` — **KHÔNG DÙNG** | đã gỡ khỏi git: `artifacts/bench/legacy/` (V10.A5) |
 | model thước `tone_ruler.pt` | không versioned | train lại: `tools/tone_ruler.py --train` |
 

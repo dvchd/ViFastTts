@@ -92,8 +92,12 @@ def _rough_from_history(run_dir: Path, step: int | None) -> float | None:
     return best
 
 
-def rough_from_checkpoint(config: str, checkpoint: str, val_manifest: str, clips: int = 12) -> float | None:
-    """Tính `rough` từ checkpoint trên ĐÚNG bản val của cổng (A4 — không dùng hằng số)."""
+def rough_from_checkpoint(config: str, checkpoint: str, val_manifest: str, clips: int = 60) -> float | None:
+    """Tính `rough` từ checkpoint trên ĐÚNG bản val của cổng (A4 — không dùng hằng số).
+
+    `clips=60` (V11 §45, hàng đợi #5): 12 clip **lật phán quyết** 42k (red-team đo 0,3588→0,3596);
+    mốc base cũng đã đo lại 60 clip (val cũ 0,3919→**0,3679** · fixtail 0,3651→**0,3419**).
+    """
     import warnings
 
     import torch

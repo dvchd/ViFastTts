@@ -20,6 +20,7 @@
     "old_tf": "4485188c55a8596e92234d85efd4bd62382dcc6501dc88cae76f5ac03cdef0ad",
     "tone": "29d64cbc3e6781988d730e7cc5b6b30e58be82df62fb0a42b01adbfacfaed792"
   },
+  "rough_clips": 60,
   "seed": "deterministic (không lấy mẫu; bootstrap thước thanh seed cố định)",
   "step": 40000,
   "summary": {
@@ -38,7 +39,7 @@
     "pause_f1": 0.5274,
     "pause_f1_all": 0.5003,
     "pause_precision": 0.6058,
-    "rough": 0.39191587275407475,
+    "rough": 0.3679,
     "syl_db": 7.6776,
     "syl_z": 0.6612,
     "tone_C": 0.8045,
@@ -59,7 +60,7 @@
     "pause_f1": 0.5274,
     "pause_f1_all": 0.5559,
     "pause_precision": 0.6058,
-    "rough": 0.36513527905831417,
+    "rough": 0.3419,
     "syl_db": 7.6868,
     "syl_z": 0.6621,
     "vuv": 0.9821

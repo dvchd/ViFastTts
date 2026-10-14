@@ -22,6 +22,7 @@
     "old_tf": "4485188c55a8596e92234d85efd4bd62382dcc6501dc88cae76f5ac03cdef0ad",
     "tone": "89cdb60e48c3812023e60ac03f872ed7534e61c494642ca8209f6addf2d1334b"
   },
+  "rough_clips": 60,
   "seed": "deterministic (không lấy mẫu; bootstrap thước thanh seed cố định)",
   "step": 40000,
   "summary": {
@@ -40,7 +41,7 @@
     "pause_f1": 0.5274,
     "pause_f1_all": 0.5003,
     "pause_precision": 0.6058,
-    "rough": 0.39191587275407475,
+    "rough": 0.3679,
     "syl_db": 7.6776,
     "syl_z": 0.6612,
     "tone_C": 0.8045,
