@@ -19,6 +19,16 @@ def _fake(tmp_path: Path) -> tuple[Path, Path]:
     return fake, args_file
 
 
+def _run_raw(tmp_path: Path, out: Path, fake: Path) -> subprocess.CompletedProcess:
+    """Chạy watchdog KHÔNG check=True — để kiểm mã thoát (V11S.A2)."""
+    env = {**os.environ, "TRAIN_CMD": str(fake), "WATCH_MAX_ATTEMPTS": "1",
+           "INIT_RESUME": "runs/acoustic_v2_base/last.pt", "INIT_RESET_VAL_STATE": "1"}
+    return subprocess.run(
+        ["bash", str(ROOT / "tools/watch_train_v2.sh"), str(out), str(tmp_path / "log2.txt"),
+         "60000", "cfg.yaml", "train.jsonl", "val.jsonl"],
+        cwd=ROOT, env=env, capture_output=True, text=True, check=False)
+
+
 def _run(tmp_path: Path, out: Path, fake: Path, *, dry: bool = False, init: bool = True) -> str:
     env = {**os.environ, "TRAIN_CMD": str(fake), "WATCH_MAX_ATTEMPTS": "1"}
     if init:
@@ -63,3 +73,38 @@ def test_watchdog_dry_run_trung_lenh_that(tmp_path):
     dry = _run(tmp_path, out, fake, dry=True)
     # dry in CẢ lệnh (gồm TRAIN_CMD); script giả nhận phần đối số ⇒ dry == "<TRAIN_CMD> <đối số>"
     assert dry == f"{fake} {real_args}"
+
+
+def test_watchdog_last_pt_hong_lui_ve_ckpt(tmp_path):
+    """V11S.A2: last.pt hỏng + có ckpt_5000.pt đọc được ⇒ resume từ ckpt đó, KHÔNG về số 0."""
+    fake, args_file = _fake(tmp_path)
+    out = tmp_path / "run_d"
+    out.mkdir()
+    (out / "last.pt").write_bytes(b"tep-hong")
+    torch.save({"step": 5000}, out / "ckpt_5000.pt")
+    _run(tmp_path, out, fake)
+    args = args_file.read_text(encoding="utf-8")
+    assert f"--resume {out}/ckpt_5000.pt" in args
+    assert "--reset-val-state" not in args
+
+
+def test_watchdog_last_pt_hong_khong_ckpt_thi_dung(tmp_path):
+    """V11S.A2: last.pt hỏng + không ckpt nào đọc được ⇒ DỪNG (mã 3), KHÔNG gọi trainer."""
+    fake, args_file = _fake(tmp_path)
+    out = tmp_path / "run_e"
+    out.mkdir()
+    (out / "last.pt").write_bytes(b"tep-hong")
+    proc = _run_raw(tmp_path, out, fake)
+    assert proc.returncode == 3
+    assert not args_file.exists()
+
+
+def test_watchdog_lan_dau_chan_khi_co_history(tmp_path):
+    """V11S.A2: chưa có last.pt mà history.csv đã có ⇒ DỪNG (mã 4), không train lại từ đầu."""
+    fake, args_file = _fake(tmp_path)
+    out = tmp_path / "run_f"
+    out.mkdir()
+    (out / "history.csv").write_text("step,phase\n1,A\n", encoding="utf-8")
+    proc = _run_raw(tmp_path, out, fake)
+    assert proc.returncode == 4
+    assert not args_file.exists()

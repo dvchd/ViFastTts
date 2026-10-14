@@ -340,3 +340,27 @@ def test_pause_fraction_dung_trong_so():
     frac = _pause_fraction({"pause_gate": 0.4, "pause_gap": 0.2}, 1.0, None)
     assert abs(frac - (0.5 * 0.4 + 0.5 * 0.2)) < 1e-9
     assert math.isnan(_pause_fraction({"pause_gate": 0.1}, 0.0, None))
+
+
+def test_ckpt_theo_moc_va_ghi_nguyen_tu(tmp_path):
+    """V11S2.A6: save_every=2 trong 6 bước ⇒ ckpt_2/4/6.pt đọc được; không sót tệp .tmp."""
+    rows = [_row("clip__s00", 5, [5, 6], [2], [[2, 0, 2, 1], [2, 0, 2, 2]]),
+            _row("clip__s01", 0, [4, 5], [3], [[1, 0, 2, 1], [2, 0, 1, 2]])]
+    manifest = tmp_path / "train_slot4.jsonl"
+    manifest.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows),
+                        encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    for row in rows:
+        _write_cache(cache_dir, row, CONFIG)
+    stats_path = tmp_path / "f0_stats_v2.json"
+    stats_path.write_text(json.dumps(F0_STATS), encoding="utf-8")
+    config = {**CONFIG, "f0_stats_path": str(stats_path),
+              "training": {**CONFIG["training"], "cache_dir": str(cache_dir),
+                           "save_every": 2, "validate_every": 4, "log_every": 1}}
+    run_dir = tmp_path / "run_ckpt"
+    train_slot_v2(config, str(manifest), str(manifest), str(run_dir), max_steps=6, device="cpu")
+    for step in (2, 4, 6):
+        state = torch.load(run_dir / f"ckpt_{step}.pt", map_location="cpu", weights_only=False)
+        assert int(state["step"]) == step, f"ckpt_{step}.pt sai bước"
+    assert not list(run_dir.glob("*.tmp")), "còn tệp tạm — ghi không nguyên tử"

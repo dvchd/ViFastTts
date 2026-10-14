@@ -21,6 +21,7 @@ import csv
 import hashlib
 import json
 import math
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -88,6 +89,21 @@ def history_header() -> list[str]:
             "val_total", "val_mel_voiced", "val_rough", "lr",
             "train_pause_frac", *(f"train_{key}" for key in LOSS_COMPONENTS),
             *(f"val_{key}" for key in LOSS_COMPONENTS), "val_pause_frac"]
+
+
+def _save_atomic(path: Path, obj: dict) -> None:
+    """V11S2.A6: ghi checkpoint NGUYÊN TỬ — tệp tạm → fsync → đổi tên.
+
+    Crash giữa chừng không để lại `last.pt` hỏng (watchdog phải lùi về `ckpt_<step>.pt`).
+    """
+    import torch
+
+    tmp = path.with_name(path.name + ".tmp")
+    with tmp.open("wb") as handle:
+        torch.save(obj, handle)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp, path)
 
 
 def _pause_fraction(parts: dict[str, float], total: float, weights: dict | None) -> float:
@@ -505,13 +521,15 @@ def train_slot_v2(
                         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
                         "warm_start_from": warm_hash, **seg_meta, **val_meta,
                     }
-                    torch.save(state, out / "last.pt")
+                    _save_atomic(out / "last.pt", state)
+                    if save_every and step % save_every == 0:  # V11S2.A6: giữ mốc riêng
+                        _save_atomic(out / f"ckpt_{step}.pt", state)
                     if discriminator is not None:
-                        torch.save({"discriminator": discriminator.state_dict(),
-                                    "d_optimizer": d_optimizer.state_dict(), "step": step},
-                                   out / "d_last.pt")
+                        _save_atomic(out / "d_last.pt", {"discriminator": discriminator.state_dict(),
+                                                         "d_optimizer": d_optimizer.state_dict(),
+                                                         "step": step})
                     if improved:
-                        torch.save(state, out / "best.pt")
+                        _save_atomic(out / "best.pt", state)
                     else:
                         if early_stop_patience and no_improve >= early_stop_patience:
                             (out / "early_stop.json").write_text(json.dumps({
@@ -523,18 +541,20 @@ def train_slot_v2(
                             early_stopped = True
                             break
                 elif step % save_every == 0:
-                    torch.save({
+                    state = {
                         "model": model.state_dict(), "optimizer": optimizer.state_dict(),
                         "config": config, "step": step, "best_val": best_val,
                         "no_improve": no_improve, "mel_hash": _mel_hash(config), "arch": ARCH_V2,
                         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
                         "warm_start_from": warm_hash, **val_meta,
                         **seg_meta,
-                    }, out / "last.pt")
+                    }
+                    _save_atomic(out / "last.pt", state)
+                    _save_atomic(out / f"ckpt_{step}.pt", state)  # V11S2.A6
                     if discriminator is not None:
-                        torch.save({"discriminator": discriminator.state_dict(),
-                                    "d_optimizer": d_optimizer.state_dict(), "step": step},
-                                   out / "d_last.pt")
+                        _save_atomic(out / "d_last.pt", {"discriminator": discriminator.state_dict(),
+                                                         "d_optimizer": d_optimizer.state_dict(),
+                                                         "step": step})
                 if (validate_at_stop and stop_at_step is not None and step >= stop_at_step
                         and step % validate_every != 0):
                     # B6: validate MỘT lần khi dừng — REPORT-ONLY: không chạm best_val/no_improve/
@@ -558,15 +578,15 @@ def train_slot_v2(
                     break
             if early_stopped or (stop_at_step is not None and step >= stop_at_step):
                 break
-    torch.save({
+    _save_atomic(out / "last.pt", {
         "model": model.state_dict(), "optimizer": optimizer.state_dict(),
         "config": config, "step": step, "best_val": best_val,
         "mel_hash": _mel_hash(config), "arch": ARCH_V2,
         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
         "warm_start_from": warm_hash, "no_improve": no_improve, **seg_meta, **val_meta,
-    }, out / "last.pt")
+    })
     if discriminator is not None:
-        torch.save({"discriminator": discriminator.state_dict(),
-                    "d_optimizer": d_optimizer.state_dict(), "step": step}, out / "d_last.pt")
+        _save_atomic(out / "d_last.pt", {"discriminator": discriminator.state_dict(),
+                                         "d_optimizer": d_optimizer.state_dict(), "step": step})
     print(f"Đã huấn luyện v2 {step} bước, checkpoint tại {out}/last.pt "
           f"(best mel hữu thanh {best_val:.4f})")
