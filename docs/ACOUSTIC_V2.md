@@ -1413,3 +1413,13 @@ base 40k + A2 chọn trên đúng 25 clip giàu ngã/nặng, báo tỉ lệ crea
 **4 bản: thật · copy-synth · free-run base · free-run A2**. (Copy-synth đã đo: thật 1,73× → copy-synth 2,39× ⇒
 Vocos **không xóa creak**, kể cả làm tương phản rõ hơn; kết hợp §39 (jitter +39% ở copy-synth) ⇒ rè phía Vocos
 nhiều khả năng là **thêm bất thường vào sóng**, không phải xóa creak — chắc chắn hơn sau khi có free-run.)
+
+**V11.B6/B7 — bench A2 4 mốc (14/10/2026).** Kết luận mỗi mốc: **TỪ CHỐI** vì 2 cổng cứng mel trên val CŨ trượt
+(mel_l1_z 1,1848–1,1954 vs biên 1,1715; mel_db 9,19–9,41 vs 9,0547) — nhưng **syl_z không đổi** ⇒ phần thêm
+nằm ở vùng gap của val cũ (so KHÁC NHÃN: A2 học nhãn fixtail). Trên val fixtail: mel_z base 1,3311 vs A2
+1,3311–1,3457. 6 cổng cứng còn lại ĐẠT và tốt hơn base (rough · tone_C 0,818 > 0,8045 · CER 0,1961 < 0,2332 ·
+f0_nga · mel_gap · syl_z) + cải thiện thật: cer_prod 0,19–0,23 < base 0,2385 · **length_ratio 55k/60k ĐẠT A9** ·
+`length_ratio_pause` 0,533→**0,740** (speech không đổi). Chưa đạt: pause_f1_all (+0,030/0,073) · gap_mae_all
+(−22%/28,6%) · gap_z · Δjitter xấu hơn base. **V11.B7 = nhánh "TỪ CHỐI" ⇒ DỪNG, báo, không chạy A1** (đúng V11.A4);
+mốc tốt nhất nếu bỏ qua 2 cổng khác nhãn = **55k**. **Bug đã sửa khi chạy B6**: bench phải nhận `resolved_config.json`
+(JSON — tone_ruler/eval_creak đọc JSON) + vá `KeyError 'cer_note'` khi in `--cer-prod` (commit `7be07c0`).

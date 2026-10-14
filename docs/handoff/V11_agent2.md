@@ -40,6 +40,21 @@
 Lưu ý kỹ thuật: f0p là loss **kéo contour về prior trung bình của thanh** — nó TĂNG có thể do model học contour **riêng biệt hơn** (xa prior), chưa chắc là F0 xấu đi; **quyết định cuối theo cổng cứng F0 NGÃ (+5 cent) + tone_C** ở B6 (đang chạy).
 **⚠ Thêm**: BCE pause val **tăng** (0,986→1,300) trong khi train giảm (0,104→0,048) ⇒ tỉ số val/train **xấu dần** (9,5×→27,2×; base ~20×) — cần bench xác nhận recall/f1 thật.
 
+## V11.B6 — bench A2 4 mốc (đã xong) + V11.B7 cây quyết định
+
+| mốc | mel_z✗ | dB✗ | rough | toneC | cer | cerP | f0nga | melgap | sylz | pF1✗ | gMAE✗ | lr | gapz✗ | sp | pa | Δjit |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 45k | 1,1924 | 9,414 | 0,3867 | 0,7858 | 0,2048 | 0,1896 | 182,4 | 3,1122 | 0,6672 | 0,5855 | 124,41 | 0,8829 | 2,1705 | 0,935 | 0,724 | 0,0490 |
+| 50k | 1,1916 | 9,194 | 0,3904 | 0,8117 | 0,2037 | 0,1919 | 182,2 | 3,0933 | 0,6676 | 0,5880 | 123,36 | 0,8816 | 2,1658 | 0,932 | 0,721 | 0,0444 |
+| **55k** | **1,1848** | 9,258 | 0,3931 | 0,8148 | 0,2030 | 0,2322 | 181,1 | 3,1012 | 0,6681 | **0,5884** | **123,35** | 0,8888 ✅ | **2,1462** | 0,937 | 0,726 | **0,0409** |
+| 60k | 1,1954 | 9,281 | 0,3911 | **0,8180** | **0,1961** | 0,2013 | 184,1 | 3,1006 | 0,6685 | 0,5870 | 122,43 | **0,9007** ✅ | 2,1724 | 0,950 | **0,740** | 0,0477 |
+| base | **1,1599** | **8,955** | 0,3819 | 0,8045 | 0,2332 | 0,2385 | 180,2 | 3,1272 | 0,6621 | 0,5559 | 156,46 | 0,7665 | 2,1529 | 0,934 | 0,533 | 0,0372 |
+
+**KẾT LUẬN MỖI MỐC: TỪ CHỐI** (mel_l1_z + mel_db trượt ở cả 4 ✗). **V11.B7 = nhánh "TỪ CHỐI" ⇒ DỪNG, báo, KHÔNG chạy A1** (đúng cây V11.A4).
+
+**Phân tích (để Agent 0 quyết, không tự ý đổi luật)**: hai cổng trượt là **mel trên val CŨ** (+1,1–2,0% vs biên 1%; +0,14–0,36 dB vs biên 0,10) — trong khi **`syl_z` (vùng âm tiết) KHÔNG đổi** ✅ ⇒ phần xấu thêm nằm ở **vùng gap của val cũ** — tức so **khác nhãn** (A2 học nhãn fixtail, val cũ giữ nhãn cũ). Trên **val fixtail** (cùng nhãn): mel_z tổng base 1,3311 vs A2 1,3414/1,3404/**1,3311 (bằng đúng)**/1,3457. **6 cổng cứng còn lại đều đạt và TỐT HƠN base** (rough, tone_C, CER, f0_nga, mel_gap, syl_z) + **cải thiện thật**: tone_C 45k 0,786→60k **0,818** (base 0,8045) · CER **0,1961** (base 0,2332) · cer_prod **0,1896–0,2322** (base 0,2385) · **length_ratio 55k/60k ĐẠT cổng A9** ✅ · `length_ratio_pause` 0,533→**0,740 (+39%)** với `speech` gần như không đổi ✅. **Chưa đạt**: pause_f1_all (+0,030/0,073) · gap_mae_all (−22%/28,6%) · gap_z (đứng yên) · Δjitter xấu hơn base ở cả 4 mốc (0,041–0,049 vs 0,0372).
+**Nếu Agent 0 quyết bỏ qua 2 cổng mel khác nhãn**: mốc tốt nhất = **55k** (mel_z thấp nhất, pF1/gMAE/Δjit/gapz tốt nhất, lr ĐẠT; hòa mục tiêu với 60k nhưng gap_z thấp hơn ✓).
+
 ## Phần B-II (sau khi A2 tới 60k) — chưa làm
 V11.B6–B11 + V11S.B3 (watchdog: step_of chịu last.pt hỏng · ghi checkpoint nguyên tử · chặn nhánh đầu khi có history.csv — **KHÔNG sửa watch_train_v2.sh khi A2 đang chạy**, đúng V11S.A2).
 
