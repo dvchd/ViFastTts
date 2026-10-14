@@ -14,6 +14,11 @@ Chạy:
 
 Kết quả JSON: `{creapy: {…tham số}, groups: {ngã+nặng: {n, mean, median}, …}, ratio,
 n_clips, clips_loi}` — `ratio` = (ngã+nặng)/(ngang+huyền), mốc THẬT = 1,73.
+
+⚠️ **V11S3 §45.6: `ratio` BỊ LẬT NGƯỢC — đừng dùng làm thước chính.** Đo liều–đáp ứng cho thấy mel
+model có ratio 1,924 (< mel thật 2,390) nhưng **creak tuyệt đối ngã+nặng cao hơn 47%** (ratio bị chi
+phối bởi mẫu số ngang+huyền). Chấm rè bằng **`groups["ngã+nặng"]["mean"]` so mốc THẬT 0,1893** +
+Δhnr/Δjitter (`tools/eval_creak.py`); ratio chỉ ghi kèm tử/mẫu.
 """
 
 from __future__ import annotations
