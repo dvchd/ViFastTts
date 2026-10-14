@@ -380,6 +380,7 @@ def main() -> None:
     commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, check=False,
                             capture_output=True, text=True).stdout.strip()
     report = {"tag": tag, "git_commit": commit, "config": config, "checkpoint": checkpoint,
+              "device": args.device,  # V11S3: thiếu trường này ⇒ không biết số đo ở CPU hay MPS
               "step": args.step, "seed": "deterministic (không lấy mẫu; bootstrap thước thanh seed cố định)",
               "val_manifest": args.val_manifest, "val_manifest_hash": _sha1_file(args.val_manifest),
               "val_manifest_old": args.val_manifest_old, "val_manifest_hash_old": _sha1_file(args.val_manifest_old),
