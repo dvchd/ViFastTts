@@ -101,3 +101,15 @@ def test_probe_chan_khi_da_co_last_pt():
                           cwd=root, capture_output=True, text=True, check=False)
     assert proc.returncode == 2
     assert "CHẶN" in proc.stdout
+
+
+def test_sharpen_mel_sh25_trong_source():
+    """sh25 = `runtime.postprocess.sharpen_mel` — α=0 không đổi, α=1,5 đổi giá trị, giữ shape."""
+    from vifasttts.runtime.postprocess import sharpen_mel
+
+    mel = torch.randn(40, 20)
+    assert torch.equal(sharpen_mel(mel, 0.0), mel)
+    sharp = sharpen_mel(mel, 1.5)
+    assert sharp.shape == mel.shape
+    assert not torch.allclose(sharp, mel)
+    assert sharp.abs().mean() > mel.abs().mean()  # làm nét ⇒ biên độ tăng (RMS thực đo 0,031→0,039)

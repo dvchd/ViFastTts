@@ -39,3 +39,20 @@ def postprocess(wav: np.ndarray, sample_rate: int, *, target_db: float | None = 
     if target_db is not None:
         output = peak_normalize(output, target_db)
     return output
+
+
+def sharpen_mel(mel, alpha: float = 1.5):
+    """Làm nét mel trong không gian z (unsharp 3×3 box-blur) — bản "sh25" chính thức của repo.
+
+    Lịch sử: bản sh25 đầu tiên (13/10) chỉ là script demo **không lưu vào repo** ⇒ mất code ✗.
+    Hàm này là bản tương đương được promote vào `src/` (V11, 14/10) để không tái diễn.
+    `alpha=1,5` = mức người dùng đã chọn ("sh25 toàn cục"); **alpha=0 ⇒ không đổi**.
+    ⚠ §38.2: tăng alpha mạnh hơn mức này **khuếch đại rè** ở ngã/nặng — đừng tăng tuỳ tiện.
+    """
+    import torch
+
+    if not alpha:
+        return mel
+    x = mel.unsqueeze(0).unsqueeze(0)                       # [1,1,T,F]
+    blur = torch.nn.functional.avg_pool2d(x, 3, stride=1, padding=1)
+    return (x + float(alpha) * (x - blur)).squeeze(0).squeeze(0)

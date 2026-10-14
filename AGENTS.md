@@ -77,6 +77,8 @@ trước khi dùng nó để quyết định — bài học §34.3→§36.4); m�
 - Một R/T xong phải có: **số đo + so mốc** (B0 hoặc số cũ) + cổng đạt/không + file thay đổi
   → ghi vào `docs/ACOUSTIC_V2.md` (số liệu trong doc; JSON thô ở `artifacts/` — local).
 - **Không commit** `data/`, `cache/`, `runs/`, `artifacts/`.
+- **Script sinh demo/thí nghiệm phải được promote vào `tools/` hoặc `src/` TRƯỚC khi dùng** (bài học sh25:
+  bản đầu chỉ là script tạm, mất code, phải dựng lại — 14/10). Riêng làm nét mel = `runtime.postprocess.sharpen_mel`.
 - **Demo audio**: *không* commit vào lịch sử repo; khi user cần nghe từ xa → đẩy bằng
   **GitHub Release asset** (vd `gh release create demo-audio-<ngày> artifacts/demo/*.wav`),
   xoá sạch về sau bằng `gh release delete <tag> --yes` (không cần force-push).

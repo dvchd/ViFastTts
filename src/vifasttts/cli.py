@@ -332,6 +332,8 @@ def synthesize_cmd(
     speed: float = typer.Option(1.0, help="Tốc độ đọc (1.0 là gốc)"),
     gate_threshold: float = typer.Option(0.5, "--gate-threshold",
                                           help="Ngưỡng gate pause (V11.A7; mặc định 0.5)"),
+    sharpen_alpha: float = typer.Option(1.5, "--sharpen-alpha",
+                                         help="Làm nét mel = sh25 (1.5 = mức người dùng chọn; 0 = tắt)"),
     vocoder_checkpoint: str | None = typer.Option(None, help="Checkpoint vocoder (tùy chọn)"),
     overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc'"),
     peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
@@ -343,7 +345,7 @@ def synthesize_cmd(
     samples, sample_rate = synthesize(
         load_config(config), checkpoint, text, output,
         dialect=dialect, speed=speed, gate_threshold=gate_threshold,
-        vocoder_checkpoint=vocoder_checkpoint,
+        sharpen_alpha=sharpen_alpha, vocoder_checkpoint=vocoder_checkpoint,
         overrides=load_overrides(overrides) if overrides else None,
         peak_normalize=peak_normalize, max_chars=max_chars, device=device,
     )

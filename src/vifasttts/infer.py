@@ -140,7 +140,7 @@ class Synthesizer:
         self.vocoder.eval()
 
     def _render(self, text: str, dialect: str, speed: float, options,
-                gate_threshold: float = 0.5) -> np.ndarray | None:
+                gate_threshold: float = 0.5, sharpen_alpha: float = 0.0) -> np.ndarray | None:
         """Tổng hợp một đoạn: parse → model → vocoder; None nếu đoạn không có âm tiết.
 
         v2 (`v2_slot5`): **một** forward `model(features, speed=[speed])` — speed
@@ -167,7 +167,9 @@ class Synthesizer:
                     durations = torch.round(outputs["durations"].float() / max(speed, 1e-3)).clamp_min(1).long()
                     outputs = self.model(features, durations=durations)
                 mel = outputs["mel"][0]
-            waveform = self.vocoder(mel.unsqueeze(0))[0]
+            from vifasttts.runtime.postprocess import sharpen_mel
+
+            waveform = self.vocoder(sharpen_mel(mel, sharpen_alpha).unsqueeze(0))[0]
         return np.asarray(waveform.cpu().numpy(), dtype=np.float32)
 
     def iter_synthesize(
@@ -177,6 +179,7 @@ class Synthesizer:
         dialect: str = "north",
         speed: float = 1.0,
         gate_threshold: float = 0.5,
+        sharpen_alpha: float = 0.0,
         overrides: dict[str, str] | None = None,
         max_chars: int = 400,
     ) -> Iterator[tuple[np.ndarray, int]]:
@@ -190,7 +193,7 @@ class Synthesizer:
         rendered_any = False
         for index, chunk in enumerate(chunks):
             rendered = self._render(chunk, dialect, speed, options,
-                                    gate_threshold=gate_threshold)
+                                    gate_threshold=gate_threshold, sharpen_alpha=sharpen_alpha)
             if rendered is None:
                 continue
             rendered_any = True
@@ -210,6 +213,7 @@ class Synthesizer:
         dialect: str = "north",
         speed: float = 1.0,
         gate_threshold: float = 0.5,
+        sharpen_alpha: float = 0.0,
         overrides: dict[str, str] | None = None,
         peak_normalize: bool = False,
         max_chars: int = 400,
@@ -219,7 +223,7 @@ class Synthesizer:
 
         pieces = [audio for audio, _ in self.iter_synthesize(
             text, dialect=dialect, speed=speed, gate_threshold=gate_threshold,
-            overrides=overrides, max_chars=max_chars,
+            sharpen_alpha=sharpen_alpha, overrides=overrides, max_chars=max_chars,
         )]
         waveform = postprocess(np.concatenate(pieces), self.sample_rate,
                                target_db=-3.0 if peak_normalize else None)
