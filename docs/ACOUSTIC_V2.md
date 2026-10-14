@@ -1401,3 +1401,15 @@ dùng) — không thử lại cấu hình khác. (c) **CreaPy ĐẠT kiểm ch�
 σ chuẩn = σ/√m; công thức giả định các bước ĐỘC LẬP — loss train tự tương quan nên biên thật rộng
 hơn chút; **lệch ngoài 2σ là lý do để KIỂM, không tự động dừng**. (e) **val f0p A2 vs base** (47k):
 +5,07% (train trượt 500 bước +0,9%) — đã báo Agent 0 theo nhánh.
+
+**V11S2.A2 — quyết định của Agent 0 (14/10/2026)**: **KHÔNG dừng A2**. Val f0p +5,07% ở mốc 47k nằm trong
+dao động nội tại giữa các mốc (chính A2 dao động ±3%: 0,4083→0,4350; trung bình 7 mốc +2,8%) và **train f0p
+trượt 500 bước chỉ +0,9%** ⇒ −16,4% ở probe là **nhiễu một cửa sổ đo**. Theo dõi val f0p 48k–60k: **chỉ báo nếu
+3 mốc liên tiếp > +5% VÀ xu hướng tăng**; nếu không, để bench quyết bằng hai cổng cứng **F0 NGÃ (+5 cent)** và
+**tone_C (−0,01)**. **Ghi chú**: base 40k chỉ có MỘT mốc val f0p (0,4140) — trainer chỉ ghi đè `last.pt` nên
+**không đo được dao động nội tại của base**; khi trainer tự lưu `ckpt_<step>.pt` (V11S2.A6) thì lần sau phải
+lưu đủ mốc cho cả run tham chiếu. **CreaPy từ nay là thước THEO DÕI** (chưa làm cổng): sau B6 chạy free-run
+base 40k + A2 chọn trên đúng 25 clip giàu ngã/nặng, báo tỉ lệ creak ngã+nặng · ngang+huyền · tỉ số hai nhóm cho
+**4 bản: thật · copy-synth · free-run base · free-run A2**. (Copy-synth đã đo: thật 1,73× → copy-synth 2,39× ⇒
+Vocos **không xóa creak**, kể cả làm tương phản rõ hơn; kết hợp §39 (jitter +39% ở copy-synth) ⇒ rè phía Vocos
+nhiều khả năng là **thêm bất thường vào sóng**, không phải xóa creak — chắc chắn hơn sau khi có free-run.)
