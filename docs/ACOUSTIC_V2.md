@@ -1370,3 +1370,23 @@ probe fixtail với **±2σ của 500 bước cuối base 40k** (thay tiêu chí
 
 **Kết luận: NHÁNH NHIỄU (V10.A7)** — mọi thành phần trong 2σ ⇒ **probe fixtail ĐẠT**; tiêu chí probe
 từng thành phần từ ±5% ⇒ **±2σ** (σ đo trên 500 bước cuối base).
+
+**V11.A2 — thang σ của probe (làm rõ, 14/10/2026).** σ ở V10 tính trên **giá trị từng mẫu** (log ghi mỗi 50 bước;
+10 mẫu trong 500 bước cuối base) và so với **một mẫu tức thời** của probe (bước 40050) ⇒ **đúng thang mẫu↔mẫu**;
+σ lớn vì metric dao động mạnh giữa các cửa sổ (f0p σ_mẫu 29,6%). Khi giá trị probe là **trung bình m bước**,
+phải dùng **σ chuẩn = σ_mẫu/√m** (√20 ≈ 4,47):
+
+| thành phần | 2σ mẫu | 2σ chuẩn (m=20) | probe Δ% |
+|---|---|---|---|
+| loss | 13,22% | 2,96% | +4,31% |
+| mel | 49,38% | 11,04% | +13,16% |
+| G | 70,58% | 15,78% | +40,78% |
+| tho | 17,50% | 3,91% | −1,13% |
+| f0d | 25,07% | 5,61% | +5,32% |
+| f0p | 59,11% | 13,22% | −16,40% |
+| sharp | 9,49% | 2,12% | +2,64% |
+
+Kiểm chéo: σ của **trung bình trượt 2 mẫu liền kề** khớp σ_mẫu/√2 (lệch 4–20%) ⇒ quy tắc √m dùng được.
+Log cũ chỉ có mẫu cách 50 bước ⇒ **không dựng được trung bình trượt 20 bước**; cột 2σ chuẩn là **ước lượng**
+σ_mẫu/√20. Từ A2, dòng `comps:` in **trung bình cửa sổ 50 bước** ⇒ lần sau đo σ chuẩn **trực tiếp**.
+**Không ảnh hưởng A2** (V10.B4 đã loại lỗi chuẩn hóa bằng đo tất định; mel/G tăng là đúng đích A2 — nhãn gap mới).
