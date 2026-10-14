@@ -195,7 +195,12 @@ def train_slot_v2(
     from torch.utils.data import DataLoader
 
     from vifasttts.data.dataset import ManifestDataset
-    from vifasttts.data.dataset_v2 import SameNBatchSampler, SlotDataset, collate_slot_batch
+    from vifasttts.data.dataset_v2 import (
+        SameNBatchSampler,
+        SlotDataset,
+        collate_slot_batch,
+        rare_group_weights,
+    )
     from vifasttts.device import resolve_device
     from vifasttts.frontend.vocab import ComponentVocabs
     from vifasttts.models.factory import (
@@ -248,11 +253,24 @@ def train_slot_v2(
     dropped = len(ManifestDataset(train_manifest).rows) - len(train_data.rows)
     if dropped:
         print(f"[v2] Lọc {dropped} row 1 âm tiết khỏi train (MPS abort conv backward với N=1 — §25).")
+    # V11S3: oversample nhóm hiếm (NGÃ/NẶNG + coda tắc) — mặc định TẮT (không có `oversample`).
+    oversample = dict(training.get("oversample") or {})
+    sample_weights = None
+    if oversample:
+        sample_weights = rare_group_weights(
+            train_data.rows, nga=float(oversample.get("nga", 2.0)),
+            nang=float(oversample.get("nang", 1.5)),
+            checked_coda=float(oversample.get("checked_coda", 1.5)))
+        boosted = sum(1 for value in sample_weights if value > 1.0)
+        print(f"[v2] oversample hiếm: {boosted} row được tăng trọng số "
+              f"(NGÃ ×{oversample.get('nga', 2.0)} · NẶNG ×{oversample.get('nang', 1.5)} · "
+              f"coda tắc ×{oversample.get('checked_coda', 1.5)})")
     if batch_size > 1:
         # Batch > 1 cần **cùng N** trong mỗi batch → gộp theo N (không pad trục âm tiết).
         train_loader = DataLoader(train_data,
                                   batch_sampler=SameNBatchSampler(train_data.rows, batch_size,
-                                                                  shuffle=True, seed=int(config.get("seed", 42))),
+                                                                  shuffle=True, seed=int(config.get("seed", 42)),
+                                                                  weights=sample_weights),
                                   num_workers=int(training.get("num_workers", 0)),
                                   collate_fn=collate_slot_batch)
         print(f"[v2] batch_size={batch_size} (gộp cùng N; val giữ batch 1 cho metric ổn định)")

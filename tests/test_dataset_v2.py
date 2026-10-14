@@ -221,3 +221,28 @@ def test_same_n_batch_sampler_gop_cung_n():
     first = list(SameNBatchSampler(rows, 2, shuffle=True, seed=7))
     second = list(SameNBatchSampler(rows, 2, shuffle=True, seed=7))
     assert first == second  # tất định theo seed (+ epoch)
+
+
+def test_rare_group_weights_va_sampler_co_trong_so():
+    """V11S3: NGÃ/NẶNG + coda tắc được tăng trọng số; sampler lấy hàng hiếm nhiều hơn."""
+    from vifasttts.data.dataset_v2 import SameNBatchSampler, rare_group_weights
+
+    def row(tone: str, coda: str) -> dict:
+        return {"durations": [4, 4], "syllables": [
+            {"abstract": {"tone": "NGANG", "coda": "N"}},
+            {"abstract": {"tone": tone, "coda": coda}}]}
+
+    rows = [row("NGANG", "N"), row("NGA", "N"), row("NANG", "T")]
+    weights = rare_group_weights(rows, nga=2.0, nang=1.5, checked_coda=1.5)
+    assert weights[0] == 1.0
+    assert abs(weights[1] - 2.0) < 1e-9          # NGÃ
+    assert abs(weights[2] - 1.5 * 1.5) < 1e-9    # NẶNG × coda tắc
+    # Sampler: cùng cỡ nhóm ⇒ số batch không đổi; hàng trọng số cao xuất hiện nhiều hơn.
+    plain = SameNBatchSampler(rows, 1, shuffle=False, seed=1)
+    boosted = SameNBatchSampler(rows, 1, shuffle=False, seed=1, weights=weights)
+    assert len(list(plain)) == len(list(boosted))
+    counts = {0: 0, 1: 0, 2: 0}
+    for _ in range(200):
+        for batch in boosted:
+            counts[batch[0]] += 1
+    assert counts[1] > counts[0] and counts[2] > counts[0], counts

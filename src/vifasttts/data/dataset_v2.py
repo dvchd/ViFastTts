@@ -164,6 +164,29 @@ def collate_slot_batch(items: list[dict[str, Any]]) -> dict[str, Any]:
     return output
 
 
+def rare_group_weights(rows: list[dict[str, Any]], *, nga: float = 2.0, nang: float = 1.5,
+                       checked_coda: float = 1.5) -> list[float]:
+    """Trọng số lấy mẫu theo nhóm HIẾM (V11S3 — phân tích bao phủ train fixtail):
+
+    NGÃ chỉ **4,5%** âm tiết, NẶNG 9,7%, coda tắc 1–5%; ô `M:NGA` chỉ **2 lần** toàn tập
+    (222.737 âm tiết) — đúng nhóm mà model yếu nhất (rè ngã + SẮC-tắc §42.1). Nhân trọng số
+    để nhóm hiếm được học nhiều hơn mà **không thêm dữ liệu giả**. Hệ số 1,0 = tắt.
+    """
+    weights: list[float] = []
+    for row in rows:
+        value = 1.0
+        for syllable in row.get("syllables") or []:
+            abstract = syllable["abstract"]
+            if abstract["tone"] == "NGA":
+                value *= max(nga, 1e-6)
+            elif abstract["tone"] == "NANG":
+                value *= max(nang, 1e-6)
+            if abstract["coda"] in ("P", "T", "C", "CH"):
+                value *= max(checked_coda, 1e-6)
+        weights.append(value)
+    return weights
+
+
 class SameNBatchSampler:
     """Sampler gộp index **theo cùng N** (số âm tiết) — để batch > 1 vẫn hợp lệ.
 
@@ -173,8 +196,13 @@ class SameNBatchSampler:
     """
 
     def __init__(self, rows: list[dict[str, Any]], batch_size: int, *,
-                 shuffle: bool = True, seed: int = 42, drop_last: bool = False) -> None:
-        """`rows`: manifest rows (cần `durations` để biết N)."""
+                 shuffle: bool = True, seed: int = 42, drop_last: bool = False,
+                 weights: list[float] | None = None) -> None:
+        """`rows`: manifest rows (cần `durations` để biết N).
+
+        `weights` (V11S3): trọng số lấy mẫu theo ROW — nhóm hiếm (NGÃ/NẶNG + coda tắc)
+        được lấy **có hoàn lại** nhiều hơn, cùng cỡ nhóm ⇒ số batch không đổi.
+        """
         import math
 
         self.rows = rows
@@ -182,6 +210,9 @@ class SameNBatchSampler:
         self.shuffle = bool(shuffle)
         self.seed = int(seed)
         self.drop_last = bool(drop_last)
+        self.weights = list(weights) if weights is not None else None
+        if self.weights is not None and len(self.weights) != len(rows):
+            raise ValueError(f"weights dài {len(self.weights)} ≠ số row {len(rows)}")
         self.epoch = 0
         self._groups: dict[int, list[int]] = {}
         for index, row in enumerate(rows):
@@ -204,7 +235,11 @@ class SameNBatchSampler:
         self.epoch += 1
         batches: list[list[int]] = []
         for group in self._groups.values():
-            indices = list(group)
+            if self.weights is None:
+                indices = list(group)
+            else:
+                # Lấy có hoàn lại theo trọng số (cùng cỡ nhóm) — hàng hiếm xuất hiện nhiều hơn.
+                indices = rng.choices(group, weights=[self.weights[i] for i in group], k=len(group))
             if self.shuffle:
                 rng.shuffle(indices)
             for start in range(0, len(indices), self.batch_size):
