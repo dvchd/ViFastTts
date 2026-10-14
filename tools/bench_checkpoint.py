@@ -196,8 +196,10 @@ def target_gates(row_fix: dict, base_fix: dict | None) -> dict[str, tuple[str, s
                                       lambda r, b: r >= b + 0.073),
         "gap_sum_mae_all≤mốc×0.714": gate(row_fix.get("gap_sum_mae_all"), base.get("gap_sum_mae_all"),
                                           lambda r, b: r <= b * 0.714),
-        "length_ratio 1.00±0.05": gate(row_fix.get("length_ratio"), 1.0,
-                                       lambda r, _b: abs(r - 1.0) <= 0.05),
+        # V10.A9: mốc fixtail 0,7665 (nói nhanh ~23% — A2 không sửa phần tiếng nói);
+        # mục tiêu = đi được NỬA khoảng cách còn lại tới 1,0 ⇒ |1−r| ≤ 0,5·|1−mốc|.
+        "length_ratio≤0.5×|1−mốc|": gate(row_fix.get("length_ratio"), base.get("length_ratio"),
+                                        lambda r, b: abs(1.0 - r) <= 0.5 * abs(1.0 - b)),
         # §44/B3: A2 có nhãn cho các khung gap ⇒ vùng gap phải giảm ≥ 15% (ước lượng đầu, chỉnh sau).
         "gap_z≤mốc×0.85": gate(row_fix.get("mel_gap_z"), base.get("mel_gap_z"),
                                lambda r, b: r <= b * 0.85),
@@ -334,6 +336,8 @@ def main() -> None:
           f"pause_f1_all {row_fix['pause_f1_all']} · gap_mae_all {row_fix['gap_sum_mae_all']} · "
           f"precision {row_fix['pause_precision']} · len_ratio {row_fix['length_ratio']} · "
           f"mel_gap {row_fix['mel_gap']} · rough {row_fix['rough']}")
+    print(f"  theo dõi A9: length_ratio_speech {row_fix.get('length_ratio_speech')} · "
+          f"length_ratio_pause {row_fix.get('length_ratio_pause')}")
     print(f"  rè ngã (val cũ): Δjitter {row_old['creak_djitter_nga']} · Δhnr {row_old['creak_dhnr_nga']}"
           f" · thanh C (val cũ) {row_old['tone_C']}")
     print(f"  vùng (tf @ fixgap): syl_z {row_fix['syl_z']} · syl_db {row_fix['syl_db']} · "

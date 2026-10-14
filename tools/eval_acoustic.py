@@ -920,6 +920,8 @@ def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
     gap_sum_errors_all: list[float] = []
     gap_pred_frames: list[float] = []
     gap_true_frames: list[float] = []
+    speech_pred_total = speech_true_total = 0.0  # V10.A9: tách length_ratio tiếng nói / pause
+    pause_pred_total = pause_true_total = 0.0
     mel_gaps: list[float] = []
     pause_masked = [0, 0, 0]  # TP, FP, FN — chỉ vị trí có nhãn (bỏ gap cuối row)
     pause_all = [0, 0, 0]     # gồm cả vị trí gap cuối row khi manifest có giá trị
@@ -1004,6 +1006,11 @@ def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
             pause_all[0] += hits
             pause_all[1] += false
             pause_all[2] += missed
+            # V10.A9: tổng frame pause dự đoán/thật (mọi vị trí gap, kể cả đuôi)
+            pause_pred_total += float(pred_array.sum())
+            pause_true_total += float(true_array.sum())
+        speech_pred_total += float(predicted_duration.sum())
+        speech_true_total += float(true_durations.sum())
 
         # Mel trên frame gap/lead THẬT (vị trí, chưa align — xem `gap_note`).
         overlap_gap = _gap_frame_mask_from(item["durations"].tolist(), true_gaps,
@@ -1103,6 +1110,9 @@ def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
         "mel_mae_db_speech": _quantiles([entry["mel_mae_db_speech"] for entry in per_clip
                                          if entry["mel_mae_db_speech"] is not None]),
         "length_ratio": _quantiles(length_ratios),
+        # V10.A9: tách phần tiếng nói vs pause — A2 kỳ vọng pause tăng rõ, speech gần như không đổi
+        "length_ratio_speech": round(speech_pred_total / max(speech_true_total, 1.0), 4),
+        "length_ratio_pause": round(pause_pred_total / max(pause_true_total, 1.0), 4),
         "f0_rmse_cents_by_tone": {tone: _quantiles(values) for tone, values in tone_f0.items()},
         "f0_note": V2_F0_NOTE,
         "vuv_accuracy": round(vuv_hits / max(vuv_total, 1), 4),

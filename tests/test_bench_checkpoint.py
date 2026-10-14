@@ -7,7 +7,7 @@ from tools.bench_checkpoint import FAIL, NO_BASE, NO_DATA, PASS, hard_gates, tar
 BASE_OLD = {"mel_l1_z": 1.14, "mel_db_speech": 8.9, "rough": 0.42, "tone_C": 0.80,
             "cer": 0.23, "f0_nga": 177.0}
 BASE_FIX = {"mel_gap": 3.1, "pause_f1_all": 0.50, "gap_sum_mae_all": 200.0,
-            "syl_z": 1.16, "mel_gap_z": 3.0}
+            "syl_z": 1.16, "mel_gap_z": 3.0, "length_ratio": 0.7665}
 
 
 def _row_old(**over):
@@ -64,7 +64,7 @@ def test_cong_muc_tieu_thieu_du_lieu_la_chua_do():
     gates = target_gates(_row_fix(pause_f1_all=None), BASE_FIX)
     assert gates["pause_f1_all≥mốc+0.073"] == (NO_DATA, "chưa đo")
     assert gates["gap_sum_mae_all≤mốc×0.714"][0] == PASS
-    assert gates["length_ratio 1.00±0.05"][0] == PASS
+    assert gates["length_ratio≤0.5×|1−mốc|"][0] == PASS
     bad = target_gates(_row_fix(pause_f1_all=0.55, gap_sum_mae_all=150.0, length_ratio=1.2,
                                 mel_gap_z=2.6), BASE_FIX)
     assert all(state == FAIL for state, _ in bad.values())
@@ -179,3 +179,16 @@ def test_pin_readme_khop_byte_trong_git():
         assert pinned == git_sha, f"{name}: README ghim {pinned} ≠ byte trong git {git_sha} — ghim lại"
         disk = hashlib.sha256((root / rel).read_bytes()).hexdigest()
         assert disk == git_sha, f"{name}: byte trên đĩa ≠ byte trong git — checkout cũ, chạy: git checkout -- {rel}"
+
+
+def test_cong_length_ratio_a9():
+    """V10.A9: |1−r| ≤ 0,5·|1−mốc| — mốc fixtail 0,7665 ⇒ đạt [0,8833; 1,1168]; mốc None ⇒ NO_BASE."""
+    from tools.bench_checkpoint import FAIL, NO_BASE, PASS, target_gates
+
+    base = {"length_ratio": 0.7665, "pause_f1_all": 0.5, "gap_sum_mae_all": 150.0, "mel_gap_z": 2.0}
+    key = "length_ratio≤0.5×|1−mốc|"
+    for value, expected in ((0.8833, PASS), (1.05, PASS), (0.8832, FAIL), (1.2, FAIL), (0.7665, FAIL)):
+        gates = target_gates({"length_ratio": value, **{k: v for k, v in base.items() if k != "length_ratio"}}, base)
+        assert gates[key][0] == expected, (value, gates[key])
+    gates = target_gates({"length_ratio": 0.9}, None)
+    assert gates[key][0] == NO_BASE
