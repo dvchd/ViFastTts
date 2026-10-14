@@ -1390,3 +1390,14 @@ Kiểm chéo: σ của **trung bình trượt 2 mẫu liền kề** khớp σ_m�
 Log cũ chỉ có mẫu cách 50 bước ⇒ **không dựng được trung bình trượt 20 bước**; cột 2σ chuẩn là **ước lượng**
 σ_mẫu/√20. Từ A2, dòng `comps:` in **trung bình cửa sổ 50 bước** ⇒ lần sau đo σ chuẩn **trực tiếp**.
 **Không ảnh hưởng A2** (V10.B4 đã loại lỗi chuẩn hóa bằng đo tất định; mel/G tăng là đúng đích A2 — nhãn gap mới).
+
+**V11S2 — bổ sung 2 (14/10/2026).** (a) **Hàng val bị loại khi chia tập**: `4ITcvEa_Acc_0186__s01`
+(parent `4ITcvEa_Acc_0186` nằm trong val300) ⇒ loại để hai tập không giao val300 (V11S2.A1) —
+val_calib 737 + val_lock 735 = 1.472 (hàng 301–1773 là 1.473). (b) **UTMOSv2 BỎ** (V11S2.A3):
+sh25/plain khớp 6/6 nhưng 40k/18k chỉ 2/3 cặp và trung bình 40k 1,242 < 18k 1,273 (ngược tai người
+dùng) — không thử lại cấu hình khác. (c) **CreaPy ĐẠT kiểm chứng** trên audio thật (V11S2.A4):
+25 clip giàu ngã/nặng, tham số đọc (min 60 ms · ngưỡng 0,8 · STE phân vị 30 · model male, F0 user
+122 Hz): ngã+nặng **0,1774** vs ngang+huyền **0,1023** (1,73×). (d) **Tiêu chí probe** (V11S2.A2):
+σ chuẩn = σ/√m; công thức giả định các bước ĐỘC LẬP — loss train tự tương quan nên biên thật rộng
+hơn chút; **lệch ngoài 2σ là lý do để KIỂM, không tự động dừng**. (e) **val f0p A2 vs base** (47k):
++5,07% (train trượt 500 bước +0,9%) — đã báo Agent 0 theo nhánh.
