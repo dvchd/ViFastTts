@@ -1,7 +1,7 @@
 # TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, Agent 2 cập nhật mỗi vòng)
 
 **Vòng hiện hành**: V09 · **Tệp đặc tả**: `docs/handoff/V09_agent0.md`
-**Commit gốc của vòng** (trước khi sửa): `475bdb4` · **Commit cuối**: `5d5827a`
+**Commit gốc của vòng** (trước khi sửa): `475bdb4` · **Commit cuối**: `556883a`
 **Trạng thái**: **DỪNG, CHỜ ĐỌC** (V09.B1–B8 xong; B10 có `f0p` lạ −18,9% ⇒ dừng báo; chưa chạy thật A2)
 
 > Agent 1 đọc vòng này theo thông tin ở đầu tệp (không cần hash gửi kèm): diff `ab42b06..<commit cuối>`,
