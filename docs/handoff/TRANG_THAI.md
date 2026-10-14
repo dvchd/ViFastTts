@@ -1,10 +1,12 @@
 # TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, Agent 2 cập nhật mỗi vòng)
 
-**Vòng hiện hành**: V11 · **Tệp đặc tả**: `docs/handoff/V11_agent0.md`
-**Commit gốc của vòng** (trước khi sửa): `b1ae8ce` · **Commit code cuối**: `<commit cuối TRƯỚC commit hồ sơ>
-> Quy ước V11S.A3: HEAD luôn là commit hồ sơ (không tự ghi hash của chính nó); Agent 1 đọc `<gốc>..HEAD`.
-**Trạng thái**: **A2 ĐANG CHẠY** + B-I (V11.B1–B5, chỉ CPU) đang làm; B-II (B6–B11) sau khi A2 tới 60k.
-A2: `runs/acoustic_v2_A2_fixtail`, resume base@40000, 60k, ~0,43 s/bước (khởi động 12:35 14/10).
+**Vòng hiện hành**: V11 (bổ sung 1+2) · **Tệp đặc tả**: `V11_agent0.md` + `V11_agent0_bosung.md` + `V11_agent0_bosung2.md`
+**Commit gốc của vòng** (trước khi sửa): `b1ae8ce` · **Commit code cuối**: `34f9b6c`
+> Quy ước V11S.A3: HEAD luôn là commit hồ sơ (không tự ghi hash của chính nó); đọc `<gốc>..HEAD`.
+> **Phiên chính TỰ QUẢN LÝ** từ 14/10 (Agent 0 hết hạn mức): quyết định tự đưa + ghi vào `V11_agent2.md`
+> mục "PHẢN BIỆN NGOÀI" (sub-agent, ít nhất 1 model khác họ = `muse-spark-1.3-contributor`).
+**Trạng thái**: **ĐANG LÀM (W1 xong, chuyển W2/E4)** — A2 xong 60k ✓ · B6/B7 xong (TỪ CHỐI hình thức do 2 cổng mel val CŨ khác nhãn; 6 cổng còn lại đạt + tốt hơn base) · W1 xong: A/B tai người **HÒA** ⇒ A2-55k = **tham chiếu nội bộ**, base 40k = bản dùng hằng ngày; rè = ưu tiên #1 · hạ tầng xong (`ckpt_<step>.pt` nguyên tử + watchdog chịu last.pt hỏng) · B9 xong (duration 53 ms không ở trần nhãn ⇒ W2; VUV bão hoà ⇒ hạ xuống theo dõi).
+**Hàng đợi phiên sau**: E4-rè (nội suy có trọng số + loss C) → W2-duration → thước F0 phân bố → cổng cùng nhãn → B10 → bộ 30 câu người thật (chi tiết ở cuối `V11_agent2.md`).
 
 > Agent 1 đọc vòng này theo thông tin ở đầu tệp (không cần hash gửi kèm): diff `06b5f10..<commit cuối>`,
 > câu hỏi V10.C1–C7 ở mục C của tệp đặc tả. Agent 1 **chỉ đọc, không ghi tệp** vào repo.

@@ -129,3 +129,20 @@ V11.B6–B11 + V11S.B3 (watchdog: step_of chịu last.pt hỏng · ghi checkpoin
 - **Xếp hạng 5 việc**: 1) C (weighted MR-STFT) · 2) kiểm gate creak vs gán tay ~100 âm tiết · 3) bộ thước F0 phân bố · 4) A/B MASK vs NỘI SUY vs LAI cho target F0 creak · 5) B (CQT) chỉ nếu p_holm<0,05.
 
 **Quyết định tinh chỉnh của phiên chính**: giữ nguyên "cắt B (CQT critic) + không thêm A" ✓; **C chuyển từ "cắt" sang ứng viên rẻ có bằng chứng mạnh** (chỉ-train, 0 chi phí suy luận; cổng: F0 RMSE per-tone giảm ≥3% + `val_rough`/`eval_creak` trong ±5%, nếu trượt ⇒ `stft_coeff=0`) — xếp **sau W1/W2**, cùng đợt với E4; **E4 = nội suy có trọng số (lai) thay vì mask**; thêm **bộ thước F0 phân bố** vào danh sách thước (làm sau khi W1 xong, phải kiểm thước trước ✓).
+
+## W1 — KẾT LUẬN + B9 (chẩn đoán nhanh, không train)
+
+**A/B tai người (6 cặp, nghe lại kỹ): HÒA** ✓ — người dùng xác nhận "về cơ bản là hòa". Ghi chú kèm: **rè to hơn ở A2** (cặp 1, cặp 5 "vừa đọc vừa rè nặng") — khớp số đo (Δjitter 0,0409 vs 0,0372; CreaPy 2,80× vs 2,72×).
+**Quyết định**: A2-55k **đạt 4/4 cổng W1** (hòa · cer_prod ✓ · CreaPy ✓ · Δjitter ✓) ⇒ **bản tham chiếu nội bộ** cho E4/ONNX; **base 40k vẫn là bản dùng hằng ngày** tới khi dòng rè xong (A/B hòa + rè là điểm đau #1).
+**Sửa nhầm đã hoàn tác**: `"AI" → "ây ai"` GIỮ NGUYÊN (mình tưởng nhầm là lỗi đọc; thực ra người dùng chỉ mô tả + nêu RÈ) — commit `34f9b6c`.
+
+**B9 — Duration (tf, val fixtail, 7.218 âm tiết)**: base 40k **4,99 frame (53 ms)** · A2-55k 5,01 (53 ms) — **không đổi** ✗. Theo nhóm `coda:tone`: xấu nhất NONE|HUYEN **6,79 frame (72 ms, n=803)**, J|SAC 5,80 (n=522), M|NGANG 6,37 — không nhóm nào nổi trội bất thường ⇒ **lỗi rải đều** ⇒ KHÔNG ở trần nhãn (§17 ~18 ms; 53 ms ≈ 3×) ⇒ **đầu duration còn dư địa** (hỗ trợ giả thuyết "thoái hoá về trung bình"); triệu chứng người thấy = nói nhanh 5–7% (length_ratio_speech 0,93–0,95) ⇒ **ứng viên W2**.
+**B9 — VUV**: metric dùng **dự đoán thật** (`pred_vuv[active_t] == true_vuv[active_t]`, `eval_acoustic.py:747`) — **không phải lỗi đo** ✓; nhưng **bão hoà** (0,9823 giống nhau ở small/base) ⇒ theo V11.A9: **hạ từ cổng xuống THEO DÕI** ✓.
+
+## HÀNG ĐỢI PHIÊN SAU (tự quản lý, không cần hỏi)
+1. **E4 — RÈ (ưu tiên #1)**: target F0 vùng creak = **nội suy có trọng số** (lan truyền pitch mark, ngưỡng MinPR 0,4/MaxPR 2,7/CorrThs 0,4 — Ninh & Yamashita 2015) + loss **C** cho vocoder (MR-STFT ≤1 kHz w=3×, FFT 512/1024/2048, hop 256; tune lại tỉ lệ; cổng F0 RMSE per-tone ↓≥3% + rough/creak ±5%) — chỉ-train, 0 chi phí suy luận.
+2. **W2 — duration**: sửa đầu duration (53 ms → mục tiêu ≤40 ms; length_ratio_speech → ≥0,97) mà không giảm CER/tone_C.
+3. **Thước F0 phân bố** (flatness_T + W₂/JSD bootstrap theo âm tiết) — phải kiểm thước trước (thật-vs-thật ≈0; 40k>18k).
+4. **Cổng cùng nhãn** trong bench (val fixtail: mel_z ≤ mốc×1,01 · dB ≤ mốc+0,10) + version cổng theo val hash.
+5. **B10**: speed 0,8/1,25 · năng lượng ngã/nặng · mối nối câu (5 câu liền) — base 40k + A2-55k.
+6. **Bộ 30 câu người thật** (người dùng thu) → chuẩn vàng + preference pairs.
