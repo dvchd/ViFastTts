@@ -114,6 +114,12 @@ trước khi dùng nó để quyết định — bài học §34.3→§36.4); m�
 - **Chia vai theo loại câu hỏi**: câu trả lời được bằng **đo** ("số này từ đâu", "dữ liệu có lệch không")
   ⇒ **Agent 2 chạy và trả lời bằng số**; **Agent 1 chỉ kiểm độc lập diff sau mỗi commit** (vai trò bắt
   lỗi thật: probe no-op, lệnh train từ số 0, sha256 ghim sai, tệp thô lọt git).
+- **Sub-agent khi cần góc nhìn khác họ** (từ vòng 11; dùng khi Agent 0 hết hạn mức hoặc cần phản biện
+  đa chiều): phiên chính tự phóng sub-agent để phản biện/nghiên cứu; **ít nhất 1 sub-agent chạy model
+  KHÁC HỌ với phiên chính** — mặc định **`opencode-go/muse-spark-1.3-contributor`** (Muse Spark 1.3
+  Contributor). Sub-agent **chỉ đọc, KHÔNG sửa tệp repo**; mỗi nhiệm vụ ghi rõ phạm vi + câu hỏi + định
+  dạng trả lời; không để 2 sub-agent trùng phạm vi; kết quả tóm tắt vào `docs/handoff/V<NN>_agent2.md`
+  (mục **"PHẢN BIỆN NGOÀI"**) kèm model đã dùng.
 - **Tệp quyết định nằm trong repo**: `docs/handoff/V<NN>_agent0.md` — Agent 2 lưu nguyên văn quyết định
   (kèm mã câu hỏi `V<NN>.B<k>` / `V<NN>.C<k>`), rồi báo commit hash. Agent 1 được nhắn đúng hash đó.
 - **Mỗi vòng chỉ một tệp còn hiệu lực** + `docs/handoff/TRANG_THAI.md` là **nguồn duy nhất** (Agent 2
