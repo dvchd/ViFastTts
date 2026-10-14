@@ -9,6 +9,8 @@ Thư mục này **ghim** đúng các hàng đó + hash manifest, để máy/ngư
 | holdout 20 (CER free) | `data/codelung/holdout_clean_v2_dur_slot4.jsonl` | `3ca7c79b0ba4ee9a66fb958ea28b3130da928fd0` | `eval/holdout20_ids.txt` |
 | train (đối chiếu) | `data/codelung/train_clean_v2_dur_seg_slot4.jsonl` | `edbc058ecad37a9c7c50844f0bb8dcde8c5ee1a7` | – |
 | **train fixgap (A2 §43)** | `data/codelung/train_clean_v2_dur_seg_slot4_fixgap.jsonl` | `fdb622940e0de9560a83050f0c8467cd34dea445` | – |
+| **val300 fixgap (A2)** | `data/codelung/val_clean_v2_dur_seg_slot4_fixgap.jsonl` | `5ec5f139ce56…` (đầy đủ trong `artifacts/dataset_v2/verify_gaps_val_fixgap.json`) | – |
+| **holdout20 fixgap (A2)** | `data/codelung/holdout_clean_v2_dur_seg_slot4_fixgap.jsonl` | `aa418147f314…` | – |
 | stats F0 | `data/codelung/f0_stats_v2.json` | `505604ebf0356560fb3348691668a687c2096c51` | – |
 
 **Quy ước**: tool luôn lấy `--clips N` = **N hàng đầu** của manifest ⇒ `--clips 300` + manifest trên
