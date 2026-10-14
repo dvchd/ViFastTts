@@ -108,3 +108,19 @@ trước khi dùng nó để quyết định — bài học §34.3→§36.4); m�
   watchdog phải đặt **cả** HIGH+**LOW** watermark; `torch.onnx.export` v2 cần `no_grad` + submodule wrapper.
 - **Bẫy quy trình**: upload demo phải **test tải**; đo bằng **hàm chuẩn của repo** (tự chế transform từng
   sai chuẩn hoá — §33.2); thước yếu che mất kết luận (§34.3 → §36.4).
+
+## 8. Quy trình vòng (áp dụng từ vòng 08)
+
+- **Chia vai theo loại câu hỏi**: câu trả lời được bằng **đo** ("số này từ đâu", "dữ liệu có lệch không")
+  ⇒ **Agent 2 chạy và trả lời bằng số**; **Agent 1 chỉ kiểm độc lập diff sau mỗi commit** (vai trò bắt
+  lỗi thật: probe no-op, lệnh train từ số 0, sha256 ghim sai, tệp thô lọt git).
+- **Tệp quyết định nằm trong repo**: `docs/handoff/V<NN>_agent0.md` — Agent 2 lưu nguyên văn quyết định
+  (kèm mã câu hỏi `V<NN>.B<k>` / `V<NN>.C<k>`), rồi báo commit hash. Agent 1 được nhắn đúng hash đó.
+- **Mỗi vòng chỉ một tệp còn hiệu lực** + `docs/handoff/TRANG_THAI.md` là **nguồn duy nhất** về mốc/hash
+  ghim/cổng/việc đang chờ (Agent 2 cập nhật mỗi vòng).
+- **Đầu tệp chuẩn**: `VÒNG <NN> | Commit gốc: <hash> | Thay thế: …` + dòng `Agent 2 THỰC THI: Phần B |
+  Agent 1 ĐỌC: Phần C | Người dùng: Phần D`.
+- **Quyết định trước 3 nhánh** cho mỗi bước có rủi ro: đạt ⇒ làm X · trượt ⇒ dừng+báo · **kết quả lạ**
+  ⇒ dừng+báo (kèm định nghĩa "lạ so với cặp đối chứng nào").
+- **Mẫu báo cáo Agent 2**: commit · kết quả test · bảng số **theo đúng mã câu hỏi** · mục
+  **"TỰ QUYẾT KHÁC ĐẶC TẢ"** (mọi thay đổi ngoài đặc tả, kể cả đổi bên đối chứng) · trạng thái **DỪNG/TIẾP**.
