@@ -286,6 +286,13 @@ def segment_targets(row: dict, features: dict, f0_stats: dict) -> dict[str, torc
                                              f0_std=float(f0_stats["f0_log_std"]),
                                              jitter=features.get("jitter"))
     phonation, phonation_mask = phonation_targets(row, features, features["vuv"])
+    # E4c: xác suất creak theo frame (cho loss làm nét `mel_sharp` vùng creak — đo được mel dự
+    # đoán ở đó mượt hơn mel thật 42% (thời gian) / 62% (tần số)). Thiếu kênh ⇒ zeros = tắt.
+    frames = features["vuv"].size(0)
+    if "jitter" in features:
+        creak_c = creak_probability(features["jitter"], features["vuv"])
+    else:
+        creak_c = torch.zeros(frames, dtype=torch.float32)
     return {
         "seg_ratio": ratio,
         "seg_ratio_mask": ratio_mask,
@@ -296,6 +303,7 @@ def segment_targets(row: dict, features: dict, f0_stats: dict) -> dict[str, torc
         "seg_vuv": voiced_ratio,
         "seg_phonation": phonation,
         "seg_phonation_mask": phonation_mask,
+        "mel_creak_c": creak_c,
         "pause_gate": gate,
         "pause_log_gap": log_gap,
         "pause_mask": pause_mask,

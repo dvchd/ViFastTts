@@ -149,7 +149,10 @@ def collate_slot_batch(items: list[dict[str, Any]]) -> dict[str, Any]:
         "id": [item["id"] for item in items],
         "frame_lengths": torch.tensor([item["mel"].size(0) for item in items], dtype=torch.long),
     }
-    for key in ("mel", "f0", "vuv", "energy"):
+    frame_keys = ["mel", "f0", "vuv", "energy"]
+    if all("mel_creak_c" in item for item in items):  # E4c: [T] theo frame (dataset mới)
+        frame_keys.append("mel_creak_c")
+    for key in frame_keys:
         first = items[0][key]
         padded = torch.zeros((batch, frame_max, *first.shape[1:]), dtype=first.dtype)
         for i, item in enumerate(items):
@@ -158,7 +161,7 @@ def collate_slot_batch(items: list[dict[str, Any]]) -> dict[str, Any]:
         output[key] = padded
     assert output["mel"].shape[1:] == (frame_max, mel_dim)
     for key in items[0]:
-        if key in ("id", "mel", "f0", "vuv", "energy", "frame_lengths"):
+        if key in ("id", "mel", "f0", "vuv", "energy", "mel_creak_c", "frame_lengths"):
             continue
         output[key] = torch.stack([item[key] for item in items])
     return output

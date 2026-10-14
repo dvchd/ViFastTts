@@ -423,3 +423,24 @@ def test_tong_thanh_phan_co_trong_so_bang_loss_tong():
                                 tone_prior=tone_prior)
     weighted = sum(float(value) * float(DEFAULT_WEIGHTS.get(key, 1.0)) for key, value in losses.items())
     assert abs(weighted - float(total)) <= 1e-5
+
+
+def test_mel_sharp_creak_boost_e4c():
+    """E4c (§45): boost > 0 ⇒ vùng creak (mel_creak_c cao) phạt mượt nặng hơn; thiếu kênh = y cũ."""
+    outputs, batch = _fixture()
+    torch.manual_seed(1)
+    outputs = {**outputs, "mel": outputs["mel"] + 0.3 * torch.randn_like(outputs["mel"])}
+    base = slot_losses(outputs, batch, weights={"mel_sharp_creak_boost": 5.0},
+                       shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)[1]["mel_sharp"]
+    plain = slot_losses(outputs, batch, shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)[1]["mel_sharp"]
+    assert abs(float(base) - float(plain)) < 1e-6          # thiếu kênh creak ⇒ boost vô hiệu
+    # Creak CHỈ nửa đầu (hằng số toàn dải thì trung bình có trọng số = không trọng số, đúng toán).
+    creak = torch.zeros(batch["mel"].size(0), batch["mel"].size(1))
+    creak[:, : batch["mel"].size(1) // 2] = 1.0
+    boosted_batch = {**batch, "mel_creak_c": creak}
+    with_channel = slot_losses(outputs, boosted_batch, shape_mean=SHAPE_MEAN,
+                               shape_std=SHAPE_STD)[1]["mel_sharp"]
+    with_boost = slot_losses(outputs, boosted_batch, weights={"mel_sharp_creak_boost": 3.0},
+                             shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD)[1]["mel_sharp"]
+    assert torch.isfinite(with_boost)
+    assert not torch.allclose(with_channel, with_boost)     # trọng số có tác dụng

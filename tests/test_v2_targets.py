@@ -117,7 +117,9 @@ def test_segment_targets_gop_day_du():
     targets = segment_targets(row, features, stats)
     assert set(targets) == {"seg_ratio", "seg_ratio_mask", "f0_shape", "f0_weight", "f0_k_mask",
                             "seg_energy", "seg_vuv", "seg_phonation", "seg_phonation_mask",
-                            "pause_gate", "pause_log_gap", "pause_mask"}
+                            "pause_gate", "pause_log_gap", "pause_mask", "mel_creak_c"}
+    assert targets["mel_creak_c"].shape == (13,)            # E4c: [T], zeros khi thiếu jitter
+    assert not targets["mel_creak_c"].any()
     assert targets["seg_phonation"].shape == (2, 4, 3)  # features test không có kênh → zeros
     assert not targets["seg_phonation_mask"].any()
     assert targets["seg_ratio"].shape == (2, 4)

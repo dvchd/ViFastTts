@@ -103,10 +103,25 @@ def slot_losses(
     delta_time = ((fake_mel[:, 1:] - fake_mel[:, :-1]) - (real_mel[:, 1:] - real_mel[:, :-1])).abs().mean(dim=-1)
     delta_freq = ((fake_mel[:, :, 1:] - fake_mel[:, :, :-1]) - (real_mel[:, :, 1:] - real_mel[:, :, :-1])).abs().mean(dim=-1)
     mask_float = frame_mask.to(torch.float32)
-    losses["mel_sharp"] = (
-        (delta_time * pair_mask).sum() / pair_mask.sum().clamp_min(1)
-        + (delta_freq * mask_float).sum() / mask_float.sum().clamp_min(1)
-    )
+    # E4c (§45): vùng creak — mel dự đoán mượt hơn mel thật 42%/62% ⇒ Vocos render thành "rè".
+    # `mel_sharp_creak_boost` > 0 ⇒ w_t = 1 + boost·c_t cho đúng vùng đó (0 = hành vi cũ y nguyên).
+    boost = float(merged.get("mel_sharp_creak_boost", 0.0))
+    creak_c = batch.get("mel_creak_c")
+    if boost > 0 and creak_c is not None:
+        creak_c = creak_c[:, :frames].to(fake_mel.dtype)
+        weight_time = 1.0 + boost * 0.5 * (creak_c[:, 1:] + creak_c[:, :-1])
+        weight_freq = 1.0 + boost * creak_c
+        pair_w = pair_mask * weight_time
+        freq_w = mask_float * weight_freq
+        losses["mel_sharp"] = (
+            (delta_time * pair_w).sum() / pair_w.sum().clamp_min(1e-6)
+            + (delta_freq * freq_w).sum() / freq_w.sum().clamp_min(1e-6)
+        )
+    else:
+        losses["mel_sharp"] = (
+            (delta_time * pair_mask).sum() / pair_mask.sum().clamp_min(1)
+            + (delta_freq * mask_float).sum() / mask_float.sum().clamp_min(1)
+        )
 
     losses["duration"] = F.mse_loss(outputs["log_duration"], torch.log1p(batch["durations"].float()))
 
