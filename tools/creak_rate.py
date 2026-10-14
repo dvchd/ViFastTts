@@ -47,11 +47,15 @@ def _load_creapy(source: str):
 
 def measure(clips_path: str | Path, synth_dir: str | Path, *, creapy_src: str = "~/creapy-src",
             gender: str = "male", threshold: float = 0.8, ste_percentile: float = 30.0,
-            real: bool = False) -> dict:
+            real: bool = False, windows_path: str | Path | None = None) -> dict:
     """Tính tỉ lệ block creak theo nhóm thanh trên `synth_dir/<parent>.wav`.
 
     `real=True` (mốc đối chứng): đọc chính `row["audio_path"]` cắt theo `frame_range`
     thay vì wav tổng hợp — cùng một thước, cùng cách quy cửa sổ âm tiết.
+
+    `windows_path`: JSON `{parent: [{tone, start, end}, …]}` (giây) — **bắt buộc cho
+    FREE-RUN**: model tự đặt thời lượng nên cửa sổ phải lấy từ `slot_durations` của model
+    (`tools/free_run_clips.py --windows-out`), không dùng `row["durations"]` của manifest.
     """
     import numpy as np
     import soundfile as sf
@@ -60,6 +64,7 @@ def measure(clips_path: str | Path, synth_dir: str | Path, *, creapy_src: str = 
     creapy.set_config(gender_model=gender, creak_threshold=threshold, verbose=False)
 
     clips = json.loads(Path(clips_path).read_text(encoding="utf-8"))
+    windows = json.loads(Path(windows_path).read_text(encoding="utf-8")) if windows_path else {}
     store: dict[str, list[float]] = {}
     failed: list[str] = []
     for entry in clips:
@@ -92,17 +97,22 @@ def measure(clips_path: str | Path, synth_dir: str | Path, *, creapy_src: str = 
             failed.append(entry["parent"])
             continue
         row = entry["row"]
-        tones = [s["abstract"]["tone"] for s in row["syllables"]]
-        durs, gaps = row["durations"], row["gaps"]
-        cursor = row.get("lead_frames", 0) * HOP_S
-        for index, (duration, tone) in enumerate(zip(durs, tones)):
-            start, end = cursor, cursor + duration * HOP_S
+        if windows_path is not None:
+            syllables = [(w["start"], w["end"], w["tone"]) for w in windows[entry["parent"]]]
+        else:
+            tones = [s["abstract"]["tone"] for s in row["syllables"]]
+            durs, gaps = row["durations"], row["gaps"]
+            cursor = row.get("lead_frames", 0) * HOP_S
+            syllables = []
+            for index, (duration, tone) in enumerate(zip(durs, tones)):
+                syllables.append((cursor, cursor + duration * HOP_S, tone))
+                cursor = cursor + duration * HOP_S + ((gaps[index] * HOP_S) if index < len(gaps) else 0.0)
+        for start, end, tone in syllables:
             lo, hi = int(start / 0.01), max(int(end / 0.01), int(start / 0.01) + 1)
             block = y_pred[lo:min(hi, len(y_pred))]
             group = GROUP.get(tone)
             if group and len(block) >= 2:
                 store.setdefault(group, []).append(float(np.mean(block > 0.5)))
-            cursor = end + ((gaps[index] * HOP_S) if index < len(gaps) else 0.0)
 
     groups = {name: {"n": len(values), "mean": float(np.mean(values)), "median": float(np.median(values))}
               for name, values in sorted(store.items())}
@@ -113,6 +123,7 @@ def measure(clips_path: str | Path, synth_dir: str | Path, *, creapy_src: str = 
         "clips": str(clips_path),
         "synth_dir": str(synth_dir),
         "real": bool(real),
+        "windows": str(windows_path) if windows_path else None,
         "creapy": {"gender": gender, "threshold": threshold, "ste_percentile": ste_percentile,
                    "min_creak_ms": 60},
         "n_clips": len(clips),
@@ -134,9 +145,12 @@ def main() -> None:
     parser.add_argument("--ste-percentile", type=float, default=30.0)
     parser.add_argument("--real", action="store_true",
                         help="Mốc đối chứng: đọc audio gốc theo frame_range thay vì wav tổng hợp")
+    parser.add_argument("--windows", default=None,
+                        help="JSON cửa sổ âm tiết theo model (BẮT BUỘC cho free-run)")
     args = parser.parse_args()
     result = measure(args.clips, args.synth_dir, creapy_src=args.creapy_src, gender=args.gender,
-                     threshold=args.threshold, ste_percentile=args.ste_percentile, real=args.real)
+                     threshold=args.threshold, ste_percentile=args.ste_percentile, real=args.real,
+                     windows_path=args.windows)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"clip dùng {result['n_clips'] - len(result['clips_loi'])}/{result['n_clips']}"
