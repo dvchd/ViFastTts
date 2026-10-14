@@ -76,8 +76,32 @@ def _move_batch(batch: dict, device) -> dict:
     return {key: (value.to(device) if torch.is_tensor(value) else value) for key, value in batch.items()}
 
 
+#: V10.A8 — thành phần loss ghi vào history.csv (tên đúng như `v2_losses.DEFAULT_WEIGHTS`), thứ tự cố định.
+LOSS_COMPONENTS = ("mel", "mel_pre", "mel_sharp", "duration", "ratio", "f0", "f0_delta",
+                   "f0_prior", "tone_disc", "vuv", "energy", "phonation", "tone",
+                   "pause_gate", "pause_gap")
+
+
+def history_header() -> list[str]:
+    """Cột history.csv — 10 cột cũ giữ nguyên thứ tự, cột thành phần mới thêm vào CUỐI (V10.A8)."""
+    return ["step", "phase", "train_total", "train_mel", "mel_gap", "mel_voiced",
+            "val_total", "val_mel_voiced", "val_rough", "lr",
+            "train_pause_frac", *(f"train_{key}" for key in LOSS_COMPONENTS),
+            *(f"val_{key}" for key in LOSS_COMPONENTS), "val_pause_frac"]
+
+
+def _pause_fraction(parts: dict[str, float], total: float, weights: dict | None) -> float:
+    """V10.A8: tỉ phần loss pause = (w·pause_gate + w·pause_gap) / tổng (nan nếu tổng = 0)."""
+    from vifasttts.models.v2_losses import DEFAULT_WEIGHTS
+
+    merged = {**DEFAULT_WEIGHTS, **(weights or {})}
+    pause = (merged.get("pause_gate", 1.0) * parts.get("pause_gate", 0.0)
+             + merged.get("pause_gap", 1.0) * parts.get("pause_gap", 0.0))
+    return pause / total if total else float("nan")
+
+
 def _validate(model, loader, weights: dict, device, max_batches: int = 0) -> dict[str, float]:
-    """Val chế độ `tf_seg`: trả {'total', 'mel', 'mel_voiced', 'rough'} (best.pt theo mel hữu thanh).
+    """Val chế độ `tf_seg`: trả {'total', 'mel_voiced', 'rough'} + TỪNG thành phần loss (V10.A8).
 
     `rough` (§37) = |Δmel_dự đoán| / |Δmel_thật| (thời gian + tần số, bình quân) — độ **nét** của mel
     (1,0 = nét bằng thật; thấp = mượt hơn thật). Cần đo cùng L1 vì **L1 trung bình thưởng cho mel
@@ -89,7 +113,7 @@ def _validate(model, loader, weights: dict, device, max_batches: int = 0) -> dic
     from vifasttts.models.v2_losses import slot_losses
 
     model.eval()
-    totals: dict[str, float] = {"total": 0.0, "mel": 0.0, "mel_voiced": 0.0, "rough": 0.0}
+    totals: dict[str, float] = {"total": 0.0, "mel_voiced": 0.0, "rough": 0.0}
     batches = 0
     with torch.no_grad():
         for batch in loader:
@@ -103,7 +127,8 @@ def _validate(model, loader, weights: dict, device, max_batches: int = 0) -> dic
                                       tone_prior=model.tone_prior_z)
             _gap, mel_voiced = _mel_split(outputs, moved)
             totals["total"] += float(loss.detach())
-            totals["mel"] += float(parts["mel"].detach())
+            for key, value in parts.items():  # V10.A8: mọi thành phần (gồm pause_gate/pause_gap)
+                totals[key] = totals.get(key, 0.0) + float(value.detach())
             totals["mel_voiced"] += float(mel_voiced)
             # §37: độ nét (gồ ghề) — bám frame_lengths để bỏ padding
             pred, real = outputs["mel"], moved["mel"]
@@ -362,8 +387,10 @@ def train_slot_v2(
         if not append_history:
             if resume_note:
                 history.write(resume_note + "\n")  # X3: dấu vết resume đổi tập val (trước header)
-            writer.writerow(["step", "phase", "train_total", "train_mel", "mel_gap", "mel_voiced",
-                             "val_total", "val_mel_voiced", "val_rough", "lr"])
+            writer.writerow(history_header())
+        window: dict[str, float] = {}  # V10.A8: gom thành phần loss trong cửa sổ log_every
+        window_n = 0
+        last_window: dict[str, float] = {}
         while step < steps:
             for batch in train_loader:
                 step += 1
@@ -417,6 +444,13 @@ def train_slot_v2(
                 if grad_clip:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
                 optimizer.step()
+                # V10.A8: trung bình thành phần loss theo cửa sổ log_every (để ghi history + in log).
+                for key, value in parts.items():
+                    window[key] = window.get(key, 0.0) + float(value.detach())
+                window_n += 1
+                if step % log_every == 0:
+                    last_window = {key: value / max(1, window_n) for key, value in window.items()}
+                    window, window_n = {}, 0
 
                 mel_gap = mel_voiced = float("nan")
                 if step % log_every == 0:
@@ -435,6 +469,10 @@ def train_slot_v2(
                           f"adv={float(parts.get('adv', torch.zeros(())).detach()):.3f} "
                           f"d={float(parts.get('d', torch.zeros(())).detach()):.3f} "
                           f"lr={learning_rate:.2e} ({speed:.3f}s/bước){memory}")
+                    print("  comps: " + " ".join(f"{key}={value:.4f}"
+                                                 for key, value in sorted(last_window.items()))
+                          + f" pause_frac="
+                          f"{_pause_fraction(last_window, float(loss.detach()), weights):.3f}")
                 if resolved_device.type == "mps" and step % 500 == 0:
                     torch.mps.empty_cache()
                 if step % validate_every == 0:
@@ -448,7 +486,11 @@ def train_slot_v2(
                                      float(loss), float(parts["mel"]), float(mel_gap),
                                      float(mel_voiced),
                                      metrics["total"], metrics["mel_voiced"], metrics["rough"],
-                                     learning_rate])
+                                     learning_rate,
+                                     _pause_fraction(last_window, float(loss.detach()), weights),
+                                     *(last_window.get(key, float("nan")) for key in LOSS_COMPONENTS),
+                                     *(metrics.get(key, float("nan")) for key in LOSS_COMPONENTS),
+                                     _pause_fraction(metrics, metrics["total"], weights)])
                     history.flush()
                     improved = metrics["mel_voiced"] < best_val
                     if improved:
@@ -506,7 +548,11 @@ def train_slot_v2(
                     writer.writerow([step, "A" if step <= phase_a_steps else "B",
                                      float(loss), float(parts["mel"]), float(mel_gap),
                                      float(mel_voiced), metrics["total"], metrics["mel_voiced"],
-                                     metrics["rough"], learning_rate])
+                                     metrics["rough"], learning_rate,
+                                     _pause_fraction(last_window, float(loss.detach()), weights),
+                                     *(last_window.get(key, float("nan")) for key in LOSS_COMPONENTS),
+                                     *(metrics.get(key, float("nan")) for key in LOSS_COMPONENTS),
+                                     _pause_fraction(metrics, metrics["total"], weights)])
                     history.flush()
                 if step >= steps or early_stopped or (stop_at_step is not None and step >= stop_at_step):
                     break

@@ -274,9 +274,11 @@ def test_stop_at_step_dung_dung_buoc_va_khong_cham_lr(tmp_path):
                   resume=str(run_dir / "last.pt"), stop_at_step=40003, device="cpu")
     saved = torch.load(out / "last.pt", map_location="cpu", weights_only=False)
     assert saved["step"] == 40003  # dừng đúng bước tuyệt đối
-    rows = [line.split(",") for line in (out / "history.csv").read_text(encoding="utf-8").splitlines()
-            if line and not line.startswith("step")]
-    lr_col = [float(row[-1]) for row in rows]
+    all_lines = (out / "history.csv").read_text(encoding="utf-8").splitlines()
+    header = next(line for line in all_lines if line.startswith("step"))
+    lr_idx = header.split(",").index("lr")  # V10.A8: cột thành phần thêm SAU cột lr
+    rows = [line.split(",") for line in all_lines if line and not line.startswith("step")]
+    lr_col = [float(row[lr_idx]) for row in rows]
     assert len(lr_col) == 3
     for step, lr in zip((40001, 40002, 40003), lr_col):
         progress = min(1.0, (step - 0 - 1) / (60000 - 0 - 1))
@@ -306,3 +308,35 @@ def test_validate_at_stop_report_only(tmp_path):
     assert saved["best_val"] == 0.1234 and saved["no_improve"] == 7  # không bị chạm
     rows = [l for l in (out / "history.csv").read_text(encoding="utf-8").splitlines() if l and not l.startswith("step")]
     assert len(rows) == 1  # đúng 1 dòng report-only
+
+
+def test_loss_components_khop_v2_losses():
+    """V10.A8: danh sách thành phần ghi history == mọi thành phần của v2_losses."""
+    from vifasttts.models.v2_losses import DEFAULT_WEIGHTS
+    from vifasttts.train_v2 import LOSS_COMPONENTS
+
+    assert set(LOSS_COMPONENTS) == set(DEFAULT_WEIGHTS)
+
+
+def test_history_header_du_cot_thanh_phan():
+    """V10.A8: 10 cột cũ giữ nguyên thứ tự; cột thành phần + tỉ phần pause thêm vào cuối."""
+    from vifasttts.train_v2 import LOSS_COMPONENTS, history_header
+
+    header = history_header()
+    assert header[:10] == ["step", "phase", "train_total", "train_mel", "mel_gap", "mel_voiced",
+                           "val_total", "val_mel_voiced", "val_rough", "lr"]
+    assert "train_pause_frac" in header and "val_pause_frac" in header
+    for key in LOSS_COMPONENTS:
+        assert f"train_{key}" in header and f"val_{key}" in header
+    assert len(header) == 10 + 2 + 2 * len(LOSS_COMPONENTS)
+
+
+def test_pause_fraction_dung_trong_so():
+    """V10.A8: tỉ phần pause = (0,5·gate + 0,5·gap)/tổng theo trọng số mặc định; tổng = 0 ⇒ nan."""
+    import math
+
+    from vifasttts.train_v2 import _pause_fraction
+
+    frac = _pause_fraction({"pause_gate": 0.4, "pause_gap": 0.2}, 1.0, None)
+    assert abs(frac - (0.5 * 0.4 + 0.5 * 0.2)) < 1e-9
+    assert math.isnan(_pause_fraction({"pause_gate": 0.1}, 0.0, None))

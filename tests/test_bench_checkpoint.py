@@ -171,7 +171,8 @@ def test_pin_readme_khop_byte_trong_git():
     root = Path(__file__).resolve().parents[1]
     for name in ("base40k_old.json", "base40k_fixtail.json"):
         rel = f"eval/baselines/{name}"
-        blob = subprocess.run(["git", "show", f"HEAD:{rel}"], cwd=root, capture_output=True)
+        blob = subprocess.run(["git", "show", f"HEAD:{rel}"], check=False, cwd=root,
+                              capture_output=True)
         assert blob.returncode == 0, f"{rel} chưa có trong HEAD — commit trước khi ghim"
         git_sha = hashlib.sha256(blob.stdout).hexdigest()
         pinned = readme_sha256(name, root / "eval/README.md")

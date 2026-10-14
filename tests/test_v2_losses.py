@@ -413,3 +413,13 @@ def test_tone_disc_thuong_bien_phan_biet_thanh():
     _total, losses = slot_losses({**outputs, "seg_shape": shape}, batch,
                                  shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD, tone_prior=tone_prior)
     assert "tone_disc" in losses and DEFAULT_WEIGHTS["tone_disc"] == 0.0
+
+
+def test_tong_thanh_phan_co_trong_so_bang_loss_tong():
+    """V10.A8: Σ trọng số × thành phần == loss tổng (≤ 1e-5) — khóa "chỉ thêm cột, không đổi loss"."""
+    outputs, batch = _fixture()
+    tone_prior = torch.randn(6, 4)
+    total, losses = slot_losses(outputs, batch, shape_mean=SHAPE_MEAN, shape_std=SHAPE_STD,
+                                tone_prior=tone_prior)
+    weighted = sum(float(value) * float(DEFAULT_WEIGHTS.get(key, 1.0)) for key, value in losses.items())
+    assert abs(weighted - float(total)) <= 1e-5
