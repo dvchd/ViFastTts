@@ -168,3 +168,9 @@ mel_z 1,1645 ✓ · dB 8,8116 ✓ (tốt hơn base) · rough **0,3588** ✓ (≥
 **Cổng mục tiêu**: length_ratio **0,9114 ĐẠT** ✓ · F1 0,5951 ✗ (cần 0,6289; trần hiệu chuẩn ngưỡng 0,6182) · gMAE 120,15 ✗ (cần 111,7; hiệu chuẩn đưa được 110,8 ✓) · gap_z 2,0… ✗.
 ⇒ Theo **cây V11.A4**: **"ĐẠT CỨNG, TRƯỢT MỤC TIÊU"** ⇒ nhánh **chuẩn bị A1 (không chạy)** ✓ — nhưng theo red-team: F1 cần **nâng khả năng phân biệt của gate** (A1) vì trần ngưỡng = 0,6182; và trước khi chạy A1 phải sửa `pause_pos_weight` (**2,244**, config đang ghi 3,0 ✗) + `max_steps` 60k ✗ + chấp nhận hiệu ứng extension ✗.
 **A/B tai người 42k vs base**: release `demo-audio-20261014-w1b` (6 cặp, kiểm tải 200 + đúng byte ✓) — **cổng cuối** để đổi bản dùng hằng ngày.
+
+## W1c — sửa thiếu sót demo: PHẢI áp sh25 khi nghe A/B
+
+**Thiếu sót của mình**: 2 release trước (`w1` 55k vs base, `w1b` 42k vs base) sinh bằng đường **thẳng model→mel→Vocos, KHÔNG áp sh25** ✗ — không phải cấu hình production (user đã chọn sh25 toàn cục). **sh25 gốc không còn trên máy** ✗ (script cũ không lưu) ⇒ dùng bản tương đương `_unsharp` (unsharp 3×3 box-blur mel z, **α=1,5**) trong `artifacts/vocoder_gta/demo_gta.py` ✓.
+**Release mới `demo-audio-20261014-w1c`** (6 cặp base vs 42k, **CÓ sh25**, kiểm tải 200 + sha khác bản thường ✓, RMS 0,039 vs 0,031 ✓).
+**Nhận xét tai user trên w1b (không sh25)**: base vs 42k "na ná nhau" ✓ (khớp số: 42k ≈ base trên phần lớn chỉ số) · **vẫn rè** ✗ · **lỗi phát âm/tròn chữ GIỐNG NHAU ở cả 2 model** ✗ ⇒ các lỗi phát âm **không phải do checkpoint** mà ở **frontend/đặc trưng chung** ⇒ **thêm mục mới vào hàng đợi**: thu các câu lỗi cụ thể từ user → chẩn đoán frontend (chuẩn hoá/phiên âm) vs acoustic.
