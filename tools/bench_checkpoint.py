@@ -38,7 +38,7 @@ REFERENCE_ABSOLUTE = {"mel_l1_z": 1.16, "mel_db": 8.7, "rough": 0.40, "tone_C": 
 #: Ngưỡng TƯƠNG ĐỐI của cổng cứng (so mốc cùng bản val).
 RELATIVE_HARD = {"mel_l1_z": ("mul", 1.01), "mel_db": ("add", 0.10), "rough": ("sub", -0.01),
                  "tone_C": ("sub", -0.01), "cer": ("add", 0.03), "f0_nga": ("add", 5.0),
-                 "mel_gap": ("sub", 0.0)}
+                 "mel_gap": ("add", 0.0)}  # mel_gap ≤ mốc (giảm mới tốt)
 PASS, FAIL, NO_BASE, NO_DATA = "pass", "fail", "nobase", "nodata"
 SYMBOL = {PASS: "✅", FAIL: "❌", NO_BASE: "🚫", NO_DATA: "⏳"}
 
