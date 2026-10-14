@@ -134,14 +134,22 @@ def segment_pools(row: dict, energy: torch.Tensor, vuv: torch.Tensor) -> tuple[t
 
 
 def f0_targets(row: dict, f0: torch.Tensor, vuv: torch.Tensor, *, f0_mean: float, f0_std: float,
-               keep: int = 4) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+               keep: int = 4, jitter: torch.Tensor | None = None
+               ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """(s_k [N,4,keep], weight [N,4], voiced_ratio [N,4], k_mask [N,4,keep] bool) — mask Addendum 6 + F4.
 
     - `s_k = c_k/√n` trên frame hữu thanh (`vuv > 0,5` và `f0 > 0`), `n ≥ 2`;
     - `k_mask`: hệ số nào **có thật** (k < n) — loss phải mask phần thiếu (B1);
     - trọng số: N = tỷ lệ hữu thanh (luôn); O = 1 nếu onset ∈ `F0_VOICED_ONSETS` ∧ ratio ≥ 0,5;
       M/C = 1 nếu ratio ≥ 0,5; còn lại 0 (không tính loss).
+    - `jitter` (E4 — §45): khi có, F0 được **làm sạch vùng creak** trước khi lấy DCT và
+      trọng số mỗi role nhân thêm `mean(w_t) = 1 − 0,5·mean(c_t)` trên frame hữu thanh.
+      Thiếu kênh ⇒ hành vi cũ y nguyên (dataset cũ chạy được).
     """
+    if jitter is not None:
+        f0, frame_weight = clean_creak_f0(f0, vuv, jitter)
+    else:
+        frame_weight = None
     count = len(row["durations"])
     shape = torch.zeros(count, 4, keep, dtype=torch.float32)
     weight = torch.zeros(count, 4, dtype=torch.float32)
@@ -175,10 +183,63 @@ def f0_targets(row: dict, f0: torch.Tensor, vuv: torch.Tensor, *, f0_mean: float
                 weight[index, column] = 1.0 if (onset in F0_VOICED_ONSETS and ratio >= 0.5) else 0.0
             else:  # C — §6 giữ nguyên, coda tắc không bung hơi (Addendum 6)
                 weight[index, column] = 1.0 if ratio >= 0.5 else 0.0
+            if frame_weight is not None and weight[index, column] > 0:
+                window_weight = frame_weight[low:high].float()[voiced]
+                if window_weight.numel():
+                    weight[index, column] = weight[index, column] * float(window_weight.mean())
     return shape, weight, voiced_ratio, k_mask
 
 
 PHONATION_CHANNELS = ("hnr", "glottalization", "jitter")
+
+# --- E4 (§45): làm sạch F0 vùng creak -----------------------------------------------
+# Vì sao: trong creak, pyworld harvest báo f0 kém tin cậy (nhảy quãng tám/dưới hài —
+# đo trên val: 45,6% frame jitter>0,3 lệch khỏi xu hướng cục bộ >200 cent). Model học
+# đúng cái nhiễu đó ⇒ contour F0 dự đoán (đưa thẳng vào decoder làm variance) nhiễu ⇒
+# mel nhiễu ⇒ "rè". Nội suy lại + hạ trọng số loss (Ninh & Yamashita 2015).
+CREAK_JITTER_LO = 0.05        # dưới ngưỡng: f0 tin cậy (c_t = 0)
+CREAK_JITTER_HI = 0.25        # trên ngưỡng: creak chắc (c_t = 1)
+CREAK_REPLACE_JITTER = 0.15   # frame vượt ngưỡng này bị thay bằng nội suy (c_t ≥ 0,5)
+CREAK_LOSS_WEIGHT = 0.5       # w_t = 1 − 0,5·c_t (khuyến nghị nghiên cứu E4)
+
+
+def creak_probability(jitter: torch.Tensor, vuv: torch.Tensor) -> torch.Tensor:
+    """[T] xác suất creak 0..1 từ kênh `jitter` (R6: AUC 0,864) — 0 ở frame vô thanh."""
+    span = max(CREAK_JITTER_HI - CREAK_JITTER_LO, 1e-6)
+    value = ((jitter.float() - CREAK_JITTER_LO) / span).clamp(0.0, 1.0)
+    return value * (vuv.float() > 0.5).float()
+
+
+def clean_creak_f0(f0: torch.Tensor, vuv: torch.Tensor,
+                   jitter: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """(f0_sạch [T], w_frame [T]) — nội suy log-F0 vùng creak + trọng số loss (E4).
+
+    Frame hữu thanh có `jitter > CREAK_REPLACE_JITTER` bị thay bằng nội suy **tuyến tính
+    theo log-F0** giữa hai frame tin cậy gần nhất (nội suy "có trọng số" = trọng số tỉ lệ
+    nghịch khoảng cách; hai đầu không có neo thì giữ nguyên). Ít hơn 2 neo ⇒ không đổi.
+    Trọng số `w_t = 1 − CREAK_LOSS_WEIGHT·c_t` — frame creak vẫn dạy contour nhưng nhẹ hơn.
+    """
+    f0 = f0.float()
+    weight = torch.ones_like(f0) - CREAK_LOSS_WEIGHT * creak_probability(jitter, vuv)
+    voiced = (vuv.float() > 0.5) & (f0 > 1e-3)
+    if int(voiced.sum()) < 2:
+        return f0, weight
+    trust = voiced & (jitter.float() <= CREAK_REPLACE_JITTER)
+    replace = voiced & ~trust
+    if not bool(replace.any()) or int(trust.sum()) < 2:
+        return f0, weight
+    index = torch.arange(int(voiced.sum()), dtype=torch.float32)
+    anchors = index[trust[voiced]]
+    values = torch.log(f0[voiced].clamp_min(1e-6))
+    target = index[replace[voiced]]
+    low = torch.searchsorted(anchors, target).clamp(1, anchors.numel() - 1)
+    left, right = anchors[low - 1], anchors[low]
+    ratio = ((target - left) / (right - left).clamp_min(1e-6)).clamp(0.0, 1.0)
+    filled = values[low - 1] + ratio * (values[low] - values[low - 1])
+    output = f0.clone()
+    output[replace] = torch.exp(filled)
+    return output, weight
+
 
 
 def phonation_targets(row: dict, features: dict, vuv: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -222,7 +283,8 @@ def segment_targets(row: dict, features: dict, f0_stats: dict) -> dict[str, torc
     energy, voiced_ratio = segment_pools(row, features["energy"], features["vuv"])
     shape, f0_weight, _, k_mask = f0_targets(row, features["f0"], features["vuv"],
                                              f0_mean=float(f0_stats["f0_log_mean"]),
-                                             f0_std=float(f0_stats["f0_log_std"]))
+                                             f0_std=float(f0_stats["f0_log_std"]),
+                                             jitter=features.get("jitter"))
     phonation, phonation_mask = phonation_targets(row, features, features["vuv"])
     return {
         "seg_ratio": ratio,

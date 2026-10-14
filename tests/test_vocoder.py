@@ -276,3 +276,21 @@ def test_vocoder_mps_smoke(tmp_path: Path):
     out = tmp_path / "vocoder_mps"
     train_vocoder_reference(config, str(manifest), str(out), max_steps=1)
     assert (out / "last.pt").exists()
+
+
+def test_multi_resolution_stft_loss_low_band_weight():
+    """E4-C: trọng số dải trầm — tắt mặc định (y hệt bản cũ), bật thì phạt lỗi trầm nặng hơn."""
+    sr, n = 24000, 24000
+    t = torch.arange(n, dtype=torch.float32) / sr
+    base = torch.sin(2 * torch.pi * 120.0 * t) + 0.5 * torch.sin(2 * torch.pi * 3000.0 * t)
+    low_err = 1.6 * torch.sin(2 * torch.pi * 120.0 * t) + 0.5 * torch.sin(2 * torch.pi * 3000.0 * t)
+    high_err = torch.sin(2 * torch.pi * 120.0 * t) + 0.8 * torch.sin(2 * torch.pi * 3000.0 * t)
+    res = ((512, 256, 512), (1024, 256, 1024))
+    off_low = float(multi_resolution_stft_loss(low_err[None], base[None], res))
+    off_high = float(multi_resolution_stft_loss(high_err[None], base[None], res))
+    # Mặc định (không cờ) trùng khít bản không trọng số.
+    assert off_low == float(multi_resolution_stft_loss(low_err[None], base[None], res, low_hz=0.0, low_weight=3.0))
+    on_low = float(multi_resolution_stft_loss(low_err[None], base[None], res, low_hz=1000.0, low_weight=3.0))
+    on_high = float(multi_resolution_stft_loss(high_err[None], base[None], res, low_hz=1000.0, low_weight=3.0))
+    assert on_low > off_low                                  # lỗi trầm bị phạt nặng hơn
+    assert (on_low / on_high) > (off_low / off_high)         # và nặng hơn TƯƠNG ĐỐI so lỗi cao

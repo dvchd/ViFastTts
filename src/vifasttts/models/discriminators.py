@@ -265,18 +265,39 @@ def multi_resolution_stft_loss(
     pred: torch.Tensor,
     target: torch.Tensor,
     resolutions: tuple[tuple[int, int, int], ...] = DEFAULT_MRD_RESOLUTIONS,
+    *,
+    low_hz: float = 0.0,
+    low_weight: float = 1.0,
+    sample_rate: int = 24000,
 ) -> torch.Tensor:
     """Multi-resolution STFT loss: spectral convergence + log-magnitude L1.
 
     `pred`/`target` [B, L]; trả trung bình qua các độ phân giải. Target nên detach.
+
+    `low_hz`/`low_weight` (E4-C, docs/ACOUSTIC_V2.md §45): tăng trọng số dải trầm —
+    bin ≤ `low_hz` nhân `low_weight` (mặc định 0 ⇒ tắt, giá trị y hệt bản cũ).
+    Công bố nguồn (tone-aware-vocos 2026): ≤1 kHz ×3 ⇒ F0 RMSE −4,5%, p_holm=9,9e-5.
     """
     total = torch.zeros((), device=pred.device)
+    weighted = low_hz > 0 and low_weight != 1.0
     for n_fft, hop, win in resolutions:
         window = torch.hann_window(win, device=pred.device, dtype=pred.dtype)
         pred_spec = torch.stft(pred, n_fft, hop, win, window=window, return_complex=True, center=True).abs()
         target_spec = torch.stft(target.detach(), n_fft, hop, win, window=window, return_complex=True, center=True).abs()
-        convergence = (pred_spec - target_spec).norm(dim=(-2, -1)) / target_spec.norm(dim=(-2, -1)).clamp_min(1e-6)
-        log_l1 = F.l1_loss(torch.log(pred_spec.clamp_min(1e-5)), torch.log(target_spec.clamp_min(1e-5)))
+        log_pred = torch.log(pred_spec.clamp_min(1e-5))
+        log_target = torch.log(target_spec.clamp_min(1e-5))
+        if weighted:
+            freqs = torch.fft.rfftfreq(n_fft, 1.0 / float(sample_rate), device=pred.device)
+            weight = torch.where(freqs <= low_hz, torch.full_like(freqs, low_weight), torch.ones_like(freqs))
+            convergence = ((pred_spec - target_spec) * weight[:, None]).norm(dim=(-2, -1)) / (
+                (target_spec * weight[:, None]).norm(dim=(-2, -1)).clamp_min(1e-6))
+            diff = (log_pred - log_target).abs()
+            # Chuẩn hoá theo TỔNG trọng số ⇒ w đều = 1 cho đúng giá trị cũ (so sánh được giữa 2 chế độ).
+            log_l1 = (diff * weight[:, None]).sum() / (
+                weight.sum() * diff.size(0) * diff.size(-1)).clamp_min(1e-6)
+        else:
+            convergence = (pred_spec - target_spec).norm(dim=(-2, -1)) / target_spec.norm(dim=(-2, -1)).clamp_min(1e-6)
+            log_l1 = F.l1_loss(log_pred, log_target)
         total = total + convergence.mean() + log_l1
     return total / max(1, len(resolutions))
 

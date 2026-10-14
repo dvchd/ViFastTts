@@ -123,3 +123,38 @@ def test_segment_targets_gop_day_du():
     assert targets["seg_ratio"].shape == (2, 4)
     assert targets["f0_shape"].shape == (2, 4, 4)
     assert targets["pause_mask"].tolist() == [True, False]
+
+
+def test_creak_probability_va_clean_f0_e4():
+    """E4 (§45): xác suất creak đơn điệu; frame jitter cao bị nội suy, mức f0 giữ nguyên."""
+    from vifasttts.data.v2_targets import clean_creak_f0, creak_probability
+
+    vuv = torch.tensor([1.0, 1.0, 1.0, 0.0, 1.0])
+    jitter = torch.tensor([0.0, 0.05, 0.25, 0.9, 0.9])
+    c = creak_probability(jitter, vuv)
+    assert float(c[0]) == 0.0 and float(c[1]) == 0.0
+    assert abs(float(c[2]) - 1.0) < 1e-6 and abs(float(c[4]) - 1.0) < 1e-6
+    assert float(c[3]) == 0.0  # vô thanh ⇒ 0 dù jitter lớn
+
+    f0 = torch.full((30,), 120.0)
+    f0[15], f0[16] = 240.0, 60.0          # 2 frame lỗi quãng tám
+    jitter2 = torch.full((30,), 0.01)
+    jitter2[14:17] = 0.4
+    clean, weight = clean_creak_f0(f0, torch.ones(30), jitter2)
+    assert abs(float(clean[15]) - 120.0) < 1e-3 and abs(float(clean[16]) - 120.0) < 1e-3
+    assert abs(float(clean[0]) - 120.0) < 1e-6
+    assert float(weight[15]) < 0.6 and abs(float(weight[0]) - 1.0) < 1e-6
+
+
+def test_f0_targets_e4_khong_doi_khi_thieu_jitter():
+    """Thiếu kênh `jitter` (dataset cũ) ⇒ target y hệt trước E4 (tương thích ngược)."""
+    row = _row()
+    f0 = torch.full((13,), 150.0)
+    vuv = torch.ones(13)
+    shape_a, weight_a, _, _ = f0_targets(row, f0, vuv, f0_mean=4.8, f0_std=0.2)
+    shape_b, weight_b, _, _ = f0_targets(row, f0, vuv, f0_mean=4.8, f0_std=0.2, jitter=None)
+    assert torch.equal(shape_a, shape_b) and torch.equal(weight_a, weight_b)
+    # Có jitter cao ⇒ trọng số role giảm nhưng KHÔNG về 0 (vẫn dạy contour, nhẹ hơn).
+    jitter = torch.full((13,), 0.3)
+    _, weight_c, _, _ = f0_targets(row, f0, vuv, f0_mean=4.8, f0_std=0.2, jitter=jitter)
+    assert 0.0 < float(weight_c[1, 2]) < float(weight_b[1, 2])

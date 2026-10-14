@@ -502,6 +502,14 @@ def train_vocoder_reference(
     fm_weight = float(vt.get("feature_matching_weight", 2.0))
     adv_weight = float(vt.get("adversarial_weight", 1.0))
     stft_weight = float(vt.get("stft_weight", 0.0))
+    # E4-C: trọng số dải trầm cho MR-STFT (0 = tắt, giữ nguyên hành vi cũ).
+    stft_low_hz = float(vt.get("stft_low_hz", 0.0))
+    stft_low_weight = float(vt.get("stft_low_weight", 1.0))
+    # Mặc định = resolutions của MRD (hành vi cũ); E4-C đặt riêng 512/1024/2048 hop 256.
+    stft_resolutions: tuple[tuple[int, int, int], ...] = tuple(
+        (int(item[0]), int(item[1]), int(item[2]))
+        for item in (vt.get("stft_resolutions") or resolutions)
+    )
     grad_clip = float(vt.get("grad_clip", 5.0))
     adv_mode = str(vt.get("adv_loss", "bce")).lower()
     d_warmup = max(0, int(vt.get("d_warmup_steps", 0)))
@@ -594,7 +602,10 @@ def train_vocoder_reference(
                     g_mel = (mel_fake[:, :frames] - mel_target[:, :frames]).abs().mean()
                     g_stft = torch.zeros((), device=fake_crop.device)
                     if stft_weight > 0:
-                        g_stft = multi_resolution_stft_loss(fake_crop, real_crop, resolutions)
+                        g_stft = multi_resolution_stft_loss(
+                            fake_crop, real_crop, stft_resolutions,
+                            low_hz=stft_low_hz, low_weight=stft_low_weight,
+                            sample_rate=int(config.get("sample_rate", 24000)))
                     g_loss = adv_weight * g_adv + fm_weight * g_fm + mel_weight * g_mel + stft_weight * g_stft
                     finite_ok = finite_ok & torch.isfinite(g_loss)
                     window_min = torch.minimum(window_min, g_loss.detach())
