@@ -1274,3 +1274,21 @@ lỗi dồn vào đúng các khung đó, còn khung âm tiết vẫn 0,5–0,6. 
 để sửa**. Free-run không phụ thuộc manifest (đã chứng minh bằng sha256) ⇒ **cổng cứng mel/dB chấm TF
 @ val CŨ** (tiếp lịch sử), theo dõi A2 thêm **mel_z TF @ val fixgap tách 3 vùng** (kỳ vọng: vùng gap
 giảm mạnh, vùng âm tiết không xấu quá +1%).
+
+### 44.7 Chốt Lượt 1b (tổng hợp) — thước đo & cổng A2
+
+- **Thước mel (B1/B2)**: cổng cứng `mel_l1_z`/`mel_db` chấm **TF @ val CŨ** (giữ lịch sử §36–§43, mọi số cũ
+  cũng là tf). Trên val fixgap, tf tách 2 vùng bằng mặt nạ gap dùng chung (`_syl_gap_masks`):
+  **`syl_z`/`syl_db`** = khung âm tiết (ngoài gap, bỏ lead) · **`gap_z`/`gap_db`** = khung gap.
+- **Kiểm H1 (base 40k)**: `syl_z` @ fixgap ≈ `mel_l1_z` @ val cũ (kỳ vọng chênh ≤ 3%); phần tăng dồn
+  vào `gap_z`. Dữ liệu fixgap đã kiểm **toàn bộ** (train 9.763 + val 1.773 hàng): id/thứ tự/syllables/
+  durations/seg_durations/frame_range[0]/lead/audio_path **trùng 100%**; `Δframe_range[1] == gaps[-1]`
+  **100%** ⇒ H2 loại.
+- **Cổng A2**: CỨNG = mel_l1_z(tf@cũ) ≤ mốc×1,01 · mel_db ≤ mốc+0,10 · rough(từ checkpoint@cũ) ≥ mốc−0,01 ·
+  tone_C(@cũ) ≥ mốc−0,01 · F0 NGÃ ≤ mốc+5¢ · cer(holdout cũ) ≤ mốc+0,03 · **syl_z(tf@fixgap) ≤ mốc×1,01** ·
+  mel_gap(free@fixgap) ≤ mốc. MỤC TIÊU = pause_f1_all ≥ mốc+0,073 · gap_sum_mae_all ≤ mốc×0,714 ·
+  length_ratio(free@fixgap) 1,00±0,05 · **gap_z(tf@fixgap) ≤ mốc×0,85** (ước lượng đầu, chỉnh theo số thật).
+- **Đường B1** trong JSON eval: `intonation_paired.slope_final_question[_any]` (+ `intonation_by_final`).
+- **p/pos_weight (A1)**: p = 0,3082 (68.651/222.737) ⇒ `pos_weight = min(3; (1−p)/p) = 2,244` (A1 chưa chạy).
+- **Bỏ extension**: ext57k kém base 40k (mel 1,6415 vs 1,6218 · Δjitter 0,0505 vs 0,0372) ⇒ dừng ở 57k,
+  giữ thư mục.

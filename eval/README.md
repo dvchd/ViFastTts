@@ -10,7 +10,7 @@ Thư mục này **ghim** đúng các hàng đó + hash manifest, để máy/ngư
 | train (đối chiếu) | `data/codelung/train_clean_v2_dur_seg_slot4.jsonl` | `edbc058ecad37a9c7c50844f0bb8dcde8c5ee1a7` | – |
 | **train fixgap (A2 §43)** | `data/codelung/train_clean_v2_dur_seg_slot4_fixgap.jsonl` | `fdb622940e0de9560a83050f0c8467cd34dea445` | – |
 | **val300 fixgap (A2)** | `data/codelung/val_clean_v2_dur_seg_slot4_fixgap.jsonl` | `5ec5f139ce56…` (đầy đủ trong `artifacts/dataset_v2/verify_gaps_val_fixgap.json`) | – |
-| **holdout20 fixgap (A2)** | `data/codelung/holdout_clean_v2_dur_seg_slot4_fixgap.jsonl` | `aa418147f314…` | – |
+| ~~holdout20 fixgap (A2)~~ **KHÔNG DÙNG** | `data/codelung/holdout_clean_v2_dur_seg_slot4_fixgap.jsonl` | `aa418147f314…` | – |
 | stats F0 | `data/codelung/f0_stats_v2.json` | `505604ebf0356560fb3348691668a687c2096c51` | – |
 
 **Quy ước**: tool luôn lấy `--clips N` = **N hàng đầu** của manifest ⇒ `--clips 300` + manifest trên
@@ -26,6 +26,9 @@ head -3 eval/val300_ids.txt
 **A2 (§43)**: manifest `*_fixgap.jsonl` giữ **đủ gap** (kể cả gap đuôi) ⇒ Σgap/row 220,8→409,8,
 phủ khối lượng pause 53,4%→**99,2%**, bất biến `T == Σdur+Σgap` 100%, `durations`/`seg_durations`
 **không đổi** (seg hash không đổi). Val/holdout giữ nguyên ⇒ tập eval vẫn ghim như bảng trên.
+
+**Holdout**: bench mặc định dùng holdout **CŨ** (`holdout_clean_v2_dur_slot4.jsonl`, clip-level 842 hàng) để
+nối lịch sử CER; bản fixgap là segment-level (khác cấu trúc) ⇒ **không dùng** (§44, quyết định 2.5).
 
 **Còn thiếu (đã biết)**: model `tone_ruler` (`artifacts/tone_path/tone_ruler.pt`) chưa được version-control
 (train lại ~4 phút: `tools/tone_ruler.py --train`) và chưa ghi hash model vào JSON kết quả — xem
