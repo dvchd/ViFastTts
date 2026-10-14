@@ -206,6 +206,11 @@ def target_gates(row_fix: dict, base_fix: dict | None) -> dict[str, tuple[str, s
     }
 
 
+def _scalar(block: dict | None, key: str):
+    """Giá trị vô hướng trong summary eval (không phải dict quantile) — None nếu thiếu (V10.A9)."""
+    return (block or {}).get(key)
+
+
 def _eval_block(config: str, checkpoint: str, val_manifest: str, holdout: str | None, args,
                 tag: str, with_cer: bool) -> tuple[dict, dict]:
     """Chạy tf_syl + free (và CER nếu `with_cer`) trên một bản val; trả (row, raw)."""
@@ -235,6 +240,9 @@ def _eval_block(config: str, checkpoint: str, val_manifest: str, holdout: str | 
         "pause_f1_all": _mean(free, "pause_f1_all"), "gap_sum_mae_all": _mean(free, "gap_sum_mae_all_frames"),
         "pause_precision": _mean(free, "pause_precision"),
         "length_ratio": _mean(free, "length_ratio"),
+        # V10.A9: theo dõi tách phần (vô hướng — không phải dict quantile)
+        "length_ratio_speech": _scalar(free, "length_ratio_speech"),
+        "length_ratio_pause": _scalar(free, "length_ratio_pause"),
         "mel_gap": _mean(free, "mel_gap"),  # free-run: L1 mel trên khung gap THẬT (cổng cứng)
         "mel_gap_z": _mean(tf, "mel_gap_z"),  # tf: gap_z (§44/B2 — cổng mục tiêu A2)
         "syl_z": _mean(tf, "syl_z"), "syl_db": _mean(tf, "syl_db"),
@@ -379,11 +387,14 @@ def main() -> None:
         raw_paths = {name: str(args.out_dir / f"{tag}_{name}.json") for name in ("old_tf", "old_free", "old_cer",
                                                                                  "fixgap_tf", "fixgap_free",
                                                                                  "tone", "creak")}
+        # V10.A6: khóa null (cer/tone_C/creak khi không chấm) XÓA hẳn khỏi mốc, không để null.
+        row_old_emit = {k: v for k, v in row_old.items() if v is not None}
+        row_fix_emit = {k: v for k, v in row_fix.items() if v is not None}
         compact = {"tag": tag, "git_commit": commit, "checkpoint": checkpoint, "step": args.step,
                    "val_manifest_hash": report["val_manifest_hash"],
                    "val_manifest_hash_old": report["val_manifest_hash_old"],
                    "holdout_manifest_hash": report["holdout_manifest_hash"],
-                   "seed": report["seed"], "summary": row_old, "summary_fixgap": row_fix,
+                   "seed": report["seed"], "summary": row_old_emit, "summary_fixgap": row_fix_emit,
                    "raw_paths": raw_paths,
                    "raw_sha256": {name: (hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
                                          if (ROOT / path).exists() else None) for name, path in raw_paths.items()}}

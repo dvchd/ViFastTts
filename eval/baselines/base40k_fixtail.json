@@ -1,6 +1,6 @@
 {
   "checkpoint": "runs/acoustic_v2_base/last.pt",
-  "git_commit": "475bdb4",
+  "git_commit": "3bd6d04",
   "holdout_manifest_hash": "3ca7c79b0ba4ee9a66fb958ea28b3130da928fd0",
   "raw_paths": {
     "creak": "artifacts/bench/base40k_fixtail_creak.json",
@@ -13,12 +13,12 @@
   },
   "raw_sha256": {
     "creak": "068d77be2f34e150242c8d03484d69e5ba17ff5abc8db3e45bbde45fbd6647be",
-    "fixgap_free": "05e1f465a22763812fb607b83949aab049c578700ed5406e7a991803b069c072",
+    "fixgap_free": "fbcfc0cb4deca3132cb584f5269004bd7c040830fc68a9debbd68604a3b0f2a4",
     "fixgap_tf": "6e29197f84342a9fa09d267bbe9eb8f02434065097f6cbd2b180bc1377df4d40",
-    "old_cer": "d2e388be76f6ce7f6b49802123c980ddc7490930e8aa094cc245a44e99552f84",
-    "old_free": "2ad506f25c474bf6693890690e02cd5c4b3faf3b8e1c67a8813d6edea1a9eb87",
+    "old_cer": "d0f5428713ef2fe200a9c356fca59f8e851add08293b1af565720396e45091f0",
+    "old_free": "84ac4fb2835c8bbfb82d94d765199341bb009c8acd587c21419cddeaf7cd2486",
     "old_tf": "4485188c55a8596e92234d85efd4bd62382dcc6501dc88cae76f5ac03cdef0ad",
-    "tone": "e0fb1c2e9ad10273f291964eca38de0eb367fc89ba47bdce45dfc97ad9eda4c4"
+    "tone": "29d64cbc3e6781988d730e7cc5b6b30e58be82df62fb0a42b01adbfacfaed792"
   },
   "seed": "deterministic (không lấy mẫu; bootstrap thước thanh seed cố định)",
   "step": 40000,
@@ -50,6 +50,8 @@
     "gap_sum_mae": 119.1246,
     "gap_sum_mae_all": 156.4633,
     "length_ratio": 0.7665,
+    "length_ratio_pause": 0.5332,
+    "length_ratio_speech": 0.9343,
     "mel_db_speech": 9.879,
     "mel_gap": 3.1272,
     "mel_gap_z": 2.1529,

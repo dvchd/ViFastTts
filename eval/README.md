@@ -43,7 +43,7 @@ indent 2, dòng trống cuối) + `.gitattributes` `eval/baselines/*.json -text`
 | Tệp | sha256 | val_manifest_hash | Trạng thái |
 |---|---|---|---|
 | `base40k_old.json` | `92e90dad406f661557d2a648c3a171bf8c9e6320bb659b261efcd50a88d475d8` | `19b6e11756284ea86ee88933cc315b34011378b7` (val CŨ) | **DÙNG** — CỔNG CỨNG (mel/dB/rough/tone_C/CER/F0 NGÃ @ val cũ) |
-| `base40k_fixtail.json` | `53d85abd9ef28fc233c604bd774a42f71d19a8456d97d658b399f24452461655` | `cdbbd659116ae9f948c56152be5b08ea7fa08115` (val fixtail; old `19b6e117…`) | **DÙNG** — mel_gap + syl_z + CỔNG MỤC TIÊU pause (val fixtail) |
+| `base40k_fixtail.json` | `a8b74d2ea48f0ebc58027f56282835df74bc0199b16e9f1ac0205ded46c14004` | `cdbbd659116ae9f948c56152be5b08ea7fa08115` (val fixtail; old `19b6e117…`) | **DÙNG** — mel_gap + syl_z + CỔNG MỤC TIÊU pause (val fixtail) |
 | `base40k_fixgap.json` | `cf7708644f6396028452e746258a955bf848f3ea74521ffad3d20273bf024036` | `5ec5f139ce56a763d90af7de7a59956f712ee88c` (val fixgap) | **KHÔNG DÙNG** (thay bởi fixtail; bản trên đĩa: `artifacts/bench/legacy/`) |
 
 Kiểm H1 (base 40k): `syl_z` val cũ **0,6612** → fixgap **0,6608** (chênh **0,1%**) · `gap_z` 1,9493 → 2,3862
