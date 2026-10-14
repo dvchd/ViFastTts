@@ -50,5 +50,5 @@ indent 2, dòng trống cuối) + `.gitattributes` `eval/baselines/*.json -text`
 | `base40k_fixtail.json` | `a8b74d2ea48f0ebc58027f56282835df74bc0199b16e9f1ac0205ded46c14004` | `cdbbd659116ae9f948c56152be5b08ea7fa08115` (val fixtail; old `19b6e117…`) | **DÙNG** — mel_gap + syl_z + CỔNG MỤC TIÊU pause (val fixtail) |
 | `base40k_fixgap.json` | `cf7708644f6396028452e746258a955bf848f3ea74521ffad3d20273bf024036` | `5ec5f139ce56a763d90af7de7a59956f712ee88c` (val fixgap) | **KHÔNG DÙNG** (thay bởi fixtail; bản trên đĩa: `artifacts/bench/legacy/`) |
 
-Kiểm H1 (base 40k): `syl_z` val cũ **0,6612** → fixgap **0,6608** (chênh **0,1%**) · `gap_z` 1,9493 → 2,3862
+Kiểm H1 (base 40k): `syl_z` val cũ **0,6612** → **fixtail 0,6621** (chênh **+0,14%**) · `gap_z` 1,9493 → **2,1529** (giá trị fixtail; bản fixgap cũ 2,3862 — KHÔNG dùng)
 ⇒ mọi phần tăng của `mel_l1_z` tổng nằm ở khung gap (khung âm tiết không đổi) — §44.6.

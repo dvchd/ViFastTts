@@ -163,6 +163,6 @@ loss_weights:
   phonation: 0.5  # v2: L1 trên segment hữu thanh (cache v3, R6)
   tone: 0.1       # F3: hạ từ 0.25 (aux nhẹ; mask bỏ SIL khi có SIL ở bước 4)
   pause_gate: 2.0
-  pause_pos_weight: 3.0    # A1 (§43.1): BCE pos_weight cho vị trí pause
+  pause_pos_weight: 2.244  # A1: (1−p)/p với p=0,3082 đo trên train fixtail (§44.7/V08.B3; red-team: bản cũ ghi 3.0 lệch 34%)
   pause_mass_scale: 10.0   # A1: phạt theo khối lượng (frame) của pause dương     # A1 (§43.1): 0,5 → 2,0 — pause quá nhỏ trong loss (1,26%)
   pause_gap: 2.0      # A1 (§43.1): 0,5 → 2,0 — kéo recall + cỡ gap (Σgap 63% thật)

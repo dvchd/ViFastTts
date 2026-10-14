@@ -29,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OLD_VAL = "data/codelung/val_clean_v2_dur_seg_slot4.jsonl"
-FIX_VAL = "data/codelung/val_clean_v2_dur_seg_slot4_fixgap.jsonl"
+FIX_VAL = "data/codelung/val_clean_v2_dur_seg_slot4_fixtail.jsonl"  # V11: fixgap đã bỏ (red-team mục 13)
 OLD_HOLDOUT = "data/codelung/holdout_clean_v2_dur_slot4.jsonl"
 CACHE = "cache/codelung_v2"
 
@@ -271,7 +271,7 @@ def main() -> None:
     parser.add_argument("--creak-clips", type=int, default=25)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--no-cer", action="store_true")
-    parser.add_argument("--val-manifest", default=FIX_VAL, help="val FIXGAP (mặc định)")
+    parser.add_argument("--val-manifest", default=FIX_VAL, help="val fixtail (mặc định; V11 — fixgap đã bỏ)")
     parser.add_argument("--val-manifest-old", default=OLD_VAL)
     parser.add_argument("--holdout-manifest", default=OLD_HOLDOUT, help="holdout CŨ (mặc định)")
     parser.add_argument("--baseline-old", help="mốc val CŨ (cổng cứng)")
