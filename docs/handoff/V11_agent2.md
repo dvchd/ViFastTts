@@ -174,3 +174,11 @@ mel_z 1,1645 ✓ · dB 8,8116 ✓ (tốt hơn base) · rough **0,3588** ✓ (≥
 **Thiếu sót của mình**: 2 release trước (`w1` 55k vs base, `w1b` 42k vs base) sinh bằng đường **thẳng model→mel→Vocos, KHÔNG áp sh25** ✗ — không phải cấu hình production (user đã chọn sh25 toàn cục). **sh25 gốc không còn trên máy** ✗ (script cũ không lưu) ⇒ dùng bản tương đương `_unsharp` (unsharp 3×3 box-blur mel z, **α=1,5**) trong `artifacts/vocoder_gta/demo_gta.py` ✓.
 **Release mới `demo-audio-20261014-w1c`** (6 cặp base vs 42k, **CÓ sh25**, kiểm tải 200 + sha khác bản thường ✓, RMS 0,039 vs 0,031 ✓).
 **Nhận xét tai user trên w1b (không sh25)**: base vs 42k "na ná nhau" ✓ (khớp số: 42k ≈ base trên phần lớn chỉ số) · **vẫn rè** ✗ · **lỗi phát âm/tròn chữ GIỐNG NHAU ở cả 2 model** ✗ ⇒ các lỗi phát âm **không phải do checkpoint** mà ở **frontend/đặc trưng chung** ⇒ **thêm mục mới vào hàng đợi**: thu các câu lỗi cụ thể từ user → chẩn đoán frontend (chuẩn hoá/phiên âm) vs acoustic.
+
+## CHỐT CUỐI PHIÊN (14/10) — quyết định production + việc đã sửa
+
+**Tai user trên `w1c` (có sh25)**: base vs 42k **vẫn hòa** ✓ · **sh25 dựng lại đạt** ✓ ("chất lượng tốt hơn") ⇒ **sh25 α=1,5 được xác nhận** + đã vào source (`runtime.postprocess.sharpen_mel`, `--sharpen-alpha`) ✓.
+**Quyết định production**: **A2 `best.pt@42k` + sh25 (α=1,5)** = cấu hình chính ✓ — lý do: **8/8 cổng cứng** ✓ + **CER 0,1853 vs base 0,2332 (−20% ⇒ rõ chữ hơn** — đúng điểm user phàn nàn) + dB/syl_z/Δjit tốt hơn base ✓ (kém nhẹ tone_C 0,8002 vs 0,8045 và f0_nga 182,0 vs 180,2 ✗ — trong nhiễu). Base 40k giữ làm mốc so sánh ✓.
+**Đã sửa trong phiên**: sh25 promote vào source + luật AGENTS.md ✓ · bench default `--val-manifest` → fixtail ✓ · config A1 `pause_pos_weight` → **2,244** ✓ · README H1 → số fixtail (gap_z 2,1529) ✓.
+**Còn nợ (ghi rõ)**: (a) `rough` 12 clip lật phán quyết ⇒ phải nâng cỡ mẫu + hiệu chuẩn lại mốc rough ✗ (chưa làm); (b) `base_60k/resolved_config.json` ghi sai `max_steps` ✗ (tệp local cũ, chỉ ghi chú); (c) biên mel ±1% ≈ 1–2σ nhiễu ⇒ nêu trong docs khi bàn cổng ✗.
+**Hàng đợi**: E4-rè (nội suy có trọng số + loss C) → chẩn đoán lỗi phát âm chung (cần câu lỗi từ user; nếu không có thì tự soát frontend trên bộ câu khó) → W2-duration → B10 → bộ 30 câu.
