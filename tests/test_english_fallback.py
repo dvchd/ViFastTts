@@ -36,3 +36,13 @@ def test_readings_are_valid_vietnamese_syllables(reading):
     for word in reading.split():
         assert safe_parse_syllable(word) is not None, f"{word!r} trong {reading!r}"
 
+
+
+def test_oov_danh_van_moi_token_chu():
+    """P0.2 (14/10): "B"/"wav"/"COVID-19" phải được đánh vần, KHÔNG rơi về fallback "a"."""
+    from vifasttts.frontend.oov import resolve_oov_token
+
+    assert resolve_oov_token("B") == "bê"
+    assert resolve_oov_token("wav") == "vê kép a vê"
+    assert resolve_oov_token("COVID-19") == "xê o vê i dê 19"
+    assert resolve_oov_token("TP.HCM") == "tê pê hát xê em"

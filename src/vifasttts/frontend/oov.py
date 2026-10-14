@@ -41,9 +41,13 @@ def resolve_oov_token(token: str) -> str | None:
     english = lookup_case_insensitive_english(token)
     if english is not None:
         return english
-    # Chỉ đánh vần khi toàn bộ là chữ cái (giữ chữ số lại cho người dùng xử lý)
-    # và có ít nhất hai chữ cái viết hoa (tránh nhầm một chữ cái đơn).
+    # V11 (P0.2, 14/10): đánh vần khi token "trông như viết tắt/từ lạ ngắn":
+    #   (a) chữ HOA (mọi độ dài, gồm 1 ký tự — "B" → "bê"); (b) có số/ký hiệu ("COVID-19", "TP.HCM");
+    #   (c) từ thường ngắn ≤4 ("wav"). Từ thường DÀI vẫn trả None để báo cáo OOV còn giá trị.
     letters = [c for c in token if c.isalpha()]
-    if token.isalpha() and token.isupper() and len(letters) >= 2 and all(c.lower() in LETTER_READINGS for c in letters):
-        return spell_token(token)
+    mixed = len(letters) != len(token)
+    if letters and all(c.lower() in LETTER_READINGS for c in letters) and (token.isupper() or mixed or len(letters) <= 4):
+        spelled = spell_token("".join(letters))
+        digits = "".join(c for c in token if c.isdigit())
+        return f"{spelled} {digits}" if digits else spelled
     return None

@@ -21,7 +21,7 @@ def test_resolve_oov_priorities():
     assert resolve_oov_token("MacBook") == "mác búc"     # product
     assert resolve_oov_token("tiktok") == "tíc tốc"      # english fallback
     assert resolve_oov_token("VNG") == "vê en giê"       # all-caps spelling
-    assert resolve_oov_token("RTX3080") is None          # has digits -> keep fallback
+    assert resolve_oov_token("RTX3080") == "rờ tê ích 3080"  # V11: có số ⇒ đánh vần chữ, giữ số
     assert resolve_oov_token("blorptang") is None        # unknown lowercase -> keep fallback
 
 

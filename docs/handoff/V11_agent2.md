@@ -198,3 +198,15 @@ Soát 6 câu demo (parse 1:1 từ→âm tiết ✓) + bộ câu khó → **5 l�
 Nguyên nhân nghi: nhánh xử lý **chữ cái đơn / viết tắt có dấu chấm / gạch nối** rơi về mặc định "a" ✗ (chưa có test phủ ✗).
 **Phát hiện thêm (quan trọng, giải thích "lỗi giống nhau ở cả 2 model")**: text trong manifest **đã chuẩn hoá sẵn** và **chứa lỗi từ nguồn** — ví dụ câu 2 có **"thư dục"** (đúng là "thư mục") ✗ ⇒ model **đọc đúng cái sai của transcript** ✓ — đây là **lỗi dữ liệu**, không phải checkpoint ⇒ đúng như user nói "lỗi giống nhau" ✗.
 **Việc kế tiếp**: (1) sửa 5 lỗi frontend + test khóa; (2) rà transcript (tìm các từ sai chính tả phổ biến kiểu "dục/mục", "ây ai") — có thể sửa bằng bộ override + lọc tự động; (3) rồi E4-rè.
+
+## P0.2 — SỬA XONG 4/5 lỗi frontend (14/10)
+
+| Input | Trước ✗ | Sau ✓ |
+|---|---|---|
+| `anh A và chị B` | "chị **a**" | "chị **bê**" |
+| `file wav` | "phây **a**" | "phai **vê kép a vê**" |
+| `COVID-19` | "**a** mười chín" | "**xê o vê i dê** mười chín" |
+| `TP.HCM` | "**a a**" | "**tê pê hát xê em**" |
+
+**Gốc rễ tìm ra**: (1) `parse_text(resolve_oov=False)` **mặc định TẮT** ⇒ mọi token OOV rơi xuống `_fallback_syllable` trả **"a"** ✗; (2) `resolve_oov_token` chỉ đánh vần **chữ IN HOA ≥2 ký tự** ✗. **Đã sửa**: đánh vần cho chữ HOA (mọi độ dài) / token có số-ký hiệu / từ thường ≤4 ký tự (từ dài vẫn trả None để báo cáo OOV còn giá trị ✓) + **bật `resolve_oov=True` ở đường suy luận** (`infer._render`) ✓ + test ✓ (2492 pass).
+**Còn lại**: (a) `2+2=4` — dấu "+"/"=" chưa có luật (cần map ký hiệu số học ✗); (b) **lỗi DỮ LIỆU** (manifest có "thư dục" thay "thư mục" ✗) — cần rà transcript + bộ override; (c) `"AI" → "ây ai"` giữ nguyên (đúng ✓).

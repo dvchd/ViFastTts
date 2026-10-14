@@ -150,7 +150,7 @@ class Synthesizer:
 
         from vifasttts.models.factory import ARCH_V2
 
-        items = parse_text(text, dialect=dialect, options=options)
+        items = parse_text(text, dialect=dialect, options=options, resolve_oov=True)
         if not items:
             return None
         features = torch.tensor(
