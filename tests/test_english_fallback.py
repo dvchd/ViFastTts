@@ -35,3 +35,4 @@ def test_readings_are_valid_vietnamese_syllables(reading):
     sẽ rơi lại vào FALLBACK_REQUIRED ngay sau khi chuẩn hoá."""
     for word in reading.split():
         assert safe_parse_syllable(word) is not None, f"{word!r} trong {reading!r}"
+
