@@ -39,7 +39,11 @@ REFERENCE_ABSOLUTE = {"mel_l1_z": 1.16, "mel_db": 8.7, "rough": 0.40, "tone_C": 
 RELATIVE_HARD = {"mel_l1_z": ("mul", 1.01), "mel_db": ("add", 0.10), "rough": ("sub", -0.01),
                  "tone_C": ("sub", -0.01), "cer": ("add", 0.03), "f0_nga": ("add", 5.0),
                  "mel_gap": ("add", 0.0),  # mel_gap ≤ mốc (giảm mới tốt)
-                 "syl_z": ("mul", 1.01)}  # §44/B3: vùng âm tiết @ fixgap không xấu quá 1%
+                 "syl_z": ("mul", 1.01),  # §44/B3: vùng âm tiết @ fixgap không xấu quá 1%
+                 # V11 (§45, hàng đợi #4): CỔNG CÙNG NHÃN — mel trên val FIXTAIL (khớp nhãn
+                 # train) — red-team đã nêu bộ cổng cũ "trộn 2 val" mà thiếu mel cùng nhãn.
+                 "mel_z_fix": ("mul", 1.01),
+                 "mel_db_fix": ("add", 0.10)}
 PASS, FAIL, NO_BASE, NO_DATA = "pass", "fail", "nobase", "nodata"
 SYMBOL = {PASS: "✅", FAIL: "❌", NO_BASE: "🚫", NO_DATA: "⏳"}
 
@@ -164,7 +168,8 @@ def conclusion(hard: dict, target: dict) -> str:
 
 def hard_gates(row_old: dict, base_old: dict | None, row_fix: dict, base_fix: dict | None,
                rough_old: float | None) -> dict[str, tuple[str, str]]:
-    """CỔNG CỨNG tương đối (§44): mel/dB/rough/tone_C/CER/F0 NGÃ theo val CŨ; mel_gap theo val FIXGAP."""
+    """CỔNG CỨNG tương đối (§44 + V11 §45): mel/dB/rough/tone_C/CER/F0 NGÃ theo val CŨ;
+    mel/dB **cùng nhãn** + mel_gap + syl_z theo val FIXTAIL (6 + 4 chỉ số, ghi rõ bản val)."""
     base_old = base_old or {}
     base_fix = base_fix or {}
     values = {
@@ -176,6 +181,9 @@ def hard_gates(row_old: dict, base_old: dict | None, row_fix: dict, base_fix: di
         "f0_nga": (row_old.get("f0_nga"), base_old.get("f0_nga")),
         "mel_gap": (row_fix.get("mel_gap"), base_fix.get("mel_gap")),
         "syl_z": (row_fix.get("syl_z"), base_fix.get("syl_z")),
+        # V11: mel cùng nhãn (val fixtail) — mốc base40k_fixtail: 1,3311 · 9,879
+        "mel_z_fix": (row_fix.get("mel_l1_z"), base_fix.get("mel_l1_z")),
+        "mel_db_fix": (row_fix.get("mel_db_speech"), base_fix.get("mel_db_speech")),
     }
     return {key: _relative_gate(key, value, limit) for key, (value, limit) in values.items()}
 
@@ -338,7 +346,7 @@ def main() -> None:
 
     gates = {"hard": hard_gates(row_old, base_old, row_fix, base_fix, row_old["rough"]),
              "target": target_gates(row_fix, base_fix)}
-    print("\n== CỔNG CỨNG (tương đối, val cũ + mel_gap val fixgap) ==")
+    print("\n== CỔNG CỨNG (tương đối: 6 chỉ số val cũ + mel_z_fix/dB_fix/mel_gap/syl_z val fixgap) ==")
     for name, (state, detail) in gates["hard"].items():
         print(f"  {SYMBOL[state]} {name} [{detail}]")
     print("== CỔNG MỤC TIÊU A2 (val fixgap) ==")

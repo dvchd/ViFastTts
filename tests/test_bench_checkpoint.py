@@ -7,7 +7,8 @@ from tools.bench_checkpoint import FAIL, NO_BASE, NO_DATA, PASS, hard_gates, tar
 BASE_OLD = {"mel_l1_z": 1.14, "mel_db_speech": 8.9, "rough": 0.42, "tone_C": 0.80,
             "cer": 0.23, "f0_nga": 177.0}
 BASE_FIX = {"mel_gap": 3.1, "pause_f1_all": 0.50, "gap_sum_mae_all": 200.0,
-            "syl_z": 1.16, "mel_gap_z": 3.0, "length_ratio": 0.7665}
+            "syl_z": 1.16, "mel_gap_z": 3.0, "length_ratio": 0.7665,
+            "mel_l1_z": 1.3311, "mel_db_speech": 9.879}
 
 
 def _row_old(**over):
@@ -18,7 +19,7 @@ def _row_old(**over):
 
 def _row_fix(**over):
     row = {"mel_gap": 3.0, "pause_f1_all": 0.58, "gap_sum_mae_all": 140.0, "length_ratio": 1.02,
-           "syl_z": 1.16, "mel_gap_z": 2.5}
+           "syl_z": 1.16, "mel_gap_z": 2.5, "mel_l1_z": 1.3257, "mel_db_speech": 9.5965}
     row.update(over)
     return row
 
@@ -202,3 +203,13 @@ def test_cong_length_ratio_a9():
         assert gates[key][0] == expected, (value, gates[key])
     gates = target_gates({"length_ratio": 0.9}, None)
     assert gates[key][0] == NO_BASE
+
+
+def test_cong_cung_nhan_fixtail():
+    """V11 §45: mel cùng nhãn (val fixtail) là cổng cứng — 42k (1,3257/9,5965) ĐẠT so mốc base."""
+    gates = hard_gates(_row_old(), BASE_OLD, _row_fix(), BASE_FIX, rough_old=0.42)
+    assert gates["mel_z_fix"][0] == PASS and gates["mel_db_fix"][0] == PASS
+    bad = hard_gates(_row_old(), BASE_OLD, _row_fix(mel_l1_z=1.36), BASE_FIX, rough_old=0.42)
+    assert bad["mel_z_fix"][0] == FAIL            # > 1,3311 × 1,01 = 1,3444
+    bad2 = hard_gates(_row_old(), BASE_OLD, _row_fix(mel_db_speech=10.0), BASE_FIX, rough_old=0.42)
+    assert bad2["mel_db_fix"][0] == FAIL          # > 9,879 + 0,10
