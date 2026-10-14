@@ -330,6 +330,8 @@ def synthesize_cmd(
     output: str = typer.Option(..., help="File WAV đầu ra"),
     dialect: str = typer.Option("north", help="north, central hoặc south"),
     speed: float = typer.Option(1.0, help="Tốc độ đọc (1.0 là gốc)"),
+    gate_threshold: float = typer.Option(0.5, "--gate-threshold",
+                                          help="Ngưỡng gate pause (V11.A7; mặc định 0.5)"),
     vocoder_checkpoint: str | None = typer.Option(None, help="Checkpoint vocoder (tùy chọn)"),
     overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc'"),
     peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
@@ -340,7 +342,8 @@ def synthesize_cmd(
     from vifasttts.infer import load_overrides, synthesize
     samples, sample_rate = synthesize(
         load_config(config), checkpoint, text, output,
-        dialect=dialect, speed=speed, vocoder_checkpoint=vocoder_checkpoint,
+        dialect=dialect, speed=speed, gate_threshold=gate_threshold,
+        vocoder_checkpoint=vocoder_checkpoint,
         overrides=load_overrides(overrides) if overrides else None,
         peak_normalize=peak_normalize, max_chars=max_chars, device=device,
     )
@@ -355,6 +358,8 @@ def synthesize_onnx_cmd(
     output: str = typer.Option(..., help="File WAV đầu ra"),
     dialect: str = typer.Option("north", help="north, central hoặc south"),
     speed: float = typer.Option(1.0, help="Tốc độ đọc (xấp xỉ bằng co giãn mel)"),
+    gate_threshold: float = typer.Option(0.5, "--gate-threshold",
+                                          help="Ngưỡng gate pause (V11.A7; mặc định 0.5)"),
     overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc'"),
     peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
     max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
@@ -366,7 +371,7 @@ def synthesize_onnx_cmd(
 
     samples, sample_rate = synthesize_onnx(
         text, acoustic, output, vocoder_path=vocoder,
-        dialect=dialect, speed=speed,
+        dialect=dialect, speed=speed, gate_threshold=gate_threshold,
         overrides=load_overrides(overrides) if overrides else None,
         peak_normalize=peak_normalize, max_chars=max_chars, provider=provider,
     )

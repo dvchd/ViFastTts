@@ -19,6 +19,11 @@ check "$VAL" cdbbd659116ae9f948c56152be5b08ea7fa08115
 
 case "${1:-}" in
   probe)
+    # V11S.A4: chặn ghi đè im lặng — chỉ chạy khi thư mục probe CHƯA có last.pt (hoặc cố ý).
+    if [ -f "$PROBE_OUT/last.pt" ] && [ "${2:-}" != "--overwrite-probe" ]; then
+      echo "CHẶN: $PROBE_OUT/last.pt đã tồn tại — dùng '$0 probe --overwrite-probe' nếu cố ý."
+      exit 2
+    fi
     echo "== PROBE tới bước 40100 =="
     .venv/bin/vifasttts train-v2 --config "$CFG" --train-manifest "$TRAIN" --val-manifest "$VAL" \
       --output "$PROBE_OUT" --resume "$BASE" --reset-val-state \

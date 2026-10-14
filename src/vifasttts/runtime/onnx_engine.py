@@ -107,6 +107,8 @@ class OnnxAcousticModel:
         self.input_names = [item.name for item in self.session.get_inputs()]
         self.input_name = self.input_names[0]
         self.speed_input_name = self.input_names[1] if len(self.input_names) > 1 else None
+        # V11.A7: graph mới có input thứ ba `gate_threshold` (cuối); graph cũ 2 input vẫn chạy
+        self.gate_input_name = self.input_names[2] if len(self.input_names) > 2 else None
         self.output_names = [output.name for output in self.session.get_outputs()]
         self.metadata = dict(self.session.get_modelmeta().custom_metadata_map or {})
         self.is_v2 = self.metadata.get("arch") == "v2_slot5" or self.speed_input_name is not None
@@ -125,13 +127,17 @@ class OnnxAcousticModel:
         vocabs = ComponentVocabs.default()
         return np.array([[vocabs.encode(item) for item in items]], dtype=np.int64)
 
-    def run(self, features: np.ndarray, *, speed: float = 1.0) -> dict[str, np.ndarray]:
-        """Chạy session; v2 (`arch == "v2_slot5"`) truyền thêm input `speed`, v1 giữ 1 input."""
+    def run(self, features: np.ndarray, *, speed: float = 1.0,
+            gate_threshold: float = 0.5) -> dict[str, np.ndarray]:
+        """Chạy session; v2 truyền thêm `speed` (+ `gate_threshold` nếu graph có input thứ ba)."""
         if self.is_v2 and self.speed_input_name is not None:
             feeds = {
                 self.input_name: features.astype(np.int64),
                 self.speed_input_name: np.array([speed], dtype=np.float32),
             }
+            gate_name = getattr(self, "gate_input_name", None)
+            if gate_name is not None:
+                feeds[gate_name] = np.array([gate_threshold], dtype=np.float32)
             outputs = self.session.run(None, feeds)
         else:
             outputs = self.session.run(None, {self.input_name: features.astype(np.int64)})
@@ -194,6 +200,7 @@ def synthesize_onnx(
     vocoder_path: str | Path,
     dialect: str = "north",
     speed: float = 1.0,
+    gate_threshold: float = 0.5,
     overrides: dict[str, str] | None = None,
     peak_normalize: bool = False,
     max_chars: int = 400,
@@ -210,6 +217,7 @@ def synthesize_onnx(
     pieces: list[np.ndarray] = []
     for audio, chunk_rate in iter_synthesize_onnx(
         text, acoustic_path, vocoder_path=vocoder_path, dialect=dialect, speed=speed,
+        gate_threshold=gate_threshold,
         overrides=overrides, max_chars=max_chars, sample_rate=sample_rate, provider=provider,
     ):
         rate = chunk_rate
@@ -227,6 +235,7 @@ def iter_synthesize_onnx(
     vocoder_path: str | Path,
     dialect: str = "north",
     speed: float = 1.0,
+    gate_threshold: float = 0.5,
     overrides: dict[str, str] | None = None,
     max_chars: int = 400,
     sample_rate: int | None = None,
@@ -245,7 +254,8 @@ def iter_synthesize_onnx(
     for index, chunk in enumerate(chunks):
         features = acoustic.features_from_text(chunk, dialect=dialect, options=options)
         is_v2 = acoustic.metadata.get("arch") == "v2_slot5"
-        outputs = acoustic.run(features, speed=speed) if is_v2 else acoustic.run(features)
+        outputs = (acoustic.run(features, speed=speed, gate_threshold=gate_threshold)
+                   if is_v2 else acoustic.run(features))
         mel = np.asarray(outputs["mel"])
         if speed != 1.0 and not is_v2:
             mel = _stretch_mel(mel, speed)

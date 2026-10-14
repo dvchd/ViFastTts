@@ -83,7 +83,7 @@ def test_export_v2_input_output_va_metadata(tmp_path, use_phonation: bool):
     export_onnx(config, str(ckpt), str(out), precision="fp32")
 
     acoustic = OnnxAcousticModel(out, provider="cpu")
-    assert acoustic.input_names == ["features", "speed"]
+    assert acoustic.input_names == ["features", "speed", "gate_threshold"]  # V11.A7: input cuối
     assert acoustic.output_names == _expected_v2_outputs(use_phonation)
 
     meta = read_metadata(out)

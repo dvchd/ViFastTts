@@ -231,7 +231,15 @@ def _eval_block(config: str, checkpoint: str, val_manifest: str, holdout: str | 
              "--manifest", holdout, "--cache-dir", CACHE, "--clips", str(args.holdout),
              "--device", args.device, "--out", str(args.out_dir / f"{tag}_cer.json")],
             args.out_dir / f"{tag}_cer.json", f"{tag}: CER holdout (Whisper)")
+    cer_prod = None
+    if with_cer and not args.no_cer:
+        cer_prod = _run_tool(
+            ["tools/eval_acoustic.py", "--config", config, "--checkpoint", checkpoint, "--mode", "free",
+             "--manifest", holdout, "--cache-dir", CACHE, "--clips", str(args.holdout),
+             "--device", args.device, "--cer-prod", "--out", str(args.out_dir / f"{tag}_cer_prod.json")],
+            args.out_dir / f"{tag}_cer_prod.json", f"{tag}: CER holdout (prod — theo dõi V11.A5)")
     row = {
+        "cer_prod": _mean(cer_prod, "cer_prod"),  # V11.A5: theo dõi (cổng vẫn dùng `cer`)
         "mel_l1_z": _mean(tf, "mel_l1_z"), "mel_db_speech": _mean(tf, "mel_mae_db_speech"),
         "vuv": _mean(tf, "vuv_accuracy"), "dur_mae": _mean(tf, "duration_mae_frames"),
         "f0_nga": (((tf or {}).get("f0_rmse_cents_by_tone") or {}).get("NGA") or {}).get("median"),
@@ -346,6 +354,7 @@ def main() -> None:
           f"mel_gap {row_fix['mel_gap']} · rough {row_fix['rough']}")
     print(f"  theo dõi A9: length_ratio_speech {row_fix.get('length_ratio_speech')} · "
           f"length_ratio_pause {row_fix.get('length_ratio_pause')}")
+    print(f"  cer_prod (theo dõi V11.A5): {row_old.get('cer_prod')}")
     print(f"  rè ngã (val cũ): Δjitter {row_old['creak_djitter_nga']} · Δhnr {row_old['creak_dhnr_nga']}"
           f" · thanh C (val cũ) {row_old['tone_C']}")
     print(f"  vùng (tf @ fixgap): syl_z {row_fix['syl_z']} · syl_db {row_fix['syl_db']} · "

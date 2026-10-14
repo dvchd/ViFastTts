@@ -118,7 +118,8 @@ trước khi dùng nó để quyết định — bài học §34.3→§36.4); m�
   (kèm mã câu hỏi `V<NN>.B<k>` / `V<NN>.C<k>`), rồi báo commit hash. Agent 1 được nhắn đúng hash đó.
 - **Mỗi vòng chỉ một tệp còn hiệu lực** + `docs/handoff/TRANG_THAI.md` là **nguồn duy nhất** (Agent 2
   cập nhật mỗi vòng). **Đầu tệp TRANG_THAI luôn ghi**: vòng hiện hành · tệp đặc tả · **commit gốc của vòng**
-  (trước khi sửa) · **commit cuối** · **trạng thái** (ĐANG LÀM / DỪNG, CHỜ ĐỌC) — Agent 1 tự tìm vòng để đọc
+  (trước khi sửa) · **commit code cuối** (commit cuối TRƯỚC commit hồ sơ; HEAD luôn là commit hồ sơ —
+  quy ước V11S.A3) · **trạng thái** (ĐANG LÀM / DỪNG, CHỜ ĐỌC) — Agent 1 tự tìm vòng để đọc
   từ đây, **không cần hash gửi kèm**.
 - **Agent 1 chỉ đọc, KHÔNG ghi tệp vào repo** (không có `V0x_agent1.md`); báo cáo đọc của Agent 1 do người
   dùng chuyển cho Agent 0. Agent 2 ghi `docs/handoff/V<NN>_agent2.md` (báo cáo + mục TỰ QUYẾT KHÁC ĐẶC TẢ).

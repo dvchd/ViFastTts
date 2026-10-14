@@ -119,6 +119,19 @@ def _quantiles_std(values: list[float]) -> dict[str, float]:
     return stats
 
 
+#: V11.A5 — `cer_prod`: đệm lặng cố định hai đầu trước ASR (khớp tầng ghép production).
+CER_PROD_PAD_MS = 150.0
+
+
+def _pad_silence(wav, sample_rate: int, ms: float = CER_PROD_PAD_MS):
+    """Đệm lặng cố định `ms` hai đầu waveform (V11.A5 — đo CER như production)."""
+    import torch
+
+    n = round(sample_rate * ms / 1000.0)
+    pad = torch.zeros(n, dtype=wav.dtype)
+    return torch.cat([pad, wav, pad])
+
+
 def _char_cer(reference: str, hypothesis: str) -> float:
     """CER cấp ký tự sau chuẩn hoá (bỏ dấu câu, thường hoá, gộp khoảng trắng)."""
     def clean(text: str) -> str:
@@ -864,7 +877,7 @@ def evaluate_tf_v2(model, dataset, config: dict, *, use_seg: bool,
 def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
                      limit: int | None = None, speed: float = 1.0,
                      wav_dir: str | Path | None = None, group_by: list[str] | None = None,
-                     skip_cer: bool = False) -> dict:
+                     skip_cer: bool = False, cer_prod: bool = False) -> dict:
     """Free-run v2 thuần: model tự dự đoán durations/slot (không cho gì ngoài features).
 
     Mel/F0 đo trên vùng overlap với target thật + `length_ratio`; CER chấm qua
@@ -1180,9 +1193,10 @@ def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
             else:
                 tmp = None
                 directory = Path(wav_dir)
+            prod = cer_prod  # V11.A5: đo như production (lead=0 + lặng 150 ms)
             try:
                 wav_paths = _synthesize_free_v2_wavs(model, config, text_rows, directory,
-                                                     device, speed)
+                                                     device, speed, prod=prod)
                 scored: list[float] = []
                 for row, path in zip(text_rows, wav_paths):
                     if path is None:
@@ -1196,9 +1210,9 @@ def evaluate_free_v2(model, dataset, config: dict, *, device: str = "cpu",
                 if tmp is not None:
                     tmp.cleanup()
             if scored:
-                summary["cer"] = _quantiles(scored)
+                summary["cer_prod" if prod else "cer"] = _quantiles(scored)
             else:
-                summary["cer"] = None
+                summary["cer_prod" if prod else "cer"] = None
                 summary["cer_note"] = "bỏ qua CER: không có row nào parse ra âm tiết"
     return summary
 
@@ -1243,7 +1257,8 @@ def run_free_v2(args, config: dict) -> dict:
                                limit=args.clips, speed=getattr(args, "speed", 1.0),
                                wav_dir=Path(args.out).parent / "free_wavs",
                                group_by=parse_group_by(getattr(args, "group_by", None)),
-                               skip_cer=bool(getattr(args, "no_cer", False)))
+                               skip_cer=bool(getattr(args, "no_cer", False)),
+                               cer_prod=bool(getattr(args, "cer_prod", False)))
     summary["checkpoint"] = args.checkpoint
     summary["manifest"] = args.manifest
     return summary
@@ -1277,11 +1292,14 @@ def _score_transcript(reference: str, hypothesis: str) -> tuple[float, str]:
 
 
 def _synthesize_free_v2_wavs(model, config: dict, rows: list[dict], wav_dir: Path,
-                             device: str, speed: float) -> list[Path]:
+                             device: str, speed: float, prod: bool = False) -> list[Path]:
     """Text → WAV bằng model v2 đã nạp + vocoder dựng từ config (cơ chế như `Synthesizer`).
 
     Mỗi row cần `text` parse được (row không có âm tiết nào thì bỏ qua, giữ thứ tự
     bằng `None`). Model chạy một forward có `speed` trong graph (khớp `_render` v2).
+
+    `prod=True` (V11.A5 — `cer_prod`): model **vẫn nhận lead = 0** (free-run không truyền lead)
+    và **đệm lặng cố định 150 ms** hai đầu trước khi ghi WAV cho ASR — khớp production.
     """
     import torch
 
@@ -1307,8 +1325,11 @@ def _synthesize_free_v2_wavs(model, config: dict, rows: list[dict], wav_dir: Pat
                 continue
             features = torch.tensor([[vocabs.encode(item) for item in items]],
                                     dtype=torch.long, device=device_t)
-            mel = model(features, speed=speed_t)["mel"][0]
+            mel = model(features, speed=speed_t)["mel"][0]  # lead = 0 (free-run)
             waveform = vocoder(mel.unsqueeze(0))[0]
+            if prod:
+                waveform = _pad_silence(waveform.detach().cpu(),
+                                        int(config.get("sample_rate", 24000)))
             target = wav_dir / f"{row.get('id', 'clip')}.wav"
             write_wav(target, waveform.detach().cpu(),
                       int(config.get("sample_rate", 24000)))
@@ -1377,6 +1398,8 @@ def main() -> None:
     parser.add_argument("--group-by", default=None,
                         help="tách metric cấp âm tiết theo nhóm, vd `coda,tone,status` hoặc nhóm "
                              f"ghép `coda:tone` (chọn trong {','.join(GROUP_KEYS)}); chỉ v2")
+    parser.add_argument("--cer-prod", action="store_true",
+                        help="V11.A5: CER như production (lead=0 + đệm lặng 150 ms) → ghi vào `cer_prod`")
     parser.add_argument("--no-cer", action="store_true",
                         help="free mode: bỏ CER (chạy nhanh khi chỉ cần nhịp nghỉ/ngữ điệu)")
     parser.add_argument("--out", required=True)

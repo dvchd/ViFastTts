@@ -180,6 +180,7 @@ class ViFastTtsModelV2(nn.Module):
         lead: torch.Tensor | None = None,
         speed: torch.Tensor | None = None,
         input_lengths: torch.Tensor | None = None,
+        gate_threshold: float | torch.Tensor = 0.5,
     ) -> dict[str, torch.Tensor]:
         """features [B,N,7] → dict đầu ra (docstring module: quy ước tham số + output)."""
         batch, syllables = features.shape[0], features.shape[1]
@@ -224,7 +225,7 @@ class ViFastTtsModelV2(nn.Module):
             gap = torch.round((torch.exp(log_gap) - 1.0).clamp_min(1)).long()
             if speed_value is not None:
                 gap = torch.round(gap.to(torch.float32) / speed_value).clamp_min(1).long()
-            gap = torch.where(gate_prob > 0.5, gap, torch.zeros_like(gap))
+            gap = torch.where(gate_prob > gate_threshold, gap, torch.zeros_like(gap))
         else:
             gap = gaps.long()
 

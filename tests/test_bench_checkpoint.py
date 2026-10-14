@@ -166,9 +166,19 @@ def test_pin_readme_khop_byte_trong_git():
     import subprocess
     from pathlib import Path
 
+    import pytest
+
     from tools.bench_checkpoint import readme_sha256
 
     root = Path(__file__).resolve().parents[1]
+    import shutil
+
+    if shutil.which("git") is None:
+        pytest.skip("không có binary git — bỏ kiểm pin theo byte git (V11S.A5)")
+    probe = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], check=False, cwd=root,
+                           capture_output=True, text=True)
+    if probe.returncode != 0:
+        pytest.skip("không phải repo git — bỏ kiểm pin theo byte git (V11S.A5)")
     for name in ("base40k_old.json", "base40k_fixtail.json"):
         rel = f"eval/baselines/{name}"
         blob = subprocess.run(["git", "show", f"HEAD:{rel}"], check=False, cwd=root,

@@ -148,27 +148,29 @@ def _export_v2_fp32(config: dict, checkpoint: str, output: str, opset_version: i
             super().__init__()
             self.model = module
 
-        def forward(self, features: torch.Tensor, speed: torch.Tensor) -> tuple[torch.Tensor, ...]:
-            """features [B,N,7] long + speed float32 [1] → tuple output theo `output_names`."""
-            outputs = self.model(features, speed=speed)
+        def forward(self, features: torch.Tensor, speed: torch.Tensor,
+                    gate_threshold: torch.Tensor) -> tuple[torch.Tensor, ...]:
+            """features + speed + gate_threshold (float32 [1]) → tuple output theo `output_names`."""
+            outputs = self.model(features, speed=speed, gate_threshold=gate_threshold)
             return tuple(outputs[name] for name in output_names)
 
     wrapper = _V2ExportWrapper(model).eval()
     dummy_features = torch.zeros((1, 8, 7), dtype=torch.long)
     dummy_speed = torch.tensor([1.0], dtype=torch.float32)
+    dummy_gate = torch.tensor([0.5], dtype=torch.float32)  # V11.A7: ngưỡng gate = input CUỐI
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     with torch.no_grad():  # bắt buộc: v2 slice/index Parameter trong forward (baked thành constant)
         if "dynamo" in inspect.signature(torch.onnx.export).parameters:
             torch.onnx.export(
-                wrapper, (dummy_features, dummy_speed), output,
-                input_names=["features", "speed"], output_names=output_names,
+                wrapper, (dummy_features, dummy_speed, dummy_gate), output,
+                input_names=["features", "speed", "gate_threshold"], output_names=output_names,
                 dynamic_axes={"features": {0: "batch", 1: "syllables"}},
                 opset_version=opset_version, dynamo=False,
             )
         else:  # torch cũ không có tham số dynamo
             torch.onnx.export(
-                wrapper, (dummy_features, dummy_speed), output,
-                input_names=["features", "speed"], output_names=output_names,
+                wrapper, (dummy_features, dummy_speed, dummy_gate), output,
+                input_names=["features", "speed", "gate_threshold"], output_names=output_names,
                 dynamic_axes={"features": {0: "batch", 1: "syllables"}},
                 opset_version=opset_version,
             )

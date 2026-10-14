@@ -139,7 +139,8 @@ class Synthesizer:
         self.vocoder.to(self.device)
         self.vocoder.eval()
 
-    def _render(self, text: str, dialect: str, speed: float, options) -> np.ndarray | None:
+    def _render(self, text: str, dialect: str, speed: float, options,
+                gate_threshold: float = 0.5) -> np.ndarray | None:
         """Tổng hợp một đoạn: parse → model → vocoder; None nếu đoạn không có âm tiết.
 
         v2 (`v2_slot5`): **một** forward `model(features, speed=[speed])` — speed
@@ -158,7 +159,8 @@ class Synthesizer:
         with torch.no_grad():
             if self.arch == ARCH_V2:
                 speed_t = torch.tensor([float(speed)], dtype=torch.float32, device=self.device)
-                mel = self.model(features, speed=speed_t)["mel"][0]
+                mel = self.model(features, speed=speed_t,
+                                 gate_threshold=gate_threshold)["mel"][0]
             else:
                 outputs = self.model(features)
                 if speed != 1.0:
@@ -174,6 +176,7 @@ class Synthesizer:
         *,
         dialect: str = "north",
         speed: float = 1.0,
+        gate_threshold: float = 0.5,
         overrides: dict[str, str] | None = None,
         max_chars: int = 400,
     ) -> Iterator[tuple[np.ndarray, int]]:
@@ -186,7 +189,8 @@ class Synthesizer:
             raise ValueError("Không có âm tiết nào để tổng hợp")
         rendered_any = False
         for index, chunk in enumerate(chunks):
-            rendered = self._render(chunk, dialect, speed, options)
+            rendered = self._render(chunk, dialect, speed, options,
+                                    gate_threshold=gate_threshold)
             if rendered is None:
                 continue
             rendered_any = True
@@ -205,6 +209,7 @@ class Synthesizer:
         *,
         dialect: str = "north",
         speed: float = 1.0,
+        gate_threshold: float = 0.5,
         overrides: dict[str, str] | None = None,
         peak_normalize: bool = False,
         max_chars: int = 400,
@@ -213,7 +218,8 @@ class Synthesizer:
         from vifasttts.runtime.postprocess import postprocess
 
         pieces = [audio for audio, _ in self.iter_synthesize(
-            text, dialect=dialect, speed=speed, overrides=overrides, max_chars=max_chars,
+            text, dialect=dialect, speed=speed, gate_threshold=gate_threshold,
+            overrides=overrides, max_chars=max_chars,
         )]
         waveform = postprocess(np.concatenate(pieces), self.sample_rate,
                                target_db=-3.0 if peak_normalize else None)

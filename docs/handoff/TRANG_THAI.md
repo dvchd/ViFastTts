@@ -1,7 +1,8 @@
 # TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, Agent 2 cập nhật mỗi vòng)
 
 **Vòng hiện hành**: V11 · **Tệp đặc tả**: `docs/handoff/V11_agent0.md`
-**Commit gốc của vòng** (trước khi sửa): `b1ae8ce` · **Commit cuối**: `<cập nhật khi dừng>`
+**Commit gốc của vòng** (trước khi sửa): `b1ae8ce` · **Commit code cuối**: `<commit cuối TRƯỚC commit hồ sơ>
+> Quy ước V11S.A3: HEAD luôn là commit hồ sơ (không tự ghi hash của chính nó); Agent 1 đọc `<gốc>..HEAD`.
 **Trạng thái**: **A2 ĐANG CHẠY** + B-I (V11.B1–B5, chỉ CPU) đang làm; B-II (B6–B11) sau khi A2 tới 60k.
 A2: `runs/acoustic_v2_A2_fixtail`, resume base@40000, 60k, ~0,43 s/bước (khởi động 12:35 14/10).
 
