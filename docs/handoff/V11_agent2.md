@@ -57,3 +57,13 @@ V11.B6–B11 + V11S.B3 (watchdog: step_of chịu last.pt hỏng · ghi checkpoin
 - **CreaPy** (V11.B5): không cài được — xem bảng trên.
 - **UTMOSv2**: bị loại theo tiêu chí (40k/18k không khớp).
 - B6–B11 + V11S.B3: chờ A2 tới 60k.
+
+
+## Phụ lục: nghiên cứu dataset giọng NỮ BẮC mở hoàn toàn (sub-agent, 14/10)
+
+**Kết luận: KHÔNG có bộ nào hội đủ** "mở hoàn toàn + nữ Bắc (Hà Nội) + chất lượng cao + ≥5–10 h để train acoustic".
+- Gần nhất: **VLSP 2021 TTS** (~7,5 h, nữ Hà Nội, **research-only**, thu từ vlog có nhiễu) · **VAIS-1000** (~1,7 h nữ Bắc **studio**, **CC-BY-4.0** — quá ngắn để train, tốt cho eval/fine-tune).
+- Nhóm **giấy phép sạch cho thương mại/eval**: VAIS-1000 (CC-BY-4.0) · Common Voice vi validated (CC0, lọc `sex=female`; MDC cấm re-host) · FLEURS vi (CC-BY-4.0) · FOSD ~30 h (FPT license mở) · LSVSC 100 h (CC-BY-4.0, rủi ro provenance crawl).
+- **Cảnh báo**: các bộ lớn "mở" (viVoice 1.017 h, PhoAudiobook 941 h, Bud500 500 h, VSV-1100 1.100 h, GigaSpeech2 6.039 h…) đều **crawl YouTube/social + NC/không sở hữu bản quyền** ✗ — không dùng cho sản phẩm.
+- **Đính chính 2 chi tiết trong báo cáo sub-agent**: (a) giọng hiện tại của dự án là **NAM Bắc** (F0 trung vị 122 Hz), không phải nữ; (b) dataset train thật = **19,3 h** (không phải 12 h).
+- **Ý nghĩa kế hoạch**: muốn giọng nữ Bắc *sản phẩm* ⇒ **tự thu 10–20 h** (hoặc VLSP 2021 chỉ để nghiên cứu, không phát hành); còn VAIS/FLEURS/CV dùng được ngay cho **eval chéo người nói** (kiểm khái quát) — giấy phép sạch.
