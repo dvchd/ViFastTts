@@ -295,11 +295,13 @@ def main() -> None:
 
     base_old = base_fix = None
     if args.baseline_old:
-        base_old = json.loads(Path(args.baseline_old).read_text(encoding="utf-8"))
-        _check_baseline_hash(base_old, args.val_manifest_old, args.baseline_old)
+        payload = json.loads(Path(args.baseline_old).read_text(encoding="utf-8"))
+        base_old = payload.get("summary", payload)  # tệp mốc gọn: metric nằm trong "summary"
+        _check_baseline_hash(payload, args.val_manifest_old, args.baseline_old)
     if args.baseline_fixgap:
-        base_fix = json.loads(Path(args.baseline_fixgap).read_text(encoding="utf-8"))
-        _check_baseline_hash(base_fix, args.val_manifest, args.baseline_fixgap)
+        payload = json.loads(Path(args.baseline_fixgap).read_text(encoding="utf-8"))
+        base_fix = payload.get("summary_fixgap") or payload.get("summary", payload)
+        _check_baseline_hash(payload, args.val_manifest, args.baseline_fixgap)
 
     gates = {"hard": hard_gates(row_old, base_old, row_fix, base_fix, row_old["rough"]),
              "target": target_gates(row_fix, base_fix)}
@@ -322,7 +324,7 @@ def main() -> None:
     print(f"  vùng (tf @ fixgap): syl_z {row_fix['syl_z']} · syl_db {row_fix['syl_db']} · "
           f"gap_z {row_fix['mel_gap_z']}")
     if base_fix:
-        f1_base, gap_base = base_fix.get("summary", {}).get("pause_f1_all"), base_fix.get("summary", {}).get("gap_sum_mae_all")
+        f1_base, gap_base = base_fix.get("pause_f1_all"), base_fix.get("gap_sum_mae_all")
         if f1_base is not None and gap_base is not None:
             print(f"  ngưỡng tuyệt đối suy ra: pause_f1_all ≥ {f1_base + 0.073:.4f} · "
                   f"gap_sum_mae_all ≤ {gap_base * 0.714:.1f}")
