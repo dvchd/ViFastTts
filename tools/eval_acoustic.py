@@ -1458,7 +1458,9 @@ def _print_summary(summary: dict, mode: str) -> None:
               f"· length_ratio {summary['length_ratio']['mean']:.3f} "
               + (f"· CER TB {summary['cer']['mean']:.3f}"
                  if summary.get("cer") is not None
-                 else f"· CER bỏ qua ({summary['cer_note']})"))
+                 else f"· CER bỏ qua ({summary.get('cer_note', 'bỏ qua')})"))
+        if summary.get("cer_prod") is not None:
+            print(f"  CER_prod (lead=0 + lặng 150 ms) TB {summary['cer_prod']['mean']:.3f}")
         print(f"  VUV acc {summary['vuv_accuracy']:.3f} "
               f"· duration MAE {summary['duration_mae_frames']['mean']:.1f} frame "
               f"· RTF acoustic {summary['rtf']:.3f} · RAM đỉnh {summary['ram_peak_gib']:.2f} GiB")
