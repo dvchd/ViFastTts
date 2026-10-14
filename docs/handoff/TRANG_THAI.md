@@ -1,9 +1,9 @@
 # TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, Agent 2 cập nhật mỗi vòng)
 
-**Vòng hiện hành**: V10 · **Tệp đặc tả**: `docs/handoff/V10_agent0.md`
-**Commit gốc của vòng** (trước khi sửa): `06b5f10` · **Commit cuối**: `403969e`
-**Trạng thái**: **A2 ĐANG CHẠY, CHỜ ĐỌC** — A2 khởi động 12:35 14/10 (`runs/acoustic_v2_A2_fixtail`, resume base@40000,
-60k, ~0,43 s/bước ⇒ tới 60k ≈ 2,3 giờ); đủ 6 điều kiện V10.A11; B10 (bench 45/50/55/60k) chờ A2 xong.
+**Vòng hiện hành**: V11 · **Tệp đặc tả**: `docs/handoff/V11_agent0.md`
+**Commit gốc của vòng** (trước khi sửa): `b1ae8ce` · **Commit cuối**: `<cập nhật khi dừng>`
+**Trạng thái**: **A2 ĐANG CHẠY** + B-I (V11.B1–B5, chỉ CPU) đang làm; B-II (B6–B11) sau khi A2 tới 60k.
+A2: `runs/acoustic_v2_A2_fixtail`, resume base@40000, 60k, ~0,43 s/bước (khởi động 12:35 14/10).
 
 > Agent 1 đọc vòng này theo thông tin ở đầu tệp (không cần hash gửi kèm): diff `06b5f10..<commit cuối>`,
 > câu hỏi V10.C1–C7 ở mục C của tệp đặc tả. Agent 1 **chỉ đọc, không ghi tệp** vào repo.
@@ -43,11 +43,15 @@
 ## 4. Việc đang chờ (theo mã vòng)
 | Mã | Việc | Trạng thái |
 |---|---|---|
-| V10.B1–B7 | đặc tả · pin byte git · loss vào history · B4 nhánh nhiễu · length_ratio A9 · test/push · sinh lại mốc (H1 +0,14%) | ✅ `baab50f` `e14d2dd` `168d1fb` `9b073c8` `d83230f` |
-| V10.B8 | A2 thật — đủ 6/6 điều kiện, khởi động 12:35 | ✅ **ĐANG CHẠY** |
-| V10.B9 | hồ sơ `V10_agent2.md` + TRANG_THAI | ✅ |
-| V10.B10 | bench 45k/50k/55k/60k + tỉ số BCE pause val/train | ⏳ chờ A2 tới 60k |
-| V10.A10 | SẮC-tắc làm lại (so SẮC-tắc với SẮC-khác cùng ô độ dài + val) | ⏳ sau A2 |
+| V11.B1 | commit đặc tả V11 | 🔄 |
+| V11.B2 | σ chuẩn (trung bình trượt 20 bước) + báo lại 7 thành phần probe + sửa §44 | ⏳ |
+| V11.B3 | chia val_calib / val_lock theo clip cha + ghim hash + test | ⏳ |
+| V11.B4 | `gate_threshold` runtime + `cer_prod` (theo dõi) + test/push | ⏳ |
+| V11.B5 | CreaPy + UTMOSv2 kiểm chứng (CPU) | ⏳ |
+| V11.B6 | bench A2 45/50/55/60k + cer_prod base | ⏳ chờ A2 tới 60k |
+| V11.B7–B10 | cây quyết định A4 · A1 (nếu nhánh) · chẩn đoán duration/VUV/SẮC-tắc · theo dõi | ⏳ |
+| V11.B11 | hồ sơ `V11_agent2.md` + TRANG_THAI | ⏳ |
+| V10.A10 | SẮC-tắc làm lại — chuyển thành V11.B9 | ⏳ |
 
 ## 4b. A2 đang chạy (số kiểm đầu)
 - `runs/acoustic_v2_A2_fixtail` · log `artifacts/dataset_v2/train_v2_A2_fixtail.log` (watchdog resume).
