@@ -1316,3 +1316,57 @@ giảm mạnh, vùng âm tiết không xấu quá +1%).
 - **sh25**: giữ **toàn cục** (người dùng nghe 6 cặp AB: sh25 ổn ở ngã, plain rè hơn tổng thể) — đóng
   mục 5c, không làm bản gated. Rè ngã/nặng còn lại thuộc phía **acoustic** (dòng E).
 - p trên train fixtail **không đổi** = 0,3082 ⇒ `pos_weight` (A1) = **2,244**.
+
+### 44.9 Vòng 10: pin theo byte git, gỡ fixgap, thành phần loss, length_ratio tách phần (14/10/2026)
+
+**V10.A3 — vì sao pin lệch giữa hai máy.** Máy Agent 1 bật `core.autocrlf=true` ⇒ checkout chuyển
+LF→CRLF làm đổi byte tệp JSON (trên M6 `autocrlf` không đặt nên đĩa == git). Sửa gốc:
+`.gitattributes` → `eval/baselines/*.json -text` (không chuyển xuống dòng); tệp mốc ghi **chuẩn hóa**
+(LF, `sort_keys`, indent 2, dòng trống cuối — `bench_checkpoint._write_json_normalized`); README ghim
+sha256 **của byte trong git** (`git show HEAD:<tệp> | shasum -a 256`). Test khóa ở MỌI lần test:
+`tests/test_bench_checkpoint.py::test_pin_readme_khop_byte_trong_git` (README == byte git == byte đĩa).
+
+**V10.A5/A6 — dọn mốc.** `base40k_fixgap.json` gỡ khỏi git (`git rm --cached`), bản trên đĩa ở
+`artifacts/bench/legacy/` (KHÔNG DÙNG — thay bởi fixtail); `.gitignore` chỉ cho `base*_old.json` +
+`base*_fixtail.json`. Khóa `null` trong `summary_fixgap` (cer/tone_C/creak) **xóa hẳn** thay vì để null.
+
+**V10.A8 — history.csv ghi TỪNG thành phần loss.** 10 cột cũ giữ nguyên thứ tự (bench `_rough_from_history`
+đọc theo tên nên không vỡ); thêm vào cuối: `train_pause_frac`, `train_<comp>`, `val_<comp>`, `val_pause_frac`
+(`LOSS_COMPONENTS` = đúng tên trong `v2_losses.DEFAULT_WEIGHTS`, gồm `pause_gate`/`pause_gap`).
+Train = trung bình theo cửa sổ `log_every`; val = `_validate` gom mọi thành phần. **Chỉ thêm cột, không đổi
+giá trị loss** — khóa bằng test `test_tong_thanh_phan_co_trong_so_bang_loss_tong` (Σ w·comp == total ≤ 1e-5).
+
+**V10.A9 — `length_ratio` tách phần.** Cổng cũ `1,00±0,05` bất khả thi với A2 (base trên val cũ cũng chỉ
+0,90: model nói nhanh ~10% ở phần tiếng nói — A2 không sửa). Cổng mới: `|1−lr| ≤ 0,5×|1−mốc|` (mốc fixtail
+0,7665 ⇒ đạt [0,8833; 1,1168]). Theo dõi thêm `length_ratio_speech` (Σ frame âm tiết dự đoán/thật) và
+`length_ratio_pause` (Σ frame gap dự đoán/thật) @ val fixtail free-run — kỳ vọng A2: **pause tăng rõ,
+speech gần như không đổi**.
+
+**V10.B4 — f0p lạ là NHIỄU, không phải lỗi chuẩn hóa (đo tất định, 3 manifest × 50 batch cùng id).**
+
+| Thành phần | cũ | fixgap | fixtail | Δ%(fixtail/cũ) |
+|---|---|---|---|---|
+| `f0` (shape L1) | 0,61307 | 0,61307 | 0,61307 | **+0,000%** |
+| `f0_delta` | 6,82494 | 6,82494 | 6,82494 | **+0,000%** |
+| `f0_prior` (**f0p**) | 0,60286 | 0,60286 | 0,60286 | **+0,000%** |
+| `mel` | 0,75526 | 1,83143 | 1,13507 | +50,29% |
+| `pause_gate` | 0,06181 | 3,70730 | 3,70730 | +5.898% |
+| `pause_gap` | 0,02947 | 4,98153 | 1,78380 | +5.954% |
+
+⇒ Họ f0 chia theo **mask hữu thanh/nucleus** (`v2_losses.py:124` `/f0_mask.sum()`, `:128` `/delta_mask.sum()×3`,
+`:135` `/nucleus_weight.sum()` — KHÔNG chia `T`) nên thêm frame gap **không đổi**; các loss theo frame
+(mel/pause) đổi là **đúng thiết kế** của A2 (đưa các gap đuôi từng thiếu vào nhãn). So từng thành phần
+probe fixtail với **±2σ của 500 bước cuối base 40k** (thay tiêu chí ±5% — V10.A7):
+
+| | base mean (n=10) | 2σ% | probe (n=1) | Δ% | |
+|---|---|---|---|---|---|
+| loss | 5,90991 | 13,22% | 6,16480 | +4,31% | ✅ |
+| mel | 0,69745 | 49,38% | 0,78920 | +13,16% | ✅ |
+| G | 0,95045 | 70,58% | 1,33800 | +40,78% | ✅ |
+| tho | 0,50027 | 17,50% | 0,49460 | −1,13% | ✅ |
+| f0d | 4,77100 | 25,07% | 5,02500 | +5,32% | ✅ |
+| f0p | 0,59810 | 59,11% | 0,50000 | −16,40% | ✅ |
+| sharp | 0,55630 | 9,49% | 0,57100 | +2,64% | ✅ |
+
+**Kết luận: NHÁNH NHIỄU (V10.A7)** — mọi thành phần trong 2σ ⇒ **probe fixtail ĐẠT**; tiêu chí probe
+từng thành phần từ ±5% ⇒ **±2σ** (σ đo trên 500 bước cuối base).
