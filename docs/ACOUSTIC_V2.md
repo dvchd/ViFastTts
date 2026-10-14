@@ -1532,3 +1532,25 @@ vẫn đạt ✓). E4a **không sửa được rè ở tầng waveform** — đ�
 ⇒ **mel dự đoán vùng creak bị XOÁ MỜ (đỉnh hài mất sắc)** ⇒ Vocos — vốn học trên mel THẬT (sắc) —
 gặp mel mờ thì render thành **ồn/rè** (khớp §39: copy-synth ≈ thật, free-run vọt creak). Vậy đòn đúng
 là **làm nét mel vùng creak** (`mel_sharp` ×(1+3·c_t) — E4c), không phải sửa nhãn F0.
+
+### 45.6 Kiểm nhân quả mel↔rè (liều–đáp ứng, KHÔNG train) — và **thước ratio bị lật ngược**
+
+`tools/creak_dose_response.py` (25 clip creak, Vocos cố định, chỉ đổi mel):
+
+| Mel đưa vào Vocos | ratio (ngã+nặng/ngang+huyền) | **creak tuyệt đối ngã+nặng** | ngang+huyền |
+|---|---|---|---|
+| THẬT (copy-synth) | 2,390 | **0,1893** (mốc) | 0,0792 |
+| MODEL thầy-forced (base 40k) | **1,924** | **0,2775 (+47%)** | 0,1442 |
+| THẬT làm mờ α=0,3 / 0,5 / 0,7 | 2,328 / 2,230 / 1,926 | 0,1972 / 0,2211 / 0,2497 | 0,0847 / 0,0991 / 0,1296 |
+| MODEL làm nét α=1,5 / 3,0 (`sharpen_mel`) | 2,625 / 2,696 | **0,2097 / 0,1804 (−35%)** | 0,0799 / 0,0669 |
+
+**Ba kết luận có bằng chứng**:
+1. **"Mờ ⇒ rè" SAI ở dạng đã phát biểu** ✗: làm mờ mel THẬT *không* làm creak ngã+nặng tệ hơn so với
+   ngang+huyền (tăng cả hai ⇒ ratio *giảm*). ⇒ §45.5 (suy từ tương quan) phải hạ xuống **"mel mờ làm
+   creak tăng ở CẢ hai nhóm"**, không phải cơ chế riêng của ngã/nặng.
+2. **"Nét ⇒ giảm creak" ĐÚNG** ✓✓: làm nét mel model (α 1,5→3,0) kéo creak tuyệt đối ngã+nặng
+   0,2775 → **0,1804** (về sát mốc thật 0,1893) — đúng cơ chế `sh25` mà tai user đã xác nhận.
+3. **Thước `ratio` bị LẬT NGƯỢC** ✗✗: mel model có ratio 1,924 < mel thật 2,390 nhưng creak tuyệt đối
+   **cao hơn 47%** — ratio bị chi phối bởi mẫu số (ngang+huyền 0,1442 vs 0,0792). ⇒ **Từ nay chấm rè
+   bằng creak TUYỆT ĐỐI nhãn ngã+nặng + Δhnr/Δjitter** (ratio chỉ để tham khảo, ghi rõ tử/mẫu).
+   Điều này khớp cảnh báo phản biện ngoài (Muse) và làm lại nền cho mọi kết luận rè về sau.

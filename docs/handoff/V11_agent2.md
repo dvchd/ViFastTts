@@ -271,3 +271,11 @@ Chấm điểm đêm V11S3: **thiết kế 6/10 · độ tin cậy số đo 5/10
 **HÀNH ĐỘNG NGAY (theo đề xuất Muse)**: `tools/creak_dose_response.py` — can thiệp trên mel, KHÔNG train:
 mel THẬT → làm mờ nhân tạo (α 0,3/0,5/0,7) → Vocos → creak; mel MODEL → làm nét (`sharpen_mel` α 1,5/3,0)
 → Vocos → creak. Nếu cả hai phẳng ⇒ giả thuyết mờ⇒rè không đủ ⇒ **huỷ E4c trước khi tốn 8k bước**.
+
+### V11S3 — KIỂM NHÂN QUẢ (liều–đáp ứng) + ĐỔI THƯỚC RÈ (23:05)
+
+Kết quả `artifacts/creak25/dose_response.json`: (a) làm mờ mel THẬT **không** tăng creak riêng ngã+nặng ✗
+⇒ §45.5 hạ xuống "mờ làm creak tăng ở CẢ 2 nhóm"; (b) làm nét mel MODEL (α1,5→3,0) kéo creak tuyệt đối
+ngã+nặng **0,2775 → 0,1804** ✓ (mốc thật 0,1893) ⇒ ủng hộ E4c; (c) **ratio bị lật ngược** (model 1,924 <
+thật 2,390 nhưng creak tuyệt đối +47%) ⇒ **đổi thước chính**: creak TUYỆT ĐỐI ngã+nặng + Δhnr/Δjitter;
+ratio chỉ tham khảo kèm tử/mẫu. Quyết định: **giữ E4c** (không veto).
