@@ -48,8 +48,9 @@ def _run_tool(args: list[str], out: Path, label: str) -> dict | None:
     """Chạy 1 tool CLI; lỗi/thiếu file ⇒ None + cảnh báo (không làm sập benchmark)."""
     t0 = time.time()
     print(f"  · {label} …", flush=True)
+    out.unlink(missing_ok=True)  # C8: xoá tệp CÙNG TÊN trước khi chạy (không đọc nhầm kết quả cũ)
     proc = subprocess.run([sys.executable, *args], check=False, cwd=ROOT, capture_output=True, text=True)
-    if proc.returncode != 0 or not out.exists():
+    if proc.returncode != 0 or not out.exists():  # chỉ đọc khi exit 0 + tệp tồn tại
         tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-3:]
         print(f"    ⚠ {label} lỗi (exit {proc.returncode}): {' / '.join(tail)}")
         return None
@@ -76,14 +77,14 @@ def _rough_from_history(run_dir: Path, step: int | None) -> float | None:
     if not path.exists():
         return None
     best = None
-    with path.open(encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            if row.get("val_rough") in (None, ""):
-                continue
-            current = int(float(row.get("step", 0)))
-            if step is not None and current > step:
-                continue
-            best = float(row["val_rough"])
+    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if not line.startswith("#")]
+    for row in csv.DictReader(lines):  # C10: bỏ dòng chú thích "# X3 resume: …" (trước header)
+        if row.get("val_rough") in (None, ""):
+            continue
+        current = int(float(row.get("step", 0)))
+        if step is not None and current > step:
+            continue
+        best = float(row["val_rough"])
     return best
 
 
@@ -298,10 +299,10 @@ def main() -> None:
         if isinstance(block, dict) and "accuracy" in block:
             tone_c = float(block["accuracy"])
     creak_nga = ((creak or {}).get("groups", {}).get("NGA") or {}).get("delta_synth_minus_real", {})
-    for row in (row_old, row_fix):
-        row["tone_C"] = tone_c
-        row["creak_djitter_nga"] = creak_nga.get("jitter")
-        row["creak_dhnr_nga"] = creak_nga.get("hnr")
+    # C9: tone_C/creak chấm @ val CŨ ⇒ chỉ nằm ở hàng val cũ (một số chỉ thuộc bản val sinh ra nó)
+    row_old["tone_C"] = tone_c
+    row_old["creak_djitter_nga"] = creak_nga.get("jitter")
+    row_old["creak_dhnr_nga"] = creak_nga.get("hnr")
     row_old["rough"] = rough_from_checkpoint(config, checkpoint, args.val_manifest_old)
     row_fix["rough"] = rough_from_checkpoint(config, checkpoint, args.val_manifest)
 
@@ -331,8 +332,8 @@ def main() -> None:
           f"pause_f1_all {row_fix['pause_f1_all']} · gap_mae_all {row_fix['gap_sum_mae_all']} · "
           f"precision {row_fix['pause_precision']} · len_ratio {row_fix['length_ratio']} · "
           f"mel_gap {row_fix['mel_gap']} · rough {row_fix['rough']}")
-    print(f"  rè ngã: Δjitter {row_fix['creak_djitter_nga']} · Δhnr {row_fix['creak_dhnr_nga']}"
-          f" · (thanh+rè chấm @ val CŨ, manifest tường minh)")
+    print(f"  rè ngã (val cũ): Δjitter {row_old['creak_djitter_nga']} · Δhnr {row_old['creak_dhnr_nga']}"
+          f" · thanh C (val cũ) {row_old['tone_C']}")
     print(f"  vùng (tf @ fixgap): syl_z {row_fix['syl_z']} · syl_db {row_fix['syl_db']} · "
           f"gap_z {row_fix['mel_gap_z']}")
     if base_fix:

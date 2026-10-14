@@ -31,7 +31,6 @@
     "vuv": 0.9821,
     "dur_mae": 4.9866,
     "f0_nga": 180.1663,
-    "cer": null,
     "pause_f1": 0.5274,
     "gap_sum_mae": 119.1246,
     "pause_f1_all": 0.5559,
@@ -42,9 +41,6 @@
     "mel_gap_z": 2.3862,
     "syl_z": 0.6608,
     "syl_db": 7.6735,
-    "tone_C": 0.8045,
-    "creak_djitter_nga": 0.03721089568716707,
-    "creak_dhnr_nga": -2.745237842667848,
     "rough": 0.33672131389603316
   },
   "summary_fixgap": {
@@ -53,7 +49,6 @@
     "vuv": 0.9821,
     "dur_mae": 4.9866,
     "f0_nga": 180.1663,
-    "cer": null,
     "pause_f1": 0.5274,
     "gap_sum_mae": 119.1246,
     "pause_f1_all": 0.5559,
@@ -64,10 +59,8 @@
     "mel_gap_z": 2.3862,
     "syl_z": 0.6608,
     "syl_db": 7.6735,
-    "tone_C": 0.8045,
-    "creak_djitter_nga": 0.03721089568716707,
-    "creak_dhnr_nga": -2.745237842667848,
     "rough": 0.33672131389603316
   },
-  "mel_gap_z_note": "từ tf (khối gap), không phải free — sửa theo 5f630e3"
+  "mel_gap_z_note": "từ tf (khối gap), không phải free — sửa theo 5f630e3",
+  "c11_note": "summary_fixgap không chứa tone_C/creak/cer (C9/A2)"
 }

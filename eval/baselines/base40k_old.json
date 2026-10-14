@@ -47,5 +47,6 @@
     "creak_dhnr_nga": -2.745237842667848,
     "rough": 0.39191587275407475
   },
-  "mel_gap_z_note": "từ tf (khối gap), không phải free — sửa theo 5f630e3"
+  "mel_gap_z_note": "từ tf (khối gap), không phải free — sửa theo 5f630e3",
+  "c11_note": "summary_fixgap không chứa tone_C/creak/cer (C9/A2)"
 }

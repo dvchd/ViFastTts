@@ -85,3 +85,40 @@ def test_ket_luan_bon_truong_hop():
     assert conclusion(hard_pass, target_fail) == "ĐẠT CỨNG, TRƯỢT MỤC TIÊU"
     assert conclusion(hard_pass, target_pending) == "ĐẠT CỨNG, MỤC TIÊU CHƯA ĐỦ SỐ"
     assert conclusion(hard_pass, target_pass) == "CHẤP NHẬN"
+
+
+def test_run_tool_xoa_tep_cu_va_khong_doc_khi_loi(tmp_path):
+    """C8: tệp cũ cùng tên + subprocess lỗi ⇒ trả None (và tệp cũ đã bị xoá)."""
+
+    from tools.bench_checkpoint import _run_tool
+
+    out = tmp_path / "ket_qua.json"
+    out.write_text('{"cu": true}', encoding="utf-8")
+    result = _run_tool(["-c", "raise SystemExit(1)"], out, "giả lỗi")
+    assert result is None
+    assert not out.exists()
+
+
+def test_summary_fixgap_khong_co_tone_creak_cer():
+    """C9: hàng val fixgap KHÔNG chứa tone_C/creak/cer (số chỉ thuộc bản val sinh ra nó)."""
+    import json
+    from pathlib import Path
+
+    data = json.loads(Path("eval/baselines/base40k_fixgap.json").read_text(encoding="utf-8"))
+    for key in ("tone_C", "creak_djitter_nga", "creak_dhnr_nga", "cer"):
+        assert key not in data["summary_fixgap"], key
+
+
+def test_rough_from_history_bo_dong_chu_thich(tmp_path):
+    """C10: history.csv có dòng '# X3 resume: …' trước header vẫn đọc ra rough đúng."""
+    from tools.bench_checkpoint import _rough_from_history
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "history.csv").write_text(
+        "# X3 resume: resumed_from=a@40000, val_hash_old=x, val_hash_new=y\n"
+        "step,phase,train_total,train_mel,mel_gap,mel_voiced,val_total,val_mel_voiced,val_rough,lr\n"
+        "45000,B,5.0,0.5,0.6,0.55,8.0,0.58,0.41,1e-5\n"
+        "50000,B,5.1,0.5,0.6,0.55,8.1,0.59,0.43,1e-5\n", encoding="utf-8")
+    assert _rough_from_history(run_dir, 50000) == 0.43
+    assert _rough_from_history(run_dir, 45000) == 0.41

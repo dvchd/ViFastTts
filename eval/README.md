@@ -38,8 +38,8 @@ kiểm toán 14/10, việc #1/#10.
 
 | Tệp | sha256 | Dùng cho |
 |---|---|---|
-| `base40k_old.json` | `37dcfcd893e92a87da50e92e84acf8f1adbb23a8f67c1ee4dca798a33d5e7dbd` | CỔNG CỨNG (mel/dB/rough/tone_C/CER/F0 NGÃ @ val cũ) |
-| `base40k_fixgap.json` | `6605ad0a7b83959de28c01ad3445523fb163a93564905a4c509a32b81fdf1f0f` | mel_gap + syl_z + CỔNG MỤC TIÊU pause (val fixgap) |
+| `base40k_old.json` | `3d6fefe50bf8f789c4b7ced08acaabe859f59c2e516055d0d1038fa69fde7381` | CỔNG CỨNG (mel/dB/rough/tone_C/CER/F0 NGÃ @ val cũ) |
+| `base40k_fixgap.json` | `cf7708644f6396028452e746258a955bf848f3ea74521ffad3d20273bf024036` | mel_gap + syl_z + CỔNG MỤC TIÊU pause (val fixgap) |
 
 Kiểm H1 (base 40k): `syl_z` val cũ **0,6612** → fixgap **0,6608** (chênh **0,1%**) · `gap_z` 1,9493 → 2,3862
 ⇒ mọi phần tăng của `mel_l1_z` tổng nằm ở khung gap (khung âm tiết không đổi) — §44.6.
