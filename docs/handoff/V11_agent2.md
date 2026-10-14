@@ -251,3 +251,23 @@ creak** = E4c (`mel_sharp_creak_boost: 3.0`, code + config + test xong, commit `
 chuỗi: đo E4b → re-bench A2 42k (cổng mới) → chạy E4c → đo E4c.
 **Bench base fresh tái lập mốc CHÍNH XÁC từng số** (1,1599 · 8,9547 · 0,3679 · 0,8045 · 0,2332) ⇒ mốc/hash
 và quy trình đo ổn định ✓.
+
+## PHẢN BIỆN NGOÀI — Muse Spark 1.3 Contributor (`opencode-go/muse-spark-1.3-contributor`), 14/10 22:50
+
+Chấm điểm đêm V11S3: **thiết kế 6/10 · độ tin cậy số đo 5/10 · chống overclaim 6/10**. Ba điểm nặng:
+
+1. **E4a so SAI ĐỐI CHỨNG**: đối chứng đúng là **A2-50k** (đã có: `artifacts/bench/A2_fixtail_50000.json`
+   mel 1,1916 · dB 9,1943 · tone_C 0,8117) chứ không phải base 40k. Ở phép so đúng: E4a (1,1826 ·
+   9,1955 · 0,8152) **≈ A2-50k** ⇒ **các gain tone_C/CER/jitter có thể chỉ là "thêm 8k bước"**, không
+   phải tác dụng làm sạch F0; lịch cosine khác (50k vs 60k) càng làm so sánh nhiễu. ⇒ Mình nhận:
+   kết luận "E4a cải thiện tone_C" phải hạ xuống **"không phân biệt được với chạy tiếp"** ✗.
+2. **"Mel mờ ⇒ rè" mới là TƯƠNG QUAN, chưa nhân quả**: §39 đã đo copy-synth (mel THẬT) vẫn jitter
+   +39% ⇒ Vocos tự thêm rung ngay cả khi mel sắc; và **creak ratio gộp tử/mẫu** (mẫu ngang+huyền
+   copy-synth 0,0792 vs thật 0,0970 ⇒ ratio đổi có thể do MẪU SỐ). ⇒ Cần can thiệp liều–đáp ứng.
+3. **E4c có rủi ro khuếch đại nhiễu harvest**: `c_t` từ kênh `jitter` (AUC 0,864 ⇒ ~14% chồng lấn);
+   |Δ| thật ở frame creak một phần là **nhiễu đo**, tăng trọng số ×4 ở đó dạy model bắt chước nhiễu ✗.
+   Và `rough` trung bình toàn clip **không** phát hiện gồ ghề giả cục bộ (creak chỉ ~12,7% frame).
+
+**HÀNH ĐỘNG NGAY (theo đề xuất Muse)**: `tools/creak_dose_response.py` — can thiệp trên mel, KHÔNG train:
+mel THẬT → làm mờ nhân tạo (α 0,3/0,5/0,7) → Vocos → creak; mel MODEL → làm nét (`sharpen_mel` α 1,5/3,0)
+→ Vocos → creak. Nếu cả hai phẳng ⇒ giả thuyết mờ⇒rè không đủ ⇒ **huỷ E4c trước khi tốn 8k bước**.
