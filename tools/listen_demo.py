@@ -50,6 +50,8 @@ def main() -> None:
     parser.add_argument("--clips", type=int, default=6)
     parser.add_argument("--out", required=True)
     parser.add_argument("--device", default="cpu", help="cpu (mặc định) | mps | cuda")
+    parser.add_argument("--sharpen-alpha", type=float, default=0.0,
+                        help="làm nét mel khi nghe (production = 1,5 — sh25, §33)")
     parser.add_argument("--minimal-pairs", default=str(_ROOT / "examples/minimal_pairs.txt"))
     parser.add_argument("--no-minimal-pairs", action="store_true")
     args = parser.parse_args()
@@ -107,13 +109,14 @@ def main() -> None:
         engine = Synthesizer(config, checkpoint, device=args.device)
         for row in picked:
             target = out / subdir / f"synth_{row['id']}.wav"
-            engine.synthesize(row["text"], target)
+            engine.synthesize(row["text"], target, sharpen_alpha=args.sharpen_alpha)
             print(f"[synth] {subdir}/{row['id']} → {target.name}")
         for index, line in enumerate(pairs):
             words = [word.strip() for word in line.split("|") if word.strip()]
             for position, word in enumerate(words):
                 engine.synthesize(CARRIER.format(word=word),
-                                  out / subdir / f"mp_{index:02d}_{position}_{_slug(word)}.wav")
+                                  out / subdir / f"mp_{index:02d}_{position}_{_slug(word)}.wav",
+                                  sharpen_alpha=args.sharpen_alpha)
 
     # --- 3) index.html ---
     def audio_tag(path: Path) -> str:
