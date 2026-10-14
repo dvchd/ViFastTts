@@ -1,6 +1,7 @@
 # TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, cập nhật mỗi vòng)
 
-> Cập nhật: **vòng 08** · commit gốc `ab42b06` · người cập nhật: Agent 2 · tệp quyết định: `docs/handoff/V08_agent0.md`
+> Cập nhật: **vòng 08** · commit gốc `ab42b06` · người cập nhật: Agent 2
+> Tệp vòng 08: quyết định `docs/handoff/V08_agent0.md` · báo cáo Agent 2 `docs/handoff/V08_agent2.md`
 > Vòng đang chạy: **V08 — A2 fixtail (chuẩn bị + probe lại)**. Trạng thái: **DỪNG chờ Agent 1 đọc diff**.
 
 ## 1. Mốc & hash ghim
