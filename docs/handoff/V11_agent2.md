@@ -210,3 +210,22 @@ Nguyên nhân nghi: nhánh xử lý **chữ cái đơn / viết tắt có dấu 
 
 **Gốc rễ tìm ra**: (1) `parse_text(resolve_oov=False)` **mặc định TẮT** ⇒ mọi token OOV rơi xuống `_fallback_syllable` trả **"a"** ✗; (2) `resolve_oov_token` chỉ đánh vần **chữ IN HOA ≥2 ký tự** ✗. **Đã sửa**: đánh vần cho chữ HOA (mọi độ dài) / token có số-ký hiệu / từ thường ≤4 ký tự (từ dài vẫn trả None để báo cáo OOV còn giá trị ✓) + **bật `resolve_oov=True` ở đường suy luận** (`infer._render`) ✓ + test ✓ (2492 pass).
 **Còn lại**: (a) `2+2=4` — dấu "+"/"=" chưa có luật (cần map ký hiệu số học ✗); (b) **lỗi DỮ LIỆU** (manifest có "thư dục" thay "thư mục" ✗) — cần rà transcript + bộ override; (c) `"AI" → "ây ai"` giữ nguyên (đúng ✓).
+
+## V11S3 — PHIÊN TIẾP (14/10 tối): P0.2 đóng · E4 code + 2 run · sửa 2 lỗi thước
+
+### Đã xong (commit)
+1. **P0.2 hết 5/5** (`b983a76`): ký hiệu `+ = x/× ÷ & > < ≥ ≤` (chỉ giữa chữ/số, không phá `>>`/`C++`/`==`/`+84`), email `a còng`/`chấm`.
+2. **E4 code** (`d47fe36`): `creak_probability` + `clean_creak_f0` (nội suy log-F0 frame `jitter>0,15`; **12,7%** frame/clip, dịch mức **−4 cent**) + trọng số `w_t = 1−0,5·c_t`; `multi_resolution_stft_loss` thêm `low_hz/low_weight` (tắt mặc định = y hệt bản cũ); plumbing trainer; 2 config mới. Tương thích ngược khi thiếu kênh `jitter` (3 test).
+3. **Bench: 2 cổng CÙNG NHÃN** (`ef3cb6c`): `mel_z_fix ≤ mốc×1,01` · `mel_db_fix ≤ mốc+0,10` (val fixtail; mốc base **1,3311/9,879**; 42k **1,3257/9,5965 ĐẠT**).
+4. **`rough` 12→60 clip** (`db99df4`): 12 clip **lệch +6%** so 60 ⇒ cổng cũ quá dễ; đo lại mốc base: val cũ **0,3919→0,3679** · fixtail **0,3651→0,3419**; ghim lại sha256 README.
+5. **`tools/creak_rate.py`** (promote từ script tạm — luật AGENTS): CreaPy copy-synth **tái lập đúng** §39 (2,390×) và mốc THẬT **1,717×** (cùng một thước, 25 clip) ⇒ có mốc chuẩn để chấm E4.
+6. **§45** viết trong `docs/ACOUSTIC_V2.md` (cơ chế F0→variance→decoder, số đo, cổng).
+
+### Đang chạy (kết quả ghi sau)
+- **E4-C vocoder** `runs/vocoder_vocos_stftc` (5k bước, ~0,7 s/bước, ETA ~21:30): fine-tune Vocos pretrained trên mel THẬT codelung_v2 + MR-STFT trọng số ≤1 kHz ×3. Cổng: F0 RMSE ↓≥3% (`eval_vocoder`) + creak `creak_rate` **về phía 1,717** (đang 2,390) + `voice_quality` HNR/perturb không xấu.
+- **E4a acoustic**: probe 100 bước **ĐẠT** (7,01→6,41, không NaN); run thật (resume A2 best@42k → 50k, `configs/small_codelung_v2_E4a.yaml`) **chạy sau khi vocoder xong** (1 job MPS/lần — luật AGENTS).
+
+### Lưu ý khi đọc số E4a
+- Loss train/val của E4a **không so trực tiếp** với history A2 (F0 loss bị hạ trọng số ~5% ⇒ tổng loss thấp hơn một chút).
+- Eval (`bench`, `eval_acoustic`, `eval_creak`) dùng f0 **THÔ** từ cache ⇒ vẫn so được với mọi mốc cũ (không tự chấm bằng chính target đã làm sạch).
+- Kỳ vọng: contour F0 dự đoán êm hơn ở ngã/nặng ⇒ **Δjitter/Δhnr ngã-nặng về gần mốc thật** (§39: free-run −1,02 dB HNR; mục tiêu thu hẹp khoảng đó), `rough` không xấu, CER không tăng.

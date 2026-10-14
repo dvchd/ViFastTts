@@ -1423,3 +1423,50 @@ f0_nga · mel_gap · syl_z) + cải thiện thật: cer_prod 0,19–0,23 < base 
 (−22%/28,6%) · gap_z · Δjitter xấu hơn base. **V11.B7 = nhánh "TỪ CHỐI" ⇒ DỪNG, báo, không chạy A1** (đúng V11.A4);
 mốc tốt nhất nếu bỏ qua 2 cổng khác nhãn = **55k**. **Bug đã sửa khi chạy B6**: bench phải nhận `resolved_config.json`
 (JSON — tone_ruler/eval_creak đọc JSON) + vá `KeyError 'cer_note'` khi in `--cer-prod` (commit `7be07c0`).
+
+## 45. E4 — rè: làm sạch F0 vùng creak + loss MR-STFT có trọng số (14/10/2026)
+
+### 45.1 Vì sao đúng chỗ này (cơ chế, không phải "thử xem")
+
+Đọc mã `models/v2_slot5.py::forward` (dòng 267–284): contour F0 **dự đoán** (`build_f0_contour`
+từ `shape_slots`) được ghép vào `variance` rồi **cộng thẳng vào input decoder** —
+`expanded + variance_proj(variance) + position_proj`. Tức F0 **không phải** đầu ra phụ:
+nó là **điều kiện** cho decoder sinh mel. Chuỗi nhân quả:
+
+1. trong creak, `pyworld` báo f0 kém tin cậy (đo trên val, 80 clip, 88.042 frame hữu thanh:
+   **45,6%** frame `jitter > 0,3` lệch khỏi xu hướng cục bộ **> 200 cent**, 13,6% lệch > 500 cent);
+2. target F0 nhiễu ⇒ model học đúng cái nhiễu đó;
+3. contour nhiễu (đã ở dạng DCT-4 — nhưng hệ số bị kéo lệch) ⇒ điều kiện decoder nhiễu;
+4. ⇒ mel vùng creak nhiễu ⇒ Vocos render thành **rè** (khớp §39: HNR free-run tụt −1,02 dB so thật,
+   trong khi copy-synth chỉ −0,15 dB ⇒ nguồn ồn nằm ở **mel dự đoán**).
+
+### 45.2 Đã làm (mã + test)
+
+| Việc | Nơi | Số |
+|---|---|---|
+| `creak_probability` (từ kênh `jitter`, R6 AUC 0,864) | `data/v2_targets.py` | c_t = clamp((jitter−0,05)/0,20) trên frame hữu thanh |
+| `clean_creak_f0` — nội suy log-F0 giữa 2 neo tin cậy cho frame `jitter > 0,15` | nt. | thay **12,7%** frame/clip; **dịch mức chỉ −4 cent** (p90 +1) ⇒ không bẻ contour thật |
+| trọng số loss `w_t = 1 − 0,5·c_t` (khuyến nghị nghiên cứu) → nhân vào trọng số role | nt. | Δweight mean **−0,045** (min −0,50) |
+| `jitter` thiếu ⇒ hành vi **y hệt** trước E4 (tương thích ngược) | nt. + test | 3 test mới |
+| MR-STFT **có trọng số dải trầm** ≤1 kHz ×3 (FFT 512/1024/2048, hop 256) | `models/discriminators.py::multi_resolution_stft_loss` (`low_hz`/`low_weight`) | tắt mặc định ⇒ giá trị y hệt bản cũ (test khẳng định) |
+| plumbing `stft_weight/stft_low_hz/stft_low_weight/stft_resolutions` | `train.py` (vocoder) | config `small_codelung_v2_vocos_stftc.yaml` |
+
+**Nguồn**: Ninh & Yamashita IS 2015 (lan truyền pitch mark: MinPR 0,4 · MaxPR 2,7 · CorrThs 0,4);
+tone-aware-vocos 2026 (weighted MR-STFT ≤1 kHz ×3 ⇒ F0 RMSE −4,5%, p_holm=9,9e-5).
+
+### 45.3 Cổng + thí nghiệm đang chạy
+
+- **E4a (acoustic)**: resume `runs/acoustic_v2_A2_fixtail/best.pt`@42k → cosine tới 50k
+  (LR ~2e-5) — config `small_codelung_v2_E4a.yaml`, probe 100 bước **ĐẠT** (loss 7,01→6,41 · không NaN).
+  Cổng: **rè** (`tools/creak_rate.py` free-run + `eval_creak`: Δjitter/Δhnr ngã/nặng **về gần mốc THẬT**)
+  + bench (11 cổng cứng, **đã gồm 2 cổng cùng nhãn** mel_z_fix/mel_db_fix + rough **60 clip**) + CER.
+- **E4-C (vocoder)**: fine-tune Vocos pretrained trên mel THẬT codelung_v2 (5k bước) với MR-STFT
+  trọng số (config `small_codelung_v2_vocos_stftc.yaml`); cổng: F0 RMSE **↓≥3%** (`eval_vocoder`) +
+  rough/creak **±5%** (`voice_quality` + `creak_rate`) ⇒ trượt thì `stft_weight=0`.
+- **Mốc creak chuẩn hoá lại** (`tools/creak_rate.py`, cùng một thước, 25 clip): **THẬT 1,717×**
+  (ngã+nặng 0,1665 vs ngang+huyền 0,0970) · **copy-synth Vocos pretrained 2,390×** (0,1893/0,0792 —
+  trùng khít §39) ⇒ thước tái lập được; đích E4-C = kéo 2,390 **về phía** 1,717 mà không mất F0.
+- **Bài học đã trả** (V11 §45, hàng đợi #4–5): cổng cũ **trộn 2 val** mà thiếu mel cùng nhãn ⇒ đã thêm
+  `mel_z_fix`/`mel_db_fix` (val fixtail; mốc base 1,3311/9,879 — 42k 1,3257/9,5965 **ĐẠT**);
+  `rough` 12 clip **lệch +6%** và **lật phán quyết** ⇒ nâng **60 clip** + đo lại mốc
+  (val cũ 0,3919→**0,3679** · fixtail 0,3651→**0,3419**).
