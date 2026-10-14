@@ -104,6 +104,8 @@ def main() -> None:
     parser.add_argument("--no-cer", action="store_true", help="bỏ CER (nhanh; dùng khi chỉ soi acoustic)")
     parser.add_argument("--out-dir", default="artifacts/bench")
     parser.add_argument("--baseline", help="JSON bench mốc (so Δ + cổng cứng/rào chắn/mục tiêu A2 §44)")
+    parser.add_argument("--val-manifest", default=VAL)
+    parser.add_argument("--holdout-manifest", default=HOLDOUT)
     args = parser.parse_args()
 
     if args.run:
@@ -124,19 +126,19 @@ def main() -> None:
 
     tf = _run_tool(
         ["tools/eval_acoustic.py", "--config", config, "--checkpoint", checkpoint, "--mode", "tf_syl",
-         "--manifest", VAL, "--cache-dir", CACHE, "--clips", str(args.clips), "--device", args.device,
-         "--group-by", "coda:tone", "--out", str(out_dir / f"{tag}_tf.json")],
+         "--manifest", args.val_manifest, "--cache-dir", CACHE, "--clips", str(args.clips),
+         "--device", args.device, "--group-by", "coda:tone", "--out", str(out_dir / f"{tag}_tf.json")],
         out_dir / f"{tag}_tf.json", "mel + F0 theo thanh + nhóm coda:SẮC")
     free = _run_tool(
         ["tools/eval_acoustic.py", "--config", config, "--checkpoint", checkpoint, "--mode", "free",
-         "--manifest", VAL, "--cache-dir", CACHE, "--clips", str(args.clips), "--device", args.device,
-         "--no-cer", "--out", str(out_dir / f"{tag}_free.json")],
+         "--manifest", args.val_manifest, "--cache-dir", CACHE, "--clips", str(args.clips),
+         "--device", args.device, "--no-cer", "--out", str(out_dir / f"{tag}_free.json")],
         out_dir / f"{tag}_free.json", "free-run: nhịp nghỉ + ngữ điệu")
     cer = None
     if not args.no_cer:
         cer = _run_tool(
             ["tools/eval_acoustic.py", "--config", config, "--checkpoint", checkpoint, "--mode", "free",
-             "--manifest", HOLDOUT, "--cache-dir", CACHE, "--clips", str(args.holdout),
+             "--manifest", args.holdout_manifest, "--cache-dir", CACHE, "--clips", str(args.holdout),
              "--device", args.device, "--out", str(out_dir / f"{tag}_cer.json")],
             out_dir / f"{tag}_cer.json", "CER holdout (Whisper)")
     tone = _run_tool(
@@ -213,7 +215,13 @@ def main() -> None:
         print(f"  THEO DÕI: pause_precision {row['pause_precision']} · Δmel_z "
               f"{(row['mel_l1_z'] or 0) - (base.get('mel_l1_z') or 0):+.4f}")
 
+    import hashlib
+    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, check=False,
+                            capture_output=True, text=True).stdout.strip()
+    val_sha = hashlib.sha1(Path(ROOT / args.val_manifest).read_bytes()).hexdigest()
     report = {"tag": tag, "config": config, "checkpoint": checkpoint, "summary": row, "gates": gates,
+              "git_commit": commit, "val_manifest": args.val_manifest, "val_manifest_sha1": val_sha,
+              "seed": "deterministic (không lấy mẫu; bootstrap thước thanh seed cố định)",
               "raw": {"tf": tf, "free": free, "cer": cer, "tone": tone, "creak": creak}}
     (out_dir / f"{tag}.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
