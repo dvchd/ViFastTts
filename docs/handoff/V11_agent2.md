@@ -82,3 +82,16 @@ V11.B6–B11 + V11S.B3 (watchdog: step_of chịu last.pt hỏng · ghi checkpoin
 - **Cảnh báo**: các bộ lớn "mở" (viVoice 1.017 h, PhoAudiobook 941 h, Bud500 500 h, VSV-1100 1.100 h, GigaSpeech2 6.039 h…) đều **crawl YouTube/social + NC/không sở hữu bản quyền** ✗ — không dùng cho sản phẩm.
 - **Đính chính 2 chi tiết trong báo cáo sub-agent**: (a) giọng hiện tại của dự án là **NAM Bắc** (F0 trung vị 122 Hz), không phải nữ; (b) dataset train thật = **19,3 h** (không phải 12 h).
 - **Ý nghĩa kế hoạch**: muốn giọng nữ Bắc *sản phẩm* ⇒ **tự thu 10–20 h** (hoặc VLSP 2021 chỉ để nghiên cứu, không phát hành); còn VAIS/FLEURS/CV dùng được ngay cho **eval chéo người nói** (kiểm khái quát) — giấy phép sạch.
+
+## PHẢN BIỆN NGOÀI (sub-agent, model `opencode-go/muse-spark-1.3-contributor`)
+
+**Kết luận chính của phản biện (đọc `V11_agent2.md` + `ACOUSTIC_V2.md` §37–44 + `EVAL_TOOLS.md`):**
+1. **CẮT phần vocoder của E4** (MR-STFT trọng số <1 kHz + discriminator CQT 80–320 Hz): cùng họ "kéo thống kê" như GTA (§41) — GTA đã chứng minh jitter về mức thật nhưng HNR −1,7 dB + rough mượt hơn ✗; và **hop 256 ⇒ mel không chứa jitter mức chu kỳ** ⇒ trần lý thuyết đã thấy. Giữ **F0-mask vùng creak** (phía acoustic, rẻ) + creak theo âm tiết.
+2. **A1 (pause ×4) đã dừng là ĐÚNG** — đừng mở lại (BCE pause val/train 9,5×→27,2× đã overfit; tăng trọng số = đổ thêm dầu). Phần còn lại của pause là **chất lượng đặt pause** (F1/MAE), không phải khối lượng.
+3. **Sai thứ tự lớn nhất: 2 cổng mel val CŨ đang chặn cải thiện THẬT** ⇒ phải **version cổng theo val hash** (khi đổi nhãn thì đổi thang đo), thay vì để từng vòng phải "xin bỏ qua".
+4. Flow-matching/ZipVoice: chỉ là nghiên cứu nền; prototype phải qua cổng **"ONNX tĩnh + RTF CPU"** trước khi đo chất lượng.
+5. **1 thí nghiệm duy nhất đáng làm**: chốt **A2-55k** bằng **A/B mù (tai user) + cer_prod + CreaPy + eval_creak**, KHÔNG train thêm; cổng: A/B thắng/hòa · cer_prod ≤ base 0,2385 · tỉ số creak (ngã+nặng)/(ngang+huyền) không thấp hơn base · Δjitter ≤ base+0,01.
+6. **Đang bỏ qua**: (a) **duration là nghi phạm số 1** (length_ratio_speech 0,93–0,95 + pause + SẮC-tắc cùng chỉ về phân phối duration; MAE 4,8 frame đứng yên từ B0); (b) chưa có **cổng duration/prosody**; (c) CER 20-clip quá nhiễu để quyết (cần 50–100 — **cer_prod của ta đã 842 clip ✓ vượt yêu cầu**); (d) luật cổng thiếu điều khoản đổi nhãn; (e) checkpoint theo mốc (đã vá ở `a027fd4` ✓).
+7. **3 tuần**: W1 chốt ứng viên (không train) + hiệu chuẩn `gate_threshold` trên val_calib · W2 sửa rẻ nhất còn lại (duration/prosody, hạn chế đụng core) · W3 đóng gói + niêm phong eval + đóng băng E4-vocoder/flow-matching thành roadmap.
+
+**Quyết định của phiên chính (tự quản lý)**: ÁP DỤNG 1–7. Cụ thể: cắt phần vocoder của E4 (ghi roadmap) · A1 đóng · thêm **cổng "cùng nhãn" (val fixtail)** cho bench (việc kế tiếp) · W1 = chốt A2-55k bằng A/B mù + CreaPy free-run + eval_creak (không train) · đưa **duration** vào B9 thành chẩn đoán chính · không mở vòng train acoustic/vocoder mới tới khi W1 xong.
