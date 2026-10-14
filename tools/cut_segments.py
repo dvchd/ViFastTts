@@ -65,7 +65,8 @@ def cut_clip(spans: list[tuple[int, int]], pauses_after: set[int], *,
 
 
 def cut_manifest(manifest: str | Path, out_path: str | Path, *,
-                 min_frames: int, max_frames: int, floor_frames: int = 24) -> dict[str, Any]:
+                 min_frames: int, max_frames: int, floor_frames: int = 24,
+                 tail_cap_frames: int | None = None) -> dict[str, Any]:
     """Cắt toàn bộ manifest thành segment; ghi manifest mới + trả thống kê.
 
     `floor_frames`: segment có **độ dài hữu thanh** ngắn hơn ngưỡng này (mặc định 24 frame ≈ 0,26 s)
@@ -97,6 +98,13 @@ def cut_manifest(manifest: str | Path, out_path: str | Path, *,
             # mép cắt / lặng đuôi clip) ⇒ `frame_range` phải phủ các frame đó, nếu không bất biến
             # `T == Σdur + Σgap` vỡ và gate/log_gap của vị trí cuối trỏ ra ngoài row ("pause bịa").
             segment_gaps = [int(gaps[i]) if i < len(gaps) else 0 for i in range(start, end)]
+            # A1 (§44): TRẦN lặng đuôi — chỉ cho ĐOẠN CUỐI CLIP (lặng ghi âm, cùng bản chất lặng
+            # đầu clip đã bỏ); cắt CẢ nhãn LẪN `frame_range[1]` để giữ bất biến T == Σdur + Σgap.
+            if tail_cap_frames is not None and index == len(cuts) - 1 and segment_gaps:
+                capped = min(int(segment_gaps[-1]), int(tail_cap_frames))
+                if capped != segment_gaps[-1]:
+                    stats["tail_capped"] = stats.get("tail_capped", 0) + 1
+                segment_gaps[-1] = capped
             speech_span = spans[end - 1][1] - spans[start][0]
             frame_range = [spans[start][0], spans[end - 1][1] + segment_gaps[-1]]
             # Sàn áp trên **độ dài hữu thanh** (không tính pause đuôi): đuôi vụn vẫn bị bỏ như trước,
@@ -144,17 +152,20 @@ def main() -> None:
                         help="Sàn độ dài segment giữ lại (mặc định 0,25 s; đuôi vụn bị bỏ)")
     parser.add_argument("--sample-rate", type=int, default=24000)
     parser.add_argument("--hop-length", type=int, default=256)
+    parser.add_argument("--tail-cap-frames", type=int, default=None,
+                        help="A1: trần gap cuối của ĐOẠN CUỐI CLIP (None = hành vi fixgap cũ)")
     args = parser.parse_args()
 
     min_frames = round(args.min_seconds * args.sample_rate / args.hop_length)
     max_frames = round(args.max_seconds * args.sample_rate / args.hop_length)
     floor_frames = round(args.min_segment_seconds * args.sample_rate / args.hop_length)
     report: dict[str, Any] = {"min_frames": min_frames, "max_frames": max_frames,
-                              "floor_frames": floor_frames}
+                              "floor_frames": floor_frames, "tail_cap_frames": args.tail_cap_frames}
     for manifest in args.manifest:
         name = Path(manifest).stem
         stats = cut_manifest(manifest, Path(args.out_dir) / f"{name}_seg.jsonl",
-                             min_frames=min_frames, max_frames=max_frames, floor_frames=floor_frames)
+                             min_frames=min_frames, max_frames=max_frames, floor_frames=floor_frames,
+                             tail_cap_frames=args.tail_cap_frames)
         report[name] = stats
         print(f"{name}: {stats['clips']} clip → {stats['segments']} segment "
               f"({stats['clips_split']} clip bị cắt · bỏ đuôi vụn {stats['dropped_tiny']}) · "

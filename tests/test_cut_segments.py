@@ -195,3 +195,31 @@ def test_tts_dataset_doc_gaps_va_lead(tmp_path: Path):
     assert item2["durations"].tolist() == [20, 30]
     assert item2["spans"].tolist() == [lead + 30, 35]
     assert item2["mel"].size(0) == full_frames
+
+
+def test_tail_cap_chi_ap_doan_cuoi_clip(tmp_path):
+    """A1: trần lặng đuôi — đoạn cuối clip bị cắt gap cuối + frame_range[1]; chỗ cắt không đổi."""
+    from tools.cut_segments import cut_manifest
+
+    row = {"id": "clip", "audio_path": "a.wav", "sample_rate": 24000,
+           "syllables": [{"raw": f"s{i}"} for i in range(4)],
+           "durations": [20, 20, 20, 20], "gaps": [300, 300, 300, 300],
+           "pauses": [{"after": 1}]}
+    manifest = tmp_path / "in.jsonl"
+    manifest.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
+    plain = tmp_path / "plain_seg.jsonl"
+    capped = tmp_path / "capped_seg.jsonl"
+    cut_manifest(manifest, plain, min_frames=10, max_frames=200, floor_frames=5)
+    cut_manifest(manifest, capped, min_frames=10, max_frames=200, floor_frames=5, tail_cap_frames=67)
+    plain_rows = [json.loads(l) for l in plain.read_text().splitlines()]
+    capped_rows = [json.loads(l) for l in capped.read_text().splitlines()]
+    assert len(plain_rows) == len(capped_rows) >= 2
+    for a, b in zip(plain_rows, capped_rows):
+        assert a["id"] == b["id"] and a["syllables"] == b["syllables"] and a["durations"] == b["durations"]
+        is_last_of_clip = a["id"].endswith(f"__s{len(plain_rows) - 1:02d}")
+        if is_last_of_clip:
+            assert b["gaps"][-1] == 67 and a["gaps"][-1] == 300
+            assert a["frame_range"][1] - b["frame_range"][1] == 233  # cắt cả target
+        else:
+            assert a["gaps"] == b["gaps"] and a["frame_range"] == b["frame_range"]
+        assert b["frame_range"][1] - b["frame_range"][0] == sum(b["durations"]) + sum(b["gaps"])

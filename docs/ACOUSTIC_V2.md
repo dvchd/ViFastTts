@@ -1292,3 +1292,27 @@ giảm mạnh, vùng âm tiết không xấu quá +1%).
 - **p/pos_weight (A1)**: p = 0,3082 (68.651/222.737) ⇒ `pos_weight = min(3; (1−p)/p) = 2,244` (A1 chưa chạy).
 - **Bỏ extension**: ext57k kém base 40k (mel 1,6415 vs 1,6218 · Δjitter 0,0505 vs 0,0372) ⇒ dừng ở 57k,
   giữ thư mục.
+
+### 44.8 Chặn trần lặng đuôi (fixtail) + chốt sh25 (14/10/2026)
+
+- **C_TAIL = 67 frame** (≈0,70 s) — lấy bằng **trung vị nhóm "chỗ cắt"** (nhịp nghỉ thật giữa câu dài)
+  đo trên train fixgap (B1: nhóm cuối-clip có trung vị 244 frame ≈2,6 s, max 1.070 ≈11,4 s, chiếm
+  **80,9%** khối lượng gap cuối đoạn — chủ yếu là **lặng ghi âm**, cùng bản chất lặng đầu clip đã bỏ).
+- **Chỉ áp cho gap cuối của ĐOẠN CUỐI CLIP**; gap ở chỗ cắt và gap bên trong **giữ nguyên**.
+- **Cắt CẢ nhãn LẪN target**: `gap_cuối_mới = min(gap_cuối, 67)` **và** `frame_range[1] = spans[end−1][1]
+  + gap_cuối_mới` — nếu chỉ cắt nhãn mà giữ mel thì lặp lại đúng lỗi cũ (mel có lặng, nhãn không có).
+  Bất biến `T == Σdur + Σgap` giữ đúng.
+- **Khi nối câu**: khoảng lặng giữa các câu chèn tất định ở tầng ghép audio (như lặng đầu) — mô hình
+  chỉ cần học nghỉ cuối câu ngắn, tự nhiên.
+- **Manifest `*_fixtail` thay `*_fixgap`**: train Σgap/row 409,8 → **294,9** · phủ khối lượng pause
+  99,2% → **71,4%** · T max 1.799 → **1.293**; val tương ứng (303,0 · 74,0% · 1.216). Hash mới:
+  train `965b4798…`, val `cdbbd659…`. Mốc `base40k_fixgap.json` thay bằng `base40k_fixtail.json`;
+  `base40k_old.json` giữ nguyên (val cũ không đổi).
+- **Lỗi chặn W5 đã sửa**: `watch_train_v2.sh` nhận `INIT_RESUME`/`INIT_RESET_VAL_STATE` **chỉ dùng khi
+  `OUT/last.pt` chưa có** (khởi động lại sau sự cố ⇒ resume `OUT/last.pt`, KHÔNG reset val);
+  `run_A2_fixgap.sh` chế độ `run` truyền `INIT_RESUME=runs/acoustic_v2_base/last.pt` +
+  `INIT_RESET_VAL_STATE=1`; thêm `--dry-run` (in đúng lệnh train-v2). Kiểm sau 1 phút: dòng đầu
+  `history.csv` phải là `# X3 resume:` với step bắt đầu 40000.
+- **sh25**: giữ **toàn cục** (người dùng nghe 6 cặp AB: sh25 ổn ở ngã, plain rè hơn tổng thể) — đóng
+  mục 5c, không làm bản gated. Rè ngã/nặng còn lại thuộc phía **acoustic** (dòng E).
+- p trên train fixtail **không đổi** = 0,3082 ⇒ `pos_weight` (A1) = **2,244**.

@@ -5,6 +5,10 @@
 # Dùng: tools/watch_train_v2.sh <out_dir> <log_file> <max_steps> <config> <train_manifest> <val_manifest>
 set -u
 OUT=$1; LOG=$2; MAX=$3; CONFIG=$4; TRAIN=$5; VAL=$6
+# A3 (§44): lần khởi động ĐẦU (OUT/last.pt chưa có) có thể resume từ checkpoint NGOÀI + reset val.
+# Khởi động lại sau sự cố (đã có last.pt) ⇒ luôn resume OUT/last.pt, KHÔNG reset val (hash đã khớp).
+INIT_RESUME="${INIT_RESUME:-}"
+INIT_RESET_VAL_STATE="${INIT_RESET_VAL_STATE:-}"
 export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.8
 export PYTORCH_MPS_LOW_WATERMARK_RATIO=0.7
 export PYTHONUNBUFFERED=1
