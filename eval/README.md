@@ -34,13 +34,17 @@ nối lịch sử CER; bản fixgap là segment-level (khác cấu trúc) ⇒ **
 (train lại ~4 phút: `tools/tone_ruler.py --train`) và chưa ghi hash model vào JSON kết quả — xem
 kiểm toán 14/10, việc #1/#10.
 
-## Mốc (baseline) — `eval/baselines/` (§44)
+## Mốc (baseline) — `eval/baselines/` (§44; V10.A3/A4)
 
-| Tệp | sha256 | Dùng cho |
-|---|---|---|
-| `base40k_fixtail.json` | `7be6fcffdfb7d6c402d47860e6d325135e4a8a1bc18d6543334474806a6787bf` | mel_gap + syl_z + CỔNG MỤC TIÊU pause (val fixtail) |
-| `base40k_old.json` | `3d6fefe50bf8f789c4b7ced08acaabe859f59c2e516055d0d1038fa69fde7381` | CỔNG CỨNG (mel/dB/rough/tone_C/CER/F0 NGÃ @ val cũ) |
-| `base40k_fixtail.json` (thay `base40k_fixgap.json`) | `cf7708644f6396028452e746258a955bf848f3ea74521ffad3d20273bf024036` | mel_gap + syl_z + CỔNG MỤC TIÊU pause (val fixgap) |
+Ghim sha256 theo **byte trong git**: `git show HEAD:<tệp> | shasum -a 256`. Tệp mốc chuẩn hóa (LF, `sort_keys`,
+indent 2, dòng trống cuối) + `.gitattributes` `eval/baselines/*.json -text` ⇒ sha ổn định trên mọi máy checkout
+(máy bật `core.autocrlf` cũng không đổi byte). Test `test_pin_readme_khop_byte_trong_git` khóa ở mọi lần test.
+
+| Tệp | sha256 | val_manifest_hash | Trạng thái |
+|---|---|---|---|
+| `base40k_old.json` | `92e90dad406f661557d2a648c3a171bf8c9e6320bb659b261efcd50a88d475d8` | `19b6e11756284ea86ee88933cc315b34011378b7` (val CŨ) | **DÙNG** — CỔNG CỨNG (mel/dB/rough/tone_C/CER/F0 NGÃ @ val cũ) |
+| `base40k_fixtail.json` | `53d85abd9ef28fc233c604bd774a42f71d19a8456d97d658b399f24452461655` | `cdbbd659116ae9f948c56152be5b08ea7fa08115` (val fixtail; old `19b6e117…`) | **DÙNG** — mel_gap + syl_z + CỔNG MỤC TIÊU pause (val fixtail) |
+| `base40k_fixgap.json` | `cf7708644f6396028452e746258a955bf848f3ea74521ffad3d20273bf024036` | `5ec5f139ce56a763d90af7de7a59956f712ee88c` (val fixgap) | **KHÔNG DÙNG** (thay bởi fixtail; bản trên đĩa: `artifacts/bench/legacy/`) |
 
 Kiểm H1 (base 40k): `syl_z` val cũ **0,6612** → fixgap **0,6608** (chênh **0,1%**) · `gap_z` 1,9493 → 2,3862
 ⇒ mọi phần tăng của `mel_l1_z` tổng nằm ở khung gap (khung âm tiết không đổi) — §44.6.

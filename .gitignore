@@ -21,6 +21,5 @@ data/youtube/
 # eval/baselines: CHỈ cho tệp mốc gọn (JSON thô + scoreboard về artifacts/bench/ — §44/A3)
 eval/baselines/*
 !eval/baselines/base*_old.json
-!eval/baselines/base*_fixgap.json
 !eval/baselines/base*_fixtail.json
 !eval/baselines/README*

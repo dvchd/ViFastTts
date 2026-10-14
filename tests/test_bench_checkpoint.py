@@ -100,13 +100,30 @@ def test_run_tool_xoa_tep_cu_va_khong_doc_khi_loi(tmp_path):
 
 
 def test_summary_fixgap_khong_co_tone_creak_cer():
-    """C9: hàng val fixgap KHÔNG chứa tone_C/creak/cer (số chỉ thuộc bản val sinh ra nó)."""
+    """C9/V10.A6: hàng val fixtail KHÔNG chứa tone_C/creak/cer (kể cả dạng null)."""
     import json
     from pathlib import Path
 
-    data = json.loads(Path("eval/baselines/base40k_fixgap.json").read_text(encoding="utf-8"))
+    data = json.loads(Path("eval/baselines/base40k_fixtail.json").read_text(encoding="utf-8"))
     for key in ("tone_C", "creak_djitter_nga", "creak_dhnr_nga", "cer"):
         assert key not in data["summary_fixgap"], key
+
+
+def test_moc_chuan_hoa_lf_sort_keys():
+    """V10.A3: tệp mốc LF + sort_keys + indent 2 + dòng trống cuối (sha ổn định giữa các máy)."""
+    import json
+    from pathlib import Path
+
+    for name in ("base40k_old.json", "base40k_fixtail.json"):
+        raw = Path("eval/baselines", name).read_bytes()
+        assert b"\r" not in raw, name
+        assert raw.endswith(b"\n"), name
+        data = json.loads(raw.decode("utf-8"))
+        expected = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        assert raw.decode("utf-8") == expected, name
+        for section in ("summary", "summary_fixgap"):
+            for key, value in data.get(section, {}).items():
+                assert value is not None, f"{name} {section} {key} = null"
 
 
 def test_rough_from_history_bo_dong_chu_thich(tmp_path):
@@ -141,3 +158,23 @@ def test_check_baseline_pin_lech_thi_dung(tmp_path):
     target.write_text('{"khac": 1}', encoding="utf-8")
     with _pytest.raises(SystemExit, match="sha256"):
         check_baseline_pin(str(target), readme)
+
+
+def test_pin_readme_khop_byte_trong_git():
+    """V10.A3: sha tệp mốc theo byte TRONG GIT == sha ghim README (mọi lần test) · byte đĩa == byte git."""
+    import hashlib
+    import subprocess
+    from pathlib import Path
+
+    from tools.bench_checkpoint import readme_sha256
+
+    root = Path(__file__).resolve().parents[1]
+    for name in ("base40k_old.json", "base40k_fixtail.json"):
+        rel = f"eval/baselines/{name}"
+        blob = subprocess.run(["git", "show", f"HEAD:{rel}"], cwd=root, capture_output=True)
+        assert blob.returncode == 0, f"{rel} chưa có trong HEAD — commit trước khi ghim"
+        git_sha = hashlib.sha256(blob.stdout).hexdigest()
+        pinned = readme_sha256(name, root / "eval/README.md")
+        assert pinned == git_sha, f"{name}: README ghim {pinned} ≠ byte trong git {git_sha} — ghim lại"
+        disk = hashlib.sha256((root / rel).read_bytes()).hexdigest()
+        assert disk == git_sha, f"{name}: byte trên đĩa ≠ byte trong git — checkout cũ, chạy: git checkout -- {rel}"

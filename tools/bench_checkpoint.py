@@ -10,7 +10,7 @@ Lý do: val fixgap là **thang đo khác** cho mel/pause (§44.1) — chỉ so t
 Chạy (MPS nhanh hơn CPU; đừng chạy khi đang train trên MPS):
   .venv/bin/python tools/bench_checkpoint.py --config runs/acoustic_v2_A2_fixgap/resolved_config.json \\
       --checkpoint runs/acoustic_v2_A2_fixgap/last.pt --tag a2_45k --step 45000 --device mps \\
-      --baseline-old eval/baselines/base40k_old.json --baseline-fixgap eval/baselines/base40k_fixgap.json
+      --baseline-old eval/baselines/base40k_old.json --baseline-fixgap eval/baselines/base40k_fixtail.json
 
 Ghi: JSON đầy đủ + scoreboard vào `artifacts/bench/` (local, không commit); tệp mốc gọn vào
 `eval/baselines/` khi truyền `--emit-baseline <path>`.
@@ -383,11 +383,18 @@ def main() -> None:
                    "raw_paths": raw_paths,
                    "raw_sha256": {name: (hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
                                          if (ROOT / path).exists() else None) for name, path in raw_paths.items()}}
-        Path(args.emit_baseline).write_text(json.dumps(compact, ensure_ascii=False, indent=2), encoding="utf-8")
+        # V10.A3: mốc ghi LF + sort_keys + indent cố định + dòng trống cuối (sha ổn định giữa các máy)
+        _write_json_normalized(args.emit_baseline, compact)
         print(f"→ tệp mốc gọn: {args.emit_baseline}")
     verdict = conclusion(gates["hard"], gates["target"])
     print(f"\n== KẾT LUẬN: {verdict} ==")
     print(f"→ {report_path} · scoreboard: {scoreboard}")
+
+
+def _write_json_normalized(path: str | Path, obj: dict) -> None:
+    """V10.A3: ghi tệp mốc dạng chuẩn hóa — sha256 ổn định giữa các máy checkout."""
+    Path(path).write_text(json.dumps(obj, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                          encoding="utf-8")
 
 
 def readme_sha256(name: str, readme: str | Path = "eval/README.md") -> str | None:
