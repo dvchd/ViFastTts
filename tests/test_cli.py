@@ -25,7 +25,7 @@ def test_version_cli():
 def test_g2p_cli():
     result = runner.invoke(app, ["g2p", "quốc"])
     assert result.exit_code == 0
-    assert "k" in result.stdout and "w" in result.stdout and "˧˥" in result.stdout
+    assert "k" in result.stdout and "uə" in result.stdout and "˧˥" in result.stdout
 
     south = runner.invoke(app, ["g2p", "xoong", "--dialect", "south"])
     assert south.exit_code == 0

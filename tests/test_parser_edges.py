@@ -25,9 +25,20 @@ def test_qu_forms_still_parse(word):
     assert safe_parse_syllable(word) is not None
 
 
+def test_quoc_u_thuoc_am_doi_khong_phai_am_dem():
+    """ThS Đinh Thị Hằng (Viện Ngôn ngữ học): /w/ không đứng trước âm tròn môi (u, ô, o) —
+    "quốc" = /k/ + uô + /k/, chữ u thuộc nguyên âm đôi; đồng âm với "cuốc"."""
+    a = parse_syllable("quốc").abstract
+    assert (a.onset, a.medial, a.nucleus, a.coda) == ("K", "NONE", "UÔ", "C")
+    assert a == parse_syllable("cuốc").abstract
+    # "quất": â không tròn môi → u vẫn là âm đệm W (khác "quốc").
+    b = parse_syllable("quất").abstract
+    assert (b.medial, b.nucleus) == ("W", "Â")
+
+
 @pytest.mark.parametrize("word", ["quo", "quom", "quò", "quu", "quoo", "quuô"])
 def test_qu_with_invalid_nucleus_is_fallback(word):
-    """Sau qu, âm đệm W chỉ kết hợp với a ă â e ê i/y ô ơ (quốc, quơ...)."""
+    """Sau qu, âm đệm W chỉ kết hợp với a ă â e ê i/y ơ (quơ...); u/ô/o là âm tròn môi, không làm âm đệm."""
     assert safe_parse_syllable(word) is None
 
 
@@ -54,7 +65,7 @@ def test_double_tone_mark_rejected():
 
 
 def test_uppercase_and_diacritics():
-    assert parse_syllable("QUỐC").abstract.nucleus == "Ô"
+    assert parse_syllable("QUỐC").abstract.nucleus == "UÔ"
     assert parse_syllable("GÌ").abstract.onset == "GI"
     assert parse_syllable("ĐƯỜNG").abstract.nucleus == "ƯƠ"
 

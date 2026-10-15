@@ -57,8 +57,8 @@ inference dùng duration *tự dự đoán*. Không sampling, chạy tất đị
 | Vị trí | Trường | Số giá trị | Ví dụ `quốc` |
 | --- | --- | --- | --- |
 | 0 | onset (âm đầu) | 24 | `K` |
-| 1 | medial (âm đệm) | 2 | `W` |
-| 2 | nucleus (âm chính) | 15 | `Ô` |
+| 1 | medial (âm đệm) | 2 | `NONE` |
+| 2 | nucleus (âm chính) | 15 | `UÔ` |
 | 3 | coda (âm cuối) | 11 | `C` |
 | 4 | tone (thanh) | 6 | `SAC` |
 | 5 | boundary | 4 | `WORD` / `PHRASE` / `SENTENCE` |

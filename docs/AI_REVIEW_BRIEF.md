@@ -236,13 +236,13 @@ text
 | Ca | Cách xử lý | Ý nghĩa |
 | --- | --- | --- |
 | `gi` dùng chung chữ i | `gì/gìn` → onset GI + nucleus I; `giếng` → GI + IÊ (cùng vần `tiếng`); `già/giữ/giường` → digraph `gi` câm | Tránh mất /z/ |
-| `qu` | = `K` + `W`; sau `qu` chỉ hợp lệ `a ă â e ê i/y ô ơ`; `qua` = K+W+A | `quốc` = K+W+Ô+C |
+| `qu` | = `K` + `W` khi sau `u` là âm không tròn môi (`qua` = K+W+A, `quơ`, `quân`); `qu` + `ô`: u thuộc âm đôi uô | `quốc` = K+NONE+UÔ+C (đồng âm `cuốc`) |
 | `uy` vs `ui` | `uy` = medial W + nucleus I (`thuỷ` — dấu trên y); `ui` = nucleus U + coda J (`tủi` — dấu trên u) | Hai vần khác nhau thật |
 | `iê/yê/ia/ya`, `uô/ua`, `ươ/ưa` | Cùng nucleus trừu tượng IÊ/UÔ/ƯƠ; chính tả giữ ở Orthography | Song ánh ở cặp (tuple + chính tả dư) |
 | `oo` từ vay | **Nucleus `OO` riêng** [ɔː] (`xoong` ≠ `xong`), dấu trên chữ o thứ hai | Phản hồi người bản ngữ |
 | `ay/au` vs `ai/ao` | `ay/au` → **Ă ngắn** [a]; `ai/ao` → **A dài** [aː] (`tay≠tai`, `rau≠rao`) | Help:IPA/Vietnamese |
 | Coda tắc P/T/C/CH | Chỉ hợp lệ với thanh SẮC/NẶNG | `validate()` chặn |
-| Âm đệm W | Chỉ kết hợp `A Ă Â E Ê I Ô Ơ IÊ` | `MEDIAL_NUCLEUS_COMPATIBILITY` |
+| Âm đệm W | Chỉ kết hợp âm **không tròn môi**: `A Ă Â E Ê I Ơ IÊ` | `MEDIAL_NUCLEUS_COMPATIBILITY` |
 | `q` trần | Không hợp lệ (`qa/qi` → fallback) | — |
 | Token ngoài Latin | Giữ nguyên thành fallback (CJK, Cyrillic…) | Không nuốt chữ |
 

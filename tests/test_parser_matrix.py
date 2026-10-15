@@ -34,7 +34,7 @@ def test_full_matrix_is_stable():
         except ValueError:
             continue
         if nucleus_a not in MEDIAL_NUCLEUS_COMPATIBILITY[medial_a]:
-            continue  # ví dụ qu + o/u: không hợp lệ (xem rules.py)
+            continue  # ví dụ qu + ô/o/u: âm tròn môi — "quốc" không còn là W+Ô (xem rules.py)
         checked += 1
         word = compose_canonical(onset, medial_s, nucleus_s, coda, tone)
         parsed = safe_parse_syllable(word)

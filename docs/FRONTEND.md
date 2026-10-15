@@ -19,9 +19,10 @@ ONSET + MEDIAL + NUCLEUS + CODA + TONE
 - Giữ TR, CH riêng.
 - Giữ S, X riêng.
 - Giữ HỎI, NGÃ riêng.
-- `qu` ánh xạ K + W.
-- Sau `qu`, âm đệm W chỉ kết hợp với `a ă â e ê i/y ô ơ` (`qua`, `quăn`, `quân`, `que`, `quê`, `quy`, `quốc`, `quơ`) — `quo`, `quu` là fallback.
-- `q` chỉ tồn tại trong `qu`; `qa`, `qi`, `qy`... là fallback (không phải âm đầu hợp lệ tiếng Việt).
+- `qu` ánh xạ K + W khi sau `u` là nguyên âm **không tròn môi**: `a ă â e ê i/y ơ` (`qua`, `quăn`, `quân`, `que`, `quê`, `quy`, `quơ`).
+- `qu` + `ô` (`quốc`): âm đệm /w/ không kết hợp với âm tròn môi (u, ô, o) → chữ `u` thuộc nguyên âm đôi `uô`: `quốc` = K + NONE + UÔ + C (onset chính tả `q`; đồng âm `cuốc` — xem `docs/SYLLABLE_GUIDE.md` §5).
+- `quo`, `quu` là fallback (không phải vần thật).
+- `q` trần không hợp lệ (`qa`, `qi`, `qy`... là fallback); riêng `quốc` có onset chính tả `q` nội bộ (u thuộc vần — xem trên).
 - `i/y` cuối có thể ánh xạ J.
 - `u/o` cuối có thể ánh xạ W.
 - `uy` là medial W + nucleus I, **không** phải U + coda J: `khuy` (KH/W/I) khác `khui` (KH/NONE/U/J); dấu thanh rơi trên y (`thuỷ`, `tuỳ`).
@@ -39,7 +40,7 @@ trước khi huấn luyện production, dùng **profile** + **lexicon** (mục t
 
 ## Kiểm tra parser
 
-- `python tools/parser_audit.py` — vét cạn 49.166 tổ hợp hợp lệ (âm đầu × vần × âm cuối × thanh),
+- `python tools/parser_audit.py` — vét cạn 49.104 tổ hợp hợp lệ (âm đầu × vần × âm cuối × thanh),
   kiểm tra bất biến `parse → compose → parse`; thoát mã 1 nếu có vấn đề (chạy được trong CI).
 - `pytest tests/test_parser_matrix.py tests/test_parser_edges.py` — cùng tính chất ở dạng
   test thường trực, kèm corpus từ thật/khó, chữ ngoài Latin và edge Unicode.

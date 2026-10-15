@@ -167,7 +167,7 @@ mà không phải feature gộp vào phụ âm đầu).
 | Vấn đề | Các quan điểm | Lựa chọn của repo |
 | --- | --- | --- |
 | `/w/` là âm đệm hay nguyên âm đôi? | Đoàn Thiện Thuật: slot âm đệm; Cao Xuân Hạo: nét [+tròn môi]; Phạm Andrea Hòa (2009): **segment độc lập**, nhưng "triphthong không phải một đơn vị" | Slot `MEDIAL=W` tách khỏi nucleus; đuôi `j/w` là coda |
-| `qu` | Phần lớn: /k/ + /w/; một số: /kw/ | Onset `qu` → K + W (chính tả gộp trong onset, âm vị tách) |
+| `qu` | Phần lớn: /k/ + /w/; một số: /kw/ | Onset `qu` → K + W khi sau là âm **không tròn môi**; `quốc` (u thuộc âm đôi uô): K+UÔ+C — xem §4.4 |
 | `gi` + i | `giếng` = /z+iəŋ/; chỉ ~7 âm tiết viết `g` trước i (`gì`, `gìn`, `giết`, `giêng`, `giềng`, `giếng`, `gịa`) | GI là một onset; chữ i dùng chung (`gì` = GI + I, `giếng` = GI + IÊ + NG) |
 | `i`/`y` | Một âm vị /i/, hai cách viết; QĐ 240/1984 *không* đặt quy tắc i/y; QĐ 2018 yêu cầu i sau âm đầu (`lí luận`), tên riêng tự do | Giữ nguyên như người viết (round-trip); không tự ý đổi |
 | `/ɔ/`–`/ɔː/` | Haudricourt (1952): `xoong` [sɔːŋ] ≠ `xong` [sɔŋ]; Nguyễn Lân Trung (2010); nhiều giáo trình coi o/ô là hai âm vị | Nucleus `OO` riêng, tách khỏi `O` |
@@ -191,6 +191,11 @@ mà không phải feature gộp vào phụ âm đầu).
 
 - `/w/` (âm đệm) **không đi sau phụ âm môi** /ɓ f v m/ trong từ bản ngữ; các từ
   như `voan`, `boa`, `moa`, `phuy` là **từ vay** (chủ yếu Pháp/Anh).
+- `/w/` (âm đệm) **không đi trước nguyên âm tròn môi** /u, o, ô/ (luật dị hoá):
+  `quốc` = /k/ + /uə/ + /k/ — chữ u thuộc âm đôi `uô` (đồng âm `cuốc` miền Bắc;
+  Wiktionary ghi "Homophone: cuốc"). `quất` /kwɤ̆t/ thì u VẪN là âm đệm (`â`
+  không tròn môi). Nguồn: góp ý ThS Đinh Thị Hằng (Viện Ngôn ngữ học, 16/10);
+  giáo trình âm vị ("Hệ thống âm đệm"); Tạ Thành Tấn.
 - Coda `nh/ch` chỉ sau `a, ê, i` (Thompson 1965); coda tắc `p/t/c/ch` chỉ đi
   với **sắc/nặng**.
 - Danh sách vần đầy đủ: Thompson (1965), Wikipedia "Vietnamese phonology"
@@ -267,7 +272,7 @@ Các script audit có thể tái chạy: `tools/parser_audit.py [--wordlist FILE
 
 | Biểu diễn | Đơn vị/âm tiết | Ví dụ `khuỷu`, `quốc` | Nghịch đảo chữ được? | Phủ chuẩn? | Ghi chú |
 | --- | --- | --- | --- | --- | --- |
-| **5 thành phần (repo)** | 5 slot + thanh | `KH+W+I+W+HOI`, `K+W+Ô+C+SAC` | Có (cần alias chính tả) | Có | Tối đa thông tin, kiểm chứng vét cạn |
+| **5 thành phần (repo)** | 5 slot + thanh | `KH+W+I+W+HOI`, `K+NONE+UÔ+C+SAC` | Có (cần alias chính tả) | Có | Tối đa thông tin, kiểm chứng vét cạn |
 | Onset + vần + thanh | 3 đơn vị (vần gộp) | `KH + uyu + HOI` | Được nhưng vần nhiều (hàng trăm) | Có | Nghiên cứu ASR 2026 dùng để giảm lỗi cấp vần |
 | Phoneme string + tone | 3–5 âm vị | `kʰ w i w ˧˩˧` | Không (mất chính tả) | Có | espeak-ng/sea-g2p |
 | Tonal phoneme | tone gộp vào ký hiệu | `kʰ wi w4` | Không | Có | Vi_G2P (Kaldi lexicon) |

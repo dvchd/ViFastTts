@@ -6,8 +6,8 @@ from vifasttts.frontend.syllable import parse_syllable
 
 def test_rime_projection_components():
     a = parse_syllable("quốc").abstract
-    assert a.rime == ("W", "Ô", "C")
-    assert a.rime_key == "W+Ô+C"
+    assert a.rime == ("NONE", "UÔ", "C")
+    assert a.rime_key == "NONE+UÔ+C"
     # Gộp vần là tuple nên vẫn khôi phục nguyên vẹn 5 thành phần.
     assert (a.onset, *a.rime) == (a.onset, a.medial, a.nucleus, a.coda)
 

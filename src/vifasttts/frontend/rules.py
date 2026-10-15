@@ -7,6 +7,8 @@ from __future__ import annotations
 
 # Dạng chính tả dài được kiểm trước. "q" đứng một mình không phải âm
 # đầu hợp lệ trong tiếng Việt (chỉ tồn tại trong "qu"); "qa", "qi"... là fallback.
+# Ngoại lệ nội bộ: "quốc" — u thuộc vần nên onset chính tả là "q" (không nằm
+# trong bảng này; xem syllable.py::_match_onset).
 ONSET_SPELLINGS = (
     "ngh", "ng", "gh", "gi", "kh", "nh", "ph", "th", "tr", "ch", "qu",
     "b", "c", "d", "đ", "g", "h", "k", "l", "m", "n", "p", "r", "s", "t", "v", "x",
@@ -50,12 +52,13 @@ STOP_CODAS = {"P", "T", "C", "CH"}
 # Các tổ hợp hợp lệ dùng cho validator, báo cáo coverage và test parity Rust
 # về sau. Tính hợp lệ chính tả vẫn nên đối chiếu lexicon sinh từ corpus trước
 # khi huấn luyện production.
-# W (âm đệm o/u) chỉ kết hợp với: oa, oă, oe, uâ, uê, uy, uyê, uô?, uơ — xác
-# minh trên wordlist 39k từ: W+{A,Ă,Â,E,Ê,I,IÊ,Ô,Ơ} (Ô từ "quốc"); không có
-# W+O hay W+U trong từ thật.
+# W (âm đệm o/u) chỉ kết hợp với nguyên âm KHÔNG tròn môi: W+{A,Ă,Â,E,Ê,I,Ơ,IÊ}
+# (oa, oă, oe, uâ, uê, uy, uơ, uyê...). KHÔNG kết hợp với u/ô/o — vì thế
+# "quốc" không phải W+Ô: chữ u thuộc nguyên âm đôi uô (quốc = K+UÔ+C, đồng âm
+# "cuốc" — góp ý ThS Đinh Thị Hằng (Viện Ngôn ngữ học); xem syllable.py::_match_onset).
 MEDIAL_NUCLEUS_COMPATIBILITY = {
     "NONE": set(NUCLEUS_ABSTRACT.values()),
-    "W": {"A", "Ă", "Â", "E", "Ê", "I", "Ô", "Ơ", "IÊ"},
+    "W": {"A", "Ă", "Â", "E", "Ê", "I", "Ơ", "IÊ"},
 }
 
 CODA_TONE_COMPATIBILITY = {

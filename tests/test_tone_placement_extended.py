@@ -76,9 +76,12 @@ def test_triphthong_uye():
 
 
 def test_qu_medial():
-    a = parse_syllable("quốc").abstract
-    assert a.onset == "K"
-    assert a.medial == "W"
+    """u là âm đệm W khi nguyên âm sau không tròn môi; "quốc" (ô tròn môi)
+    thì chữ u thuộc âm đôi uô."""
+    a = parse_syllable("quất").abstract
+    assert a.onset == "K" and a.medial == "W" and a.nucleus == "Â"
+    b = parse_syllable("quốc").abstract
+    assert b.onset == "K" and b.medial == "NONE" and b.nucleus == "UÔ"
 
 
 def test_gi_cluster():

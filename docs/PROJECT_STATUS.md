@@ -81,8 +81,10 @@ dạng chính tả (Orthography) → dạng âm vị học (AbstractSyllable: 5 
   theo phản hồi người bản ngữ (`xoong` ≠ `xong`).
 - `ay/au` = **Ă ngắn [a]**, `ai/ao` = **A dài [aː]** (Help:IPA/Vietnamese);
   `tai ≠ tay`, `rao ≠ rau`, `quai ≠ quay`.
-- `q` trần không hợp lệ (`qa/qi` fallback); sau `qu` chỉ hợp lệ với
-  `a ă â e ê i/y ô ơ` (`quốc` = K+W+Ô+C).
+- `q` trần không hợp lệ (`qa/qi` fallback); sau `qu`, âm đệm W chỉ hợp lệ
+  với nguyên âm không tròn môi (`a ă â e ê i/y ơ`) — riêng `quốc`: /w/ không
+  đứng trước `ô` (tròn môi) nên u thuộc âm đôi (`quốc` = K+NONE+UÔ+C, đồng âm
+  `cuốc`; sửa theo góp ý ThS Đinh Thị Hằng — Viện Ngôn ngữ học, 16/10).
 - Tokenizer giữ chữ ngoài Latin (CJK, Cyrillic...) làm fallback, không nuốt mất.
 - Biến thể i/y tự do (`qui/quy`, `mĩ/mỹ`) **giữ nguyên** như người viết; vị trí dấu
   thanh chuẩn hoá theo lối hiện đại, **cài đặt được** qua

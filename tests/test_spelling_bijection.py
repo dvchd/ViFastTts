@@ -9,7 +9,7 @@
 Với tiếng Việt:
 - chữ canonical → bộ âm vị: TOÀN ÁNH (mọi tuple hiện thực hoá đều có chữ, xem
   `test_parser_matrix.py`) nhưng KHÔNG ĐƠN ÁNH vì đồng âm/chính tả tự do
-  (qui/quy, mĩ/mỹ, í/ý cùng tuple).
+  (qui/quy, mĩ/mỹ, í/ý, quốc/cuốc cùng tuple).
 - bộ âm vị thuần → chữ: không phải hàm (một tuple ứng nhiều chữ).
 - chữ canonical ↔ (bộ âm vị + chính tả dư) = `ParsedSyllable`: SONG ÁNH —
   compose trả lại đúng chữ gốc, parse trả lại đúng tuple.
@@ -65,6 +65,16 @@ def test_old_style_variants_normalize_without_losing_phonology(variant, canonica
 def test_free_spelling_variants_share_tuple_but_spelling_is_preserved(first, second):
     """Biến thể chính tả tự do (i/y) dùng chung tuple, nhưng chữ vẫn khả nghịch
     nhờ tầng chính tả dư."""
+    parsed_first, parsed_second = parse_syllable(first), parse_syllable(second)
+    assert parsed_first.abstract == parsed_second.abstract
+    assert _compose(parsed_first) == first
+    assert _compose(parsed_second) == second
+
+
+@pytest.mark.parametrize("first,second", [("quốc", "cuốc")])
+def test_quoc_cuoc_dong_am_cung_tuple(first, second):
+    """/w/ không đứng trước âm tròn môi: u trong "quốc" thuộc nguyên âm đôi uô —
+    "quốc" đồng âm "cuốc" (miền Bắc): cùng tuple, chính tả giữ ở Orthography."""
     parsed_first, parsed_second = parse_syllable(first), parse_syllable(second)
     assert parsed_first.abstract == parsed_second.abstract
     assert _compose(parsed_first) == first

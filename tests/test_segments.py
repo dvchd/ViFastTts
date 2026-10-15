@@ -13,11 +13,10 @@ from vifasttts.frontend.syllable import parse_syllable
 
 def test_expand_quoc_roles_and_units():
     segments = expand_syllable(parse_syllable("quốc"))
-    assert [segment.role for segment in segments] == ["onset", "medial", "nucleus", "coda", "tone"]
-    assert [segment.unit for segment in segments] == ["K", "W", "Ô", "C", "SAC"]
+    assert [segment.role for segment in segments] == ["onset", "nucleus", "nucleus", "coda", "tone"]
+    assert [segment.unit for segment in segments] == ["K", "UÔ", "UÔ", "C", "SAC"]
     assert segments[0].phoneme == "k"
-    assert segments[1].phoneme == "w"
-    assert segments[2].phoneme == "o"
+    assert [segment.phoneme for segment in segments[1:3]] == ["u", "ə"]
     assert segments[-1].weight == 0.0
 
 
@@ -93,4 +92,4 @@ def test_distribute_frames_proportional():
 def test_segment_summary():
     summary = segment_summary(expand_syllable(parse_syllable("quốc")))
     assert summary["count"] == 5
-    assert "k w o k" in str(summary["phonemes"])
+    assert "k u ə k" in str(summary["phonemes"])

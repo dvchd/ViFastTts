@@ -99,12 +99,13 @@ def test_build_f0_contour_s0_bang_mean_va_khop_idct4():
 
 
 def test_distribute_frames_frontend_cung_uu_tien_b2():
+    # "quốc" có 2 phần nucleus (uô); thiếu frame → nucleus nhận trước (B2: N > O > C > M).
     segments = expand_syllable(parse_syllable("quốc"))
     distribution = distribute_frames(2, segments)
-    roles = {segment.role: distribution[index] for index, segment in enumerate(segments)}
+    roles = [segment.role for segment in segments]
     assert sum(distribution) == 2 and distribution.count(1) == 2
-    assert roles.get("nucleus") == 1 and roles.get("onset") == 1
-    assert roles.get("medial", 0) == 0 and roles.get("coda", 0) == 0
+    assert sum(d for d, r in zip(distribution, roles) if r == "nucleus") == 2
+    assert all(d == 0 for d, r in zip(distribution, roles) if r != "nucleus")
 
 
 class _OpsModule(torch.nn.Module):
