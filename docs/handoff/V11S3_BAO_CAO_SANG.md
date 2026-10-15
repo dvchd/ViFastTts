@@ -114,3 +114,21 @@ Chi tiết: `docs/handoff/V11S3_giong_tong_hop.md`. Tóm tắt:
 3. Nâng `mel_sharp` **toàn cục** (hiện 1,0; E4c chỉ thử *cục bộ* và không ăn thua) — 1 run 1h.
 4. Dài hạn: thêm ≥40h để nuôi model lớn; adversarial/diffusion cho mel (đã park).
 5. **Không** nên: train dài thêm (đã 33 epoch) · tăng tham số một mình.
+
+## 9. Nhánh dữ liệu AI sinh — TẠM DỪNG (15/10 14:50), lý do + việc đã làm được
+
+**Đã làm được (giữ lại dùng tiếp)**:
+- Sinh **1.828 câu** bằng **VieNeu-TTS v3 Turbo (Apache-2.0)** clone từ clip 8 s của chính giọng dự án
+  (RTF 0,12 trên Mac; 1.516 clip qua được bộ lọc ban đầu) ✓.
+- 3 tool đã promote: `synth_voice_dataset.py` · `check_synth_quality.py` (CER gộp phương ngữ Bắc — phát hiện
+  whisper-small chấm **chính audio thật** CER 0,279 ✗ nên cổng ASR phải dùng dạng tương đối) ·
+  `synth_to_manifest.py` (word-timestamps → durations) ✓.
+- **Số đo quan trọng**: giọng synth **khác miền** giọng thật — F0 **145,8 vs 131±6 Hz (+11%)** ✗,
+  HNR **4,17 vs 2,42 dB** (sạch hơn) ✗, ASR dễ nghe hơn ⇒ **giọng ĐỌC ≠ giọng NÓI** ⇒ rủi ro đổi chất giọng ✗.
+
+**Vì sao tạm dừng**: tích hợp vào TRAIN vấp **3 lần liên tiếp** ở tầng bất biến dữ liệu
+(`T = lead + Σdur + Σgap` ✗ → sửa ✓; `Σseg = d_syl` ✗ → sửa ✓; lần 3 treo, log 0 byte) ✗.
+Đường đọc-durations-bằng-ASR (±30–50 ms, ≈2× nhiễu nhãn MFA) cũng chỉ đủ cho ablation ✗.
+⇒ **Quyết định**: dừng nhánh này, dồn vào **dữ liệu THẬT** (bản thu cuối tuần của chủ giọng — đúng miền,
+nhãn chính xác, không lệch F0/style) ✓. Muốn thử lại nhánh synth sau này: cần **MFA align** cho audio
+sinh (không dùng ASR timestamps) + kiểm **2 bất biến tự động trước khi train** (đã ghi vào bài học).
