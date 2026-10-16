@@ -121,7 +121,15 @@ trước khi dùng nó để quyết định — bài học §34.3→§36.4); m�
   KHÁC HỌ với phiên chính** — mặc định **`opencode-go/muse-spark-1.3-contributor`** (Muse Spark 1.3
   Contributor). Sub-agent **chỉ đọc, KHÔNG sửa tệp repo**; mỗi nhiệm vụ ghi rõ phạm vi + câu hỏi + định
   dạng trả lời; không để 2 sub-agent trùng phạm vi; kết quả tóm tắt vào `docs/handoff/V<NN>_agent2.md`
-  (mục **"PHẢN BIỆN NGOÀI"**) kèm model đã dùng.
+  (mục **"PHẢN BIỆN NGOÀI"**) kèm model **+ giá** đã dùng.
+- **Chi phí sub-agent — CHỈ model rẻ** (bổ sung 16/10, sau bài học gọi nhầm `gemini-4-argon-contributor`
+  **$4/$20 mỗi M token** cho một nhiệm vụ nghiên cứu): trần giá **input ≤ $0,2/M token**; ưu tiên
+  `muse-spark-1.3-contributor` ($0,1/$0,2) hoặc cùng nhóm rẻ (`claude-haiku-5-5`, `gpt-6-luna`,
+  `mimo-v2.5`, các model `*-free`). **Không tự gọi dòng premium** (`gemini-4-argon` $4/$20 · `kimi-k3`
+  $3/$15 · `grok-4.7`/`qwen3.8-max` $2/$6 · `glm-5.3` · `step-5-preview` · `kimi-k2.7-code` ·
+  `hy4-preview` · `deepseek-v4-pro` · `qwen3.7-plus` · `minimax-m3`…) — chỉ dùng khi **người dùng yêu
+  cầu đích danh**. Trước khi phóng sub-agent: **tra giá bằng công cụ `models`**; không rõ giá → dùng
+  mặc định `muse-spark`.
 - **Tệp quyết định nằm trong repo**: `docs/handoff/V<NN>_agent0.md` — Agent 2 lưu nguyên văn quyết định
   (kèm mã câu hỏi `V<NN>.B<k>` / `V<NN>.C<k>`), rồi báo commit hash. Agent 1 được nhắn đúng hash đó.
 - **Mỗi vòng chỉ một tệp còn hiệu lực** + `docs/handoff/TRANG_THAI.md` là **nguồn duy nhất** (Agent 2

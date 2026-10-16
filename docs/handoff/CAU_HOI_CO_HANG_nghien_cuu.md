@@ -4,7 +4,10 @@
 > phiên chính tra được, (b) phản biện độc lập của sub-agent **khác họ model** (chỉ đọc,
 > không sửa tệp). Hồ sơ này KHÔNG thay thế ý kiến chuyên gia — dùng để so.
 > Sub-agent: `opencode-go/muse-spark-1.3-contributor` (tên chữ cái + anh/ach) ·
-> `opencode-go/gemini-4-argon-contributor` (Việt hoá đọc tiếng Anh).
+> `opencode-go/gemini-4-argon-contributor` (Việt hoá đọc tiếng Anh) — giá lúc dùng:
+> muse-spark **$0,1/$0,2**/M token · gemini-4-argon **$4/$20**/M token (**vượt ngân sách
+> sub-agent** — bài học này đã thành rule trong `AGENTS.md` §8: các phiên sau chỉ dùng model
+> có input ≤ $0,2/M, mặc định `muse-spark`).
 > Kiểm chứng: mọi ví dụ `english_fallback.py` dưới đây đã đối chiếu trực tiếp với tệp
 > (`CASE_INSENSITIVE_ENGLISH`, 671 mục) — không qua trung gian.
 
