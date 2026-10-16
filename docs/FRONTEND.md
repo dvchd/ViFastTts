@@ -115,7 +115,7 @@ nạp từ điển "mặt chữ → cách đọc" và `runtime/postprocess.py` l
 Ánh xạ 5 thành phần sang IPA theo Kirby (2011)/Thompson (1965) và bảng đối chiếu trong `docs/G2P_VIETNAMESE.md`:
 
 - `syllable_to_phonemes(parsed, dialect="north", *, with_tone=True, tone_format="contour", style="broad")`.
-  - `style="broad"` (mặc định): âm vị gọn (`t`, `tʰ`, `k`...). `style="narrow"`: thêm chi tiết ngữ âm `t̪`, `t̪ʰ`, `p̚ t̚ k̚`, `k̟̚`, `ŋ̟`.
+  - `style="broad"` (mặc định): âm vị gọn (`t`, `tʰ`, `k`...). `style="narrow"`: thêm chi tiết ngữ âm `t̪`, `t̪ʰ`, `p̚ t̚ k̚`, `k̟̚`, `ŋ̟`; Bắc: trước `nh/ch`, `a`/`ê` → `ăj`/`ə̆j` (Henderson 1965; Kirby 2011: `anh` = `ăj ŋ̟`).
   - `tone_format="contour"` (mặc định, ký hiệu Chao) | `"number"` (1 ngang, 2 huyền, 3 ngã, 4 hỏi, 5 sắc, 6 nặng — quy ước viG2P để đối chiếu) | `"none"`.
 - `text_to_phonemes(...)` trả một tuple cho mỗi âm tiết; token OOV trả tuple rỗng để tầng ngoài quyết định.
 - Bảng theo vùng:

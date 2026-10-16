@@ -53,7 +53,12 @@ def test_southern_hoi_nga_merged():
 
 def test_narrow_style():
     assert syllable_to_phonemes(parse_syllable("mát"), style="narrow") == ("m", "a", "t̚", "˧˥")
-    assert syllable_to_phonemes(parse_syllable("anh"), style="narrow") == ("a", "ŋ̟", "˧")
+    # Broad giữ nhãn "a"; narrow Bắc phải là [ăj] + coda tiền-velar
+    # (Henderson 1965; Kirby 2011: /ɛŋ/→[ăjŋ̟], /ɛk/→[ăjk̟̚]).
+    assert syllable_to_phonemes(parse_syllable("anh"), style="broad") == ("a", "ɲ", "˧")
+    assert syllable_to_phonemes(parse_syllable("anh"), style="narrow") == ("ăj", "ŋ̟", "˧")
+    assert syllable_to_phonemes(parse_syllable("ách"), style="narrow") == ("ăj", "k̟̚", "˧˥")
+    assert syllable_to_phonemes(parse_syllable("ênh"), style="narrow") == ("ə̆j", "ŋ̟", "˧")
     assert syllable_to_phonemes(parse_syllable("tôi"), style="narrow")[0] == "t̪"
 
 

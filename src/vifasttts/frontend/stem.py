@@ -26,9 +26,10 @@ MATH_COMMANDS = {
 
 VARIABLES = {
     "x":"ích", "y":"i dài", "z":"dét", "a":"a", "b":"bê", "c":"xê",
-    "d":"đê", "e":"e", "f":"ép", "g":"giê", "h":"hát", "i":"i",
-    "j":"giây", "k":"ca", "m":"em", "n":"en", "p":"pê", "q":"quy",
-    "r":"e rờ", "s":"ét", "t":"tê", "u":"u", "v":"vê", "w":"vê kép",
+    "d":"dê", "đ":"đê", "e":"e", "f":"ép", "g":"giê", "h":"hát", "i":"i",
+    "j":"giây", "k":"ca", "l":"e lờ", "m":"em", "n":"en", "o":"o",
+    "p":"pê", "q":"quy", "r":"e rờ", "s":"ét", "t":"tê", "u":"u",
+    "v":"vê", "w":"vê kép",
 }
 
 ELEMENTS = {

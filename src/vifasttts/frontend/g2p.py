@@ -92,6 +92,10 @@ NUCLEUS_BROAD: dict[str, tuple[str, ...]] = {
 NUCLEUS_BROAD_SOUTH: dict[str, tuple[str, ...]] = {**NUCLEUS_BROAD, "OO": ("ɔ",)}
 NUCLEUS_BROAD_CENTRAL: dict[str, tuple[str, ...]] = dict(NUCLEUS_BROAD)
 
+# Narrow Bắc: trước coda nh/ch, "a"/"ê" rút ngắn và có offglide ngạc [j]
+# (Henderson 1965: [k̟, ŋ̟] tiền-velar; Kirby 2011: /ɛŋ/→[ăjŋ̟], /ek/→[ə̆jk̟̚]).
+NARROW_J_OFFGLIDE: dict[str, str] = {"A": "ăj", "Ê": "ə̆j"}
+
 # --- Phụ âm cuối ---
 
 CODA_BROAD: dict[str, tuple[str, ...]] = {
@@ -164,13 +168,18 @@ def nucleus_units(
 
     - Nam: `OO` → [ɔ] (gộp với `O`).
     - Bắc narrow + coda `W`: `ưu/ươu` ngả về [iw]/[iəw] (Thompson 1965).
+    - Bắc narrow + coda `NH/CH`: `a`/`ê` rút ngắn + offglide ngạc [ăj]/[ə̆j]
+      (Henderson 1965; Kirby 2011).
     """
     dialect_value = Dialect(dialect)
-    if style == "narrow" and dialect_value is Dialect.NORTH and coda == "W":
-        if nucleus == "Ư":
-            return ("i",)
-        if nucleus == "ƯƠ":
-            return ("iə",)
+    if style == "narrow" and dialect_value is Dialect.NORTH:
+        if coda in ("NH", "CH") and nucleus in NARROW_J_OFFGLIDE:
+            return (NARROW_J_OFFGLIDE[nucleus],)
+        if coda == "W":
+            if nucleus == "Ư":
+                return ("i",)
+            if nucleus == "ƯƠ":
+                return ("iə",)
     return nucleus_table(dialect_value)[nucleus]
 
 
@@ -237,6 +246,7 @@ def phoneme_inventory() -> tuple[str, ...]:
     for overrides in (ONSET_NARROW_OVERRIDES, CODA_NARROW_OVERRIDES):
         for value in overrides.values():
             phonemes.update(value)
+    phonemes.update(NARROW_J_OFFGLIDE.values())
     for tone_table in (TONE_CONTOURS_NORTH, TONE_CONTOURS_SOUTH):
         phonemes.update(tone_table.values())
     phonemes.update(TONE_NUMBERS.values())

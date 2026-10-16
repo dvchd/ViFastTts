@@ -239,12 +239,17 @@
 5. ★ **anh/ach**: giữ nhãn SGK + đích [ăjŋ̟] như khuyến nghị đúng chưa? Tương phản
    ăn–anh–ăng ở người Hà Nội trẻ còn vững không?
 
-## 6. VIỆC NÊN LÀM TIẾP (chưa làm trong phiên này — chờ chốt với cô)
+## 6. VIỆC NÊN LÀM TIẾP
 
-1. **Sửa ~10 mục SAI** trong `english_fallback.py` + hợp nhất quy ước (-ing→inh;
-   coda giữ nhất quán "lốt/lô"; chọn w/j theo giọng Bắc). *(Không tự sửa trước khi chốt
-   quy ước, tránh đổi 671 mục nửa vời.)*
-2. **Hợp nhất 2 bảng tên chữ** (`oov.py` + `stem.py`), sửa bug `d → "đê"`, thêm `đ/l/o`.
-3. **G2P narrow anh/ach → [ăjŋ̟]** (kèm test + đo formant sau).
-4. Cân nhắc tool offline `tools/generate_en_respelling.py` (CMUdict + quy luật mục 2.2)
-   để sinh gợi ý respell — người chỉ duyệt ngoại lệ.
+- ✅ **ĐÃ ÁP DỤNG 16/10** (các lỗi khách quan, không phụ thuộc quy ước đang chờ cô):
+  1. `english_fallback.py`: sửa 14 mục — `share→se`, `sell→xen`, `catching→cách chinh`,
+     `hover→hơ vơ`, `disable→đít xây bồ`, `record→ri cọt`, `result→ri dăn`,
+     `tool/tools→tun`, `download→đao lốt`, `upload→áp lốt`; đồng bộ `-ing→-inh`:
+     `monitoring→mo ni tơ rinh`, `rendering→ren đờ rinh`, `huggingface→hắc ghinh phây`.
+  2. `stem.py`: sửa bug `d→"dê"` (trước ghi sai thành "đê"), thêm `đ/l/o`.
+  3. `g2p.py` narrow (Bắc): trước `nh/ch`, `a→ăj`, `ê→ə̆j` (Henderson 1965; Kirby 2011);
+     `anh` narrow = `ăj ŋ̟` — kèm test.
+- ⏳ **Chờ cô/product chốt**: quy ước `/w/`, `/j/` cho giọng Bắc ("quít" vs "uýt"; "diu" vs "iu");
+  kiểu đọc mặt chữ vs IPA (`data/module/status/tutorial`); cụm phụ âm 3 âm ("subscribe");
+  style bảng tên chữ (tên-chuẩn vs ngắn) + đồng bộ `oov.py` ↔ `stem.py`.
+- (Nhãn `anh/ach` giữ SGK — đã thống nhất, không đổi; đo formant kiểm chứng sau khi có model.)
