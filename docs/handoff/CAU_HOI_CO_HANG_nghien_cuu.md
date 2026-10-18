@@ -266,3 +266,11 @@
   `GLOSSARY.md` thêm mục "Thanh nhập".
 - Liên hệ điểm yếu đã biết: "SẮC-tắc" là ô tệ nhất trong chẩn đoán dữ liệu (§42.1) —
   nếu cô gắn nhãn dữ liệu theo spec này, tách nhập khi báo cáo là hướng dùng tiếp.
+- **Kết luận ảnh hưởng (18/10 — "nhập có đụng âm vị / tách dữ liệu train không?")**:
+  (i) **ÂM VỊ: không đổi** — "nhập" là lớp **suy ra** `tone ∈ {SAC,NANG} × coda ∈ {P,T,C,CH}`;
+  luật hợp pháp đã nằm sẵn ở `syllable.validate()` (coda tắc chỉ sắc/nặng); KHÔNG thêm giá
+  trị 7/8 vào `AbstractSyllable.tone` (đổi vocab = retrain, lợi ích ~0 vì tổ hợp đã có).
+  (ii) **TÁCH DỮ LIỆU TRAIN: đã tách sẵn, theo chiều coda** — `rare_group_weights`
+  (`dataset_v2`, nối vào `train_v2:260`: NGÃ ×2 · NẶNG ×1,5 · coda tắc ×1,5 ⇒ sắc-tắc ×1,5 ·
+  **nặng-tắc ×2,25**); `tools/r5a_stats.py` đã báo cáo duration theo cặp `(thanh × tắc/mở)`;
+  splits theo clip cha — không liên quan thanh. **Không cần đổi gì**.
