@@ -1554,3 +1554,49 @@ là **làm nét mel vùng creak** (`mel_sharp` ×(1+3·c_t) — E4c), không ph�
    **cao hơn 47%** — ratio bị chi phối bởi mẫu số (ngang+huyền 0,1442 vs 0,0792). ⇒ **Từ nay chấm rè
    bằng creak TUYỆT ĐỐI nhãn ngã+nặng + Δhnr/Δjitter** (ratio chỉ để tham khảo, ghi rõ tử/mẫu).
    Điều này khớp cảnh báo phản biện ngoài (Muse) và làm lại nền cho mọi kết luận rè về sau.
+
+## 46. Run "lọc dữ liệu" small (18/10/2026): thanh/nét/F0 thắng rõ — nhưng TRƯỢT CỔNG (CER · rè) ⇒ giữ b8
+
+### 46.1 Dữ liệu + train
+
+- QC 7.660 clip (10s): corpus sạch (0 clipping · SNR p1 30,8 dB · nền p1 −88,6 dB); nhóm hiss/sizzle =
+  `hf_ratio_quiet` z>8 ∨ `flatness` z>12 → **loại 104 clip (1,36%)**; KHÔNG dùng HNR thấp (giữ creak
+  thật) → `*_filt.jsonl` (train 9.763→9.672 · val 1.773→1.762 · holdout 842→830).
+- Train small **từ đầu** 0→60k, recipe b8 (batch 8, cosine 60k, seed 42, không oversample):
+  `runs/acoustic_v2_small_filt` — best val 0,6277 @38k. **Cảnh báo so sánh**: val-trong-train chỉ chấm
+  40 hàng đầu — 10 clip bị lọc nằm ở đầu danh sách val ⇒ 40 hàng đã dịch; mọi so sánh làm trên bench
+  cùng `val_filt` (mốc b8 emit riêng + ghim `eval/baselines/b8_filt.json`).
+- Sự cố: process bị giết im lặng ở 27k (13:20, không crash/jetsam) → watchdog launchd
+  `tools/watchdog_resume_train.sh` tự resume; xong 60k lúc 17:35.
+
+### 46.2 Số đo (CÙNG `val_filt` + `holdout_filt`; 300 clip + CER-100 + tone 60 row + creak 25)
+
+| Chỉ số | b8 (46k) | small_filt 38k | small_filt 60k | hướng tốt |
+|---|---|---|---|---|
+| mel_z | 1,1580 | **1,1561** (≈ nhiễu) | 1,1849 ✗ | ↓ |
+| mel dB | **8,64** | 9,17 | 9,16 | ↓ |
+| độ nét rough | 0,3423 | **0,3583** | 0,3567 | ↑ |
+| thanh C (60 row) | 0,7374 | 0,7816 | **0,7955** (≈ base40k 0,798) | ↑ |
+| CER-100 | **0,2126** | 0,2498 | 0,2503 (base40k **0,2615**) | ↓ |
+| F0 NGÃ (cents) | 198,1 | **179,4** | 179,7 (base40k 177) | ↓ |
+| dur MAE (frame) | **4,74** | 4,94 | 5,03 | ↓ |
+| vuv | 0,9820 | 0,9820 | 0,9819 | ≥ 0,98 |
+| rè Δjitter ngã | **+0,0294** | +0,0440 | +0,0388 (base40k +0,037) | → 0 |
+| rè Δhnr ngã | −3,10 | −3,12 | **−2,86** (base40k −2,75) | → 0 |
+| pause_f1 | 0,575 | **0,587** | 0,570 | ↑ |
+| gap_mae | 121,0 | **107,7** | 109,5 | ↓ |
+
+Thanh A/B/C paired (60 row): mất mát C vs A = b8 **0,0643** → 38k 0,0247 → 60k **0,0086** (tone free-run
+gần như hết mất mát).
+
+### 46.3 Cổng + đọc đúng (chống đọc quá tay)
+
+- Cổng EVAL_TOOLS §4 (`mel_z ≤ mốc · rough không giảm · C ≥ 0,78 · Δcreak không phình · CER ≤ 0,22`):
+  38k trượt **CER** + **rè**; 60k trượt thêm **mel_z** ⇒ **TRƯỢT** — chưa đổi daily driver (giữ b8).
+- Bối cảnh dải lịch sử (CER 20 clip): 0,185–0,252 (A2 0,196–0,205 · E4a/c 0,195–0,197 · base40k 0,233 ·
+  ext57k 0,252). Trên 100 clip: b8 0,213 < filt 0,250 < base40k 0,262 ⇒ b8 là run CER *tốt*; bản lọc ở
+  mức CER **của base40k** (bản tai user chọn). mel dB/dur cũng nằm giữa dải lịch sử.
+- **Chưa tách được "do lọc" vs "phương sai 1 lần chạy"** (chưa chạy seed 2) — thanh/F0/nét chênh lớn
+  gợi ý hiệu ứng thật, nhưng phải xác minh trước khi kết luận nhân quả.
+- Tai người: `artifacts/listen_small_filt/index.html` (b8@46k vs 38k vs 60k, cùng Vocos + sh25 α=1,5;
+  4 clip giàu ngã/nặng + 5 cặp tối thiểu + orig/copy) — **không commit** (đúng luật demo).

@@ -13,9 +13,9 @@
 | Luật lọc | Loại khi `hf_ratio_quiet` z > 8 **HOẶC** `flatness` z > 12 (median/MAD từ corpus) → **104 clip (1,36%)** |
 | Lọc manifest | ✅ `tools/filter_manifests.py` → `*_filt.jsonl`: train 9.763→**9.672** row (−82 clip) · val 1.773→**1.762** (−10) · holdout 842→**830** (−12). Ô hiếm giữ tỉ lệ (NGA 10.113→10.067; NẶNG+tắc 9.554→9.504) |
 | Probe | ✅ 120 bước: loss ổn định (không NaN), **0,23 s/bước**, MPS ~4G |
-| Train | 🔄 **ĐANG CHẠY NỀN** — `runs/acoustic_v2_small_filt` · log `artifacts/dataset_v2/train_v2_small_filt.log` · 0→60k bước (config `small_codelung_v2.yaml`: batch 8, cosine tới 60k, patience 25, KHÔNG oversample) · dự kiến **~5–6h** |
-| Sự cố & tự phục hồi | Process bị **giết im lặng** ở step 27.000 lúc 13:20 (không crash/jetsam/sleep — nghi phiên harness dọn nền, xem §6) → dựng `tools/watchdog_resume_train.sh` chạy qua **launchd**; 14:40:12 chạy lại, nối đúng lịch cosine. **Gỡ job khi xong: `launchctl remove vifasttts.small_filt.watchdog`** |
-| Đo | ⏳ chờ train xong (xem §4) |
+| Train | ✅ **XONG** 60k lúc 17:35 — `runs/acoustic_v2_small_filt` (best val 0,6277 @38k; số 40-hàng chỉ để theo dõi) · recipe b8 (batch 8, cosine 60k, seed 42, KHÔNG oversample) |
+| Sự cố & tự phục hồi | Process bị **giết im lặng** ở step 27.000 lúc 13:20 (không crash/jetsam/sleep — nghi phiên harness dọn nền, xem §6) → dựng `tools/watchdog_resume_train.sh` chạy qua **launchd**; 14:40:12 chạy lại, nối đúng lịch cosine. Đã gỡ job khi train xong |
+| Đo | ✅ **XONG** (18/10 tối) — bảng số + cổng ở §5; mốc b8 trên val lọc đã ghim (`eval/baselines/b8_filt.json`) |
 
 ## 2. Quyết định đã chốt (kèm lý do)
 
@@ -32,7 +32,8 @@
 
 - `446460a` — tools QC + filter (+ test); artifacts: `artifacts/clip_qc/{clip_quality,drop_list,filter_report}.json`
 - `12b8f5f` — `tools/watchdog_resume_train.sh` (tự resume qua launchd) + §6 sự cố
-- (sẽ cập nhật) — kết quả train + bench
+- `45909aa` + `a03af29` — mốc b8 trên val lọc (`eval/baselines/b8_filt.json` + ghim sha256)
+- (sẽ cập nhật) — kết quả train + bench (§5 + ACOUSTIC_V2 §46)
 
 ## 4. Kế hoạch đo sau khi train xong (chuẩn bị sẵn)
 
@@ -46,10 +47,37 @@
 5. Chốt: nếu đạt cổng → đổi "daily driver" (ghi rõ), cập nhật hồ sơ + commit; nếu trượt → báo cáo số,
    giữ b8, đề xuất bước sau (oversample run #2 / mel_sharp toàn cục).
 
-## 5. Bàn giao (khi xong)
+## 5. Kết quả (18/10 tối) — **TRƯỢT CỔNG** ⇒ giữ b8; tai người vẫn quyết định
 
-- Kết quả + bảng cổng ở mục mới của tệp này (hoặc `docs/ACOUSTIC_V2.md` nếu là kết luận lâu dài).
-- Lệnh tái lập đầy đủ (QC → lọc → train → bench) ghi ở đây.
+Số đo cùng `val_filt`/`holdout_filt` (mốc `eval/baselines/b8_filt.json`, sha ghim trong `eval/README.md`;
+chi tiết + đọc đúng ở `docs/ACOUSTIC_V2.md` §46):
+
+| Chỉ số | b8 (46k) | small_filt 38k | small_filt 60k | hướng |
+|---|---|---|---|---|
+| mel_z | 1,1580 | **1,1561** (≈ nhiễu) | 1,1849 ✗ | ↓ |
+| mel dB | **8,64** | 9,17 | 9,16 | ↓ |
+| độ nét rough | 0,3423 | **0,3583** | 0,3567 | ↑ |
+| thanh C | 0,7374 | 0,7816 | **0,7955** | ↑ |
+| CER-100 | **0,2126** | 0,2498 | 0,2503 (base40k 0,2615) | ↓ |
+| F0 NGÃ | 198,1 | **179,4** | 179,7 | ↓ |
+| dur MAE | **4,74** | 4,94 | 5,03 | ↓ |
+| rè Δjitter ngã | **+0,0294** | +0,0440 | +0,0388 | →0 |
+| rè Δhnr ngã | −3,10 | −3,12 | **−2,86** | →0 |
+
+- **Cổng EVAL_TOOLS §4**: 38k trượt **CER** + **rè**; 60k trượt thêm **mel_z** ⇒ theo luật: **giữ b8**.
+- Nhưng **thanh/F0/nét thắng rõ** (C 0,738→0,78–0,80 ≈ base40k; F0 NGÃ −19 cents) — đúng điểm đau ⇒
+  **tai người A/B vẫn là chốt cuối** (§37).
+- CER-100 đo lại vì bẫy ±0,03: b8 0,2126 < 38k 0,2498 ≈ 60k 0,2503 < base40k 0,2615 ⇒ bản lọc ở mức
+  **của base40k** (bản tai user chọn), không phải bất thường — nhưng kém b8 thật (+0,037).
+- **Demo nghe** (không commit): `artifacts/listen_small_filt/index.html` — b8@46k vs 38k vs 60k, cùng
+  Vocos + sh25 α=1,5, 4 clip giàu ngã/nặng + 5 cặp tối thiểu + orig/copy.
+- **Bước sau (chờ tai + chọn)**: (1) giữ b8 → adversarial resume / mel_sharp toàn cục; (2) theo hướng
+  lọc → xác minh phương sai (seed 2) hoặc lọc+oversample; (3) luôn theo cổng + tai (§37).
+
+## 5b. Bàn giao
+
+- Kết quả + bảng cổng: §5 ở trên + `docs/ACOUSTIC_V2.md` §46 (kết luận lâu dài).
+- Lệnh tái lập đầy đủ (QC → lọc → train → bench) ghi ở §4 + §6 (watchdog).
 
 ## 6. Sự cố 18/10 13:20 — process bị giết im lặng (đã tự phục hồi)
 
