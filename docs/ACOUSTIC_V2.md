@@ -1598,5 +1598,9 @@ gần như hết mất mát).
   mức CER **của base40k** (bản tai user chọn). mel dB/dur cũng nằm giữa dải lịch sử.
 - **Chưa tách được "do lọc" vs "phương sai 1 lần chạy"** (chưa chạy seed 2) — thanh/F0/nét chênh lớn
   gợi ý hiệu ứng thật, nhưng phải xác minh trước khi kết luận nhân quả.
+- **Tai người (18/10, nghe hết 3 bản qua tunnel)**: *"ngang ngang nhau — nét vẫn nét, rè vẫn rè"* ⇒
+  **giữ b8**; mức thắng thanh đo được (+0,04–0,06 acc) **dưới ngưỡng nghe** trong phiên nghe thường.
+  ⇒ bài học: cổng đo luôn phải kèm tai; hướng tiếp: **adversarial T4.1 retry @b8** (đang chạy) +
+  **quét α làm nét cho tai** (1,5 vs 3,0) + cân nhắc **mở rộng dữ liệu (≥40h)** để mở base/large.
 - Tai người: `artifacts/listen_small_filt/index.html` (b8@46k vs 38k vs 60k, cùng Vocos + sh25 α=1,5;
   4 clip giàu ngã/nặng + 5 cặp tối thiểu + orig/copy) — **không commit** (đúng luật demo).

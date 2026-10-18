@@ -65,6 +65,9 @@ chi tiết + đọc đúng ở `docs/ACOUSTIC_V2.md` §46):
 | rè Δhnr ngã | −3,10 | −3,12 | **−2,86** | →0 |
 
 - **Cổng EVAL_TOOLS §4**: 38k trượt **CER** + **rè**; 60k trượt thêm **mel_z** ⇒ theo luật: **giữ b8**.
+- **Tai người 18/10 (nghe hết 3 bản A/B qua tunnel)**: *"ngang ngang nhau — chỗ nét vẫn nét, chỗ rè vẫn rè"*
+  ⇒ không bản nào thắng tai; cổng cũng trượt ⇒ **giữ b8 làm daily driver**; kết luận bước này:
+  **lọc dữ liệu chưa tạo khác biệt nghe được** (mức thắng thanh +0,04–0,06 acc **dưới ngưỡng nghe**).
 - Nhưng **thanh/F0/nét thắng rõ** (C 0,738→0,78–0,80 ≈ base40k; F0 NGÃ −19 cents) — đúng điểm đau ⇒
   **tai người A/B vẫn là chốt cuối** (§37).
 - CER-100 đo lại vì bẫy ±0,03: b8 0,2126 < 38k 0,2498 ≈ 60k 0,2503 < base40k 0,2615 ⇒ bản lọc ở mức
