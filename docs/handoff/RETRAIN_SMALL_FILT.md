@@ -79,6 +79,12 @@ chi tiết + đọc đúng ở `docs/ACOUSTIC_V2.md` §46):
   hiệu ứng hiếm (~0,33 dB, xu hướng). Chain đã hẹn giờ: sau `mel_sharp` → **oversample** (E4b recipe,
   run `runs/acoustic_v2_b8_oversample`, job `vifasttts.oversample`). Chờ người dùng: thu âm đuôi hiếm
   / link kênh.
+- **Đêm 18→19 (tự động, xong 05:03)**: 4 đòn rè — `mel_sharp ×2` best@63k **10/10 cổng tương đối**
+  (mel_z 1,1494 · dB 8,600 · F0 NGÃ 189,8) nhưng Δjitter phình (+0,045) + CER-100 0,2465 + C 0,744
+  (<0,78); `oversample` **chữa đuôi hiếm** (HNR hiếm +0,71→+1,26) nhưng hại mel_z (4/10); `os+melsharp`
+  creak pooled tốt nhất (Δjitter +0,027 · Δhnr −2,60) nhưng mel_z 1,178; `os mạnh` quá liều (3/10).
+  Chi tiết: `docs/handoff/OVERNIGHT_18_19.md` + `docs/ACOUSTIC_V2.md` §47. **Demo `/morning/`**
+  (b8 vs 4 best) — chờ tai người chốt.
 - Nhưng **thanh/F0/nét thắng rõ** (C 0,738→0,78–0,80 ≈ base40k; F0 NGÃ −19 cents) — đúng điểm đau ⇒
   **tai người A/B vẫn là chốt cuối** (§37).
 - CER-100 đo lại vì bẫy ±0,03: b8 0,2126 < 38k 0,2498 ≈ 60k 0,2503 < base40k 0,2615 ⇒ bản lọc ở mức

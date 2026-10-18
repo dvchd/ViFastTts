@@ -1645,5 +1645,32 @@ dự đoán không lệch) ⇒ rè nằm ở **cách mel thể hiện creak**; h
 (2) đề xuất người dùng: **thu âm bổ sung danh sách âm tiết đuôi hiếm** (ngã/nặng — phủ trực tiếp các
 từ đang rè) hoặc tải thêm video cùng kênh; (3) phần tone-conditioned over-noise giữ làm bài toán
 biểu diễn (vocoder-side) — chưa có đòn rẻ.
+
+## 47. Đêm 18→19/10: 4 đòn rè (mel_sharp · oversample · kết hợp · mạnh) — số đo đầy đủ
+
+Chạy tự động qua đêm bằng `tools/night_chain.sh` (idempotent): chờ mel_sharp → probe từng config →
+4 run **b8@46k → 70k** (một biến số mỗi run) → bench best+last (mốc `b8_filt`, cùng `val_filt`) →
+CER-100 → probe đuôi hiếm → demo nghe. Bảng đầy đủ + cổng: `docs/handoff/OVERNIGHT_18_19.md`.
+
+| Ứng viên (bước) | mel_z | dB | rough | C | CER-20 | CER-100 | Δjitter | Δhnr | cổng tương đối | probe hiếm (hnr/jit) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| b8 (mốc) | 1,1580 | 8,64 | 0,3423 | 0,7374 | 0,1977 | 0,2126 | +0,0294 | −3,10 | — | +0,71 / 0,067 |
+| **mel_sharp best (63k)** | **1,1494** | **8,600** | 0,3420 | 0,7439 | 0,2087 | 0,2465 | +0,0452 | −2,79 | **10/10** | +0,95 / 0,072 |
+| oversample (70k) | 1,1801 | 9,07 | 0,3432 | 0,7474 | 0,2152 | 0,2862 | +0,0459 | −2,87 | 4/10 | **+1,26 / 0,062** |
+| os+melsharp (70k) | 1,1777 | 9,04 | 0,3360 | 0,7385 | 0,2260 | 0,2566 | **+0,0270** | **−2,60** | 4/10 | +1,02 / 0,070 |
+| os mạnh (70k) | 1,1993 | 9,16 | **0,3641** | 0,7573 | 0,2498 | 0,2983 | +0,0283 | **−2,39** | 3/10 | **+1,51 / 0,061** |
+
+**Đọc (kèm cảnh báo):**
+1. **`mel_sharp ×2` best@63k = ứng viên đầu tiên đạt 10/10 cổng TƯƠNG ĐỐI** + mel_z/dB tốt nhất từ trước
+   tới nay (1,1494 / 8,600) + F0 NGÃ 189,8 (b8 198,1). **Nhưng**: Δjitter ngã **phình** (+0,045 vs
+   +0,029), **CER-100 0,2465** (b8 0,2126), và **C 0,744 < 0,78** — chưa đạt cổng chấp nhận §4.
+2. **`oversample` chữa đúng "đuôi hiếm"**: HNR nhóm hiếm **+0,71 → +1,26** (hết lệch so với nhóm phổ
+   biến +1,25) — khớp quan sát tai *"một số từ rè"* (§46.5) — nhưng **hại mel_z/dB** (4/10).
+3. **`os+melsharp`**: creak pooled tốt nhất (Δjitter +0,027 < b8; Δhnr −2,60) nhưng mel_z 1,178.
+4. **`os mạnh`**: rough cao nhất (0,364) + HNR hiếm tốt nhất (+1,51) nhưng mel_z 1,199 / CER-100 0,298
+   — quá liều (dose-response: vượt ngưỡng có hại).
+⇒ **Chưa ứng viên nào qua ĐỦ bộ cổng §4** (C ≥ 0,78 ∧ Δcreak ∧ CER ≤ 0,22): đòn nào cũng đánh đổi.
+**Tai người (demo `/morning/`: b8 vs 4 best) là bước chốt tiếp theo**; nếu tai chọn bản nào thì mới tính
+chuyện "pha trộn" (ví dụ mel_sharp trên dữ liệu lọc — hướng đang có C cao nhất).
 - Tai người: `artifacts/listen_small_filt/index.html` (b8@46k vs 38k vs 60k, cùng Vocos + sh25 α=1,5;
   4 clip giàu ngã/nặng + 5 cặp tối thiểu + orig/copy) — **không commit** (đúng luật demo).
