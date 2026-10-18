@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from creak_rarity_probe import VIET_RE, build_freq  # noqa: E402
+from creak_rarity_probe import VIET_RE, build_freq
 
 
 def _row(words):
