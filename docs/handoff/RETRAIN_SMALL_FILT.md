@@ -14,6 +14,7 @@
 | Lọc manifest | ✅ `tools/filter_manifests.py` → `*_filt.jsonl`: train 9.763→**9.672** row (−82 clip) · val 1.773→**1.762** (−10) · holdout 842→**830** (−12). Ô hiếm giữ tỉ lệ (NGA 10.113→10.067; NẶNG+tắc 9.554→9.504) |
 | Probe | ✅ 120 bước: loss ổn định (không NaN), **0,23 s/bước**, MPS ~4G |
 | Train | 🔄 **ĐANG CHẠY NỀN** — `runs/acoustic_v2_small_filt` · log `artifacts/dataset_v2/train_v2_small_filt.log` · 0→60k bước (config `small_codelung_v2.yaml`: batch 8, cosine tới 60k, patience 25, KHÔNG oversample) · dự kiến **~5–6h** |
+| Sự cố & tự phục hồi | Process bị **giết im lặng** ở step 27.000 lúc 13:20 (không crash/jetsam/sleep — nghi phiên harness dọn nền, xem §6) → dựng `tools/watchdog_resume_train.sh` chạy qua **launchd**; 14:40:12 chạy lại, nối đúng lịch cosine. **Gỡ job khi xong: `launchctl remove vifasttts.small_filt.watchdog`** |
 | Đo | ⏳ chờ train xong (xem §4) |
 
 ## 2. Quyết định đã chốt (kèm lý do)
@@ -30,6 +31,7 @@
 ## 3. Commit liên quan
 
 - `446460a` — tools QC + filter (+ test); artifacts: `artifacts/clip_qc/{clip_quality,drop_list,filter_report}.json`
+- `<watchdog>` — `tools/watchdog_resume_train.sh` (tự resume qua launchd) + §6 sự cố
 - (sẽ cập nhật) — kết quả train + bench
 
 ## 4. Kế hoạch đo sau khi train xong (chuẩn bị sẵn)
@@ -48,3 +50,16 @@
 
 - Kết quả + bảng cổng ở mục mới của tệp này (hoặc `docs/ACOUSTIC_V2.md` nếu là kết luận lâu dài).
 - Lệnh tái lập đầy đủ (QC → lọc → train → bench) ghi ở đây.
+
+## 6. Sự cố 18/10 13:20 — process bị giết im lặng (đã tự phục hồi)
+
+- Train chết ở **step 27.000 lúc 13:20:03** (mtime `ckpt_27000.pt`/`last.pt`). Không crash report,
+  không jetsam, không sleep/wake, log sạch → **bị giết từ bên ngoài** (nghi phiên/harness dọn tiến
+  trình nền), không phải lỗi code.
+- `last.pt` nguyên vẹn (step 27.000 · best_val 0,6305) → resume nối đúng **lịch cosine** (LR tính
+  theo bước tuyệt đối; KHÔNG đổi `max_steps` khi resume).
+- Lớp tự phục hồi: `tools/watchdog_resume_train.sh` chạy qua **launchd** (thoát khỏi process-group
+  của phiên), tự `--resume last.pt` khi chết (tối đa 8 lần), chống chạy trùng; ghi dấu vào log.
+- 14:40:12 resume thành công từ 27.000 → 14:44:59 tới 28.000 (0,30 s/bước) — **ETA ~17:30**.
+- **Việc phải làm khi run xong: `launchctl remove vifasttts.small_filt.watchdog`** (launchd tự chạy
+  lại job sau khi thoát — không gỡ thì lặp vô hại nhưng rác log).
