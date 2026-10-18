@@ -22,4 +22,5 @@ data/youtube/
 eval/baselines/*
 !eval/baselines/base*_old.json
 !eval/baselines/base*_fixtail.json
+!eval/baselines/b8_*.json
 !eval/baselines/README*
