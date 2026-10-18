@@ -73,6 +73,12 @@ chi tiết + đọc đúng ở `docs/ACOUSTIC_V2.md` §46):
   (`configs/small_codelung_v2_melsharp.yaml`, resume b8/best@46k → 70k, probe ĐẠT) — run
   `runs/acoustic_v2_b8_melsharp` (watchdog `vifasttts.melsharp`). Kèm: **quét α làm nét cho tai**
   (α=1,5 vs 3,0) qua tunnel — kết quả tai quyết định bước tiếp.
+- **Tai 18/10 tối (α + cặp tối thiểu)**: α=1,5 ≈ 3,0 (3 hơi sắc hơn) — không sửa rè; *"tôi đọc chữ"
+  nghe sạch, một số từ đuôi nghe rè* ⇒ chẩn đoán §46.5: **đuôi phân bố mỏng** (41% âm tiết <5 lần;
+  bão ×1 · hộc ×0 · khanh ×0…) + **hiệu ứng thanh** (synth ngã/nặng lệch −3,1/−1,6 dB hnr) lớn hơn
+  hiệu ứng hiếm (~0,33 dB, xu hướng). Chain đã hẹn giờ: sau `mel_sharp` → **oversample** (E4b recipe,
+  run `runs/acoustic_v2_b8_oversample`, job `vifasttts.oversample`). Chờ người dùng: thu âm đuôi hiếm
+  / link kênh.
 - Nhưng **thanh/F0/nét thắng rõ** (C 0,738→0,78–0,80 ≈ base40k; F0 NGÃ −19 cents) — đúng điểm đau ⇒
   **tai người A/B vẫn là chốt cuối** (§37).
 - CER-100 đo lại vì bẫy ±0,03: b8 0,2126 < 38k 0,2498 ≈ 60k 0,2503 < base40k 0,2615 ⇒ bản lọc ở mức

@@ -1621,5 +1621,29 @@ adversarial đạt ~1 (D thắng: d→0,03). **Không chạy dài.** Hướng th
 toàn cục** (weight 1,0→2,0) — E4c mới thử bản *cục bộ* (creak-boost) và không ăn thua; global chưa thử.
 Adversarial chỉ quay lại với thiết kế mới (weight ≤0,25 / D chậm hơn / R1 penalty).
 Kèm: **quét α làm nét cho tai** (b8, α=1,5 vs 3,0 — link tạm qua tunnel) — kết quả tai quyết định bước tiếp.
+
+### 46.5 Chẩn đoán "một số từ rè" (18/10 tối) — đuôi phân bố + hiệu ứng thanh
+
+Tai người dùng (cặp tối thiểu "Tôi đọc chữ ___ một lần."): *"tôi đọc chữ" nghe sạch, một số từ
+đuôi nghe rè, không phải từ nào cũng rè*; **α=1,5 ≈ α=3,0** (3 hơi sắc hơn) ⇒ hướng "làm nét
+post-hoc" **đóng về mặt tai**.
+
+**Độ phủ train** (`train_clean`, 222.737 âm tiết · 2.567 loại): **41% loại <5 lần · 64% <20 lần**;
+các từ tai nghe rè gần như không có: bão ×1 · hộc ×0 · hột ×2 · quyển ×10 · khanh ×0 · khang ×0 ·
+giếng ×0 — trong khi khung nghe sạch: tôi 379 · đọc 170 · chữ 127.
+
+**Probe kiểm soát** (`tools/creak_rarity_probe.py`, cùng khung + cùng thanh NGA/NANG, n=12/nhóm,
+b8+Vocos, α=1,5): hiếm (≤5×) hnr **+0,71** / jitter 0,067 vs phổ biến (≥150×) hnr **+1,04** /
+jitter 0,063; mốc NGANG-common +1,38. ⇒ **hiếm ⇒ ồn hơn ~0,33 dB (xu hướng, n=12 chưa đủ ý nghĩa),
+nhưng hiệu ứng THANH lớn hơn**: synth ngã/nặng lệch −3,10/−1,64 dB hnr so với thật, còn ngang lại
+"+1,27" (làm sạch hơn thật). Nhắc: giả thuyết "model chủ động vẽ rung" đã **bị bác** (§41 — phonation
+dự đoán không lệch) ⇒ rè nằm ở **cách mel thể hiện creak**; hop 256 không chứa jitter mức chu kỳ
+(giới hạn biểu diễn; muốn hơn phải đưa phonation/F0 vào vocoder — ngoài phạm vi hiện tại).
+
+**Hành động nối tiếp**: (1) chain `tools/chain_melsharp_then_oversample.sh` — sau mel_sharp tự probe
++ chạy **oversample** (E4b recipe: NGÃ ×2 · NẶNG ×1,5 · coda tắc ×1,5) trên b8 lineage;
+(2) đề xuất người dùng: **thu âm bổ sung danh sách âm tiết đuôi hiếm** (ngã/nặng — phủ trực tiếp các
+từ đang rè) hoặc tải thêm video cùng kênh; (3) phần tone-conditioned over-noise giữ làm bài toán
+biểu diễn (vocoder-side) — chưa có đòn rẻ.
 - Tai người: `artifacts/listen_small_filt/index.html` (b8@46k vs 38k vs 60k, cùng Vocos + sh25 α=1,5;
   4 clip giàu ngã/nặng + 5 cặp tối thiểu + orig/copy) — **không commit** (đúng luật demo).
