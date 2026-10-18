@@ -27,6 +27,16 @@ def test_six_tone_numbers_match_vig2p_convention():
         assert syllable_to_phonemes(parse_syllable(word), tone_format="number")[-1] == number
 
 
+def test_checked_tone_numbers_number8():
+    """Mã 7/8 = thanh nhập (sắc nhập/nặng nhập) cho âm tiết kết thúc p/t/c/ch —
+    quy ước gắn nhãn Praat (phân tích 8 thanh; cô Hằng gửi 18/10)."""
+    for word, code in {
+        "mát": "7", "mạt": "8", "mách": "7", "mạch": "8",  # coda tắc → nhập
+        "má": "5", "mạ": "6",  # không coda tắc → giữ 5/6
+    }.items():
+        assert syllable_to_phonemes(parse_syllable(word), tone_format="number8")[-1] == code
+
+
 def test_northern_mergers():
     # Hà Nội (Kirby 2011): d/gi/r → /z/, ch/tr → /tɕ/, s/x → /s/.
     for group in (("da", "gia", "ra"), ("cha", "tra"), ("sa", "xa")):

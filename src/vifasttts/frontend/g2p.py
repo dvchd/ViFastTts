@@ -13,7 +13,9 @@ Quy ước quan trọng:
   Huế đủ tin cậy — xem mục "Trung" trong docs/G2P_VIETNAMESE.md.
 - Thanh điệu: mặc định ký hiệu Chao (˧ ˨˩ ...); có thể xuất số theo
   quy ước viG2P (1 ngang, 2 huyền, 3 ngã, 4 hỏi, 5 sắc, 6 nặng) để
-  đối chiếu với hệ bên ngoài. Đường nét theo Kirby 2011 (Hà Nội) và
+  đối chiếu với hệ bên ngoài; `tone_format="number8"` thêm mã 7/8 cho
+  **thanh nhập** (sắc nhập/nặng nhập — âm tiết kết thúc p/t/c/ch) theo
+  quy ước gắn nhãn Praat. Đường nét theo Kirby 2011 (Hà Nội) và
   Huỳnh Công 2003 (TP.HCM); Help:IPA/Vietnamese có bảng khác đôi chỗ
   (ví dụ hỏi Hà Nội ˧˩ thay vì ˧˩˧) — dự án giữ nguồn đã chọn.
 - Nguyên âm: `OO` là nucleus riêng [ɔː] (xoong, moóc); `ay/au` dùng ă
@@ -32,10 +34,11 @@ from __future__ import annotations
 
 from vifasttts.frontend.dialect import Dialect, get_profile
 from vifasttts.frontend.pipeline import parse_text
+from vifasttts.frontend.rules import STOP_CODAS
 from vifasttts.frontend.syllable import parse_syllable
 from vifasttts.types import ParsedSyllable, ParseStatus
 
-ToneFormat = str  # "contour" | "number" | "none"
+ToneFormat = str  # "contour" | "number" | "number8" | "none"
 Style = str  # "broad" | "narrow"
 
 # --- Phụ âm đầu ---
@@ -133,6 +136,10 @@ TONE_NUMBERS: dict[str, str] = {
     "NGANG": "1", "HUYEN": "2", "NGA": "3", "HOI": "4", "SAC": "5", "NANG": "6",
 }
 
+# Mã 7/8 = thanh nhập (sắc nhập/nặng nhập) cho âm tiết kết thúc coda tắc p/t/c/ch —
+# quy ước gắn nhãn Praat / phân tích 8 thanh; "number8" = "number" + 2 mã này.
+ENTERING_NUMBERS: dict[str, str] = {"SAC": "7", "NANG": "8"}
+
 
 def tone_table(dialect: str | Dialect) -> dict[str, str]:
     """Bảng đường nét thanh (Chao) theo phương ngữ."""
@@ -195,8 +202,8 @@ def syllable_to_phonemes(
 
     - `style="broad"` (mặc định): dạng âm vị, gọn theo cách viết phổ biến.
     - `style="narrow"`: thêm chi tiết ngữ âm (t̪, p̚, k̟̚, ŋ̟).
-    - `tone_format`: "contour" (Chao letters), "number" (quy ước viG2P)
-      hoặc "none".
+    - `tone_format`: "contour" (Chao letters), "number" (viG2P 1–6),
+      "number8" (viG2P + 7/8 cho thanh nhập: sắc nhập/nặng nhập) hoặc "none".
     - Trả về tuple rỗng cho âm tiết FALLBACK_REQUIRED (từ ngoại lai).
     """
     if parsed.status != ParseStatus.VALID:
@@ -218,6 +225,10 @@ def syllable_to_phonemes(
     if not with_tone or tone_format == "none":
         return phonemes
     if tone_format == "number":
+        return phonemes + (TONE_NUMBERS[a.tone.value],)
+    if tone_format == "number8":
+        if a.coda in STOP_CODAS and a.tone.value in ENTERING_NUMBERS:
+            return phonemes + (ENTERING_NUMBERS[a.tone.value],)
         return phonemes + (TONE_NUMBERS[a.tone.value],)
     return phonemes + (tone_table(dialect)[a.tone.value],)
 
@@ -250,6 +261,7 @@ def phoneme_inventory() -> tuple[str, ...]:
     for tone_table in (TONE_CONTOURS_NORTH, TONE_CONTOURS_SOUTH):
         phonemes.update(tone_table.values())
     phonemes.update(TONE_NUMBERS.values())
+    phonemes.update(ENTERING_NUMBERS.values())
     return tuple(sorted(phonemes))
 
 

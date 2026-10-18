@@ -71,6 +71,12 @@ Quy tắc dùng tên:
 | `CODA` | âm cuối | coda |
 | `TONE` | thanh điệu | tone |
 
+**Thanh nhập** (sắc nhập / nặng nhập): âm tiết kết thúc bằng coda tắc `p/t/c/ch` chỉ đi
+với thanh SẮC hoặc NẶNG; phân tích **8 thanh** truyền thống (gốc Hán học, "nhập thanh")
+tách chúng thành 2 mã riêng (7 = sắc nhập, 8 = nặng nhập) vì ngắn và bị chặn đột ngột.
+Dự án giữ `tone` 6 giá trị, tính "nhập" **suy ra** từ `tone` + `coda` (`STOP_CODAS`);
+`g2p.py` có `tone_format="number8"` để xuất mã 7/8 khi đối chiếu nhãn ngoài.
+
 ## Nhãn âm vị (giá trị category)
 
 - Kiểu viết: chữ in hoa, có thể kèm dấu tiếng Việt: `K`, `W`, `IÊ`, `UÔ`, `ƯƠ`, `NG`, `SAC`...

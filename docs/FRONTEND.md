@@ -116,7 +116,7 @@ nạp từ điển "mặt chữ → cách đọc" và `runtime/postprocess.py` l
 
 - `syllable_to_phonemes(parsed, dialect="north", *, with_tone=True, tone_format="contour", style="broad")`.
   - `style="broad"` (mặc định): âm vị gọn (`t`, `tʰ`, `k`...). `style="narrow"`: thêm chi tiết ngữ âm `t̪`, `t̪ʰ`, `p̚ t̚ k̚`, `k̟̚`, `ŋ̟`; Bắc: trước `nh/ch`, `a`/`ê` → `ăj`/`ə̆j` (Henderson 1965; Kirby 2011: `anh` = `ăj ŋ̟`).
-  - `tone_format="contour"` (mặc định, ký hiệu Chao) | `"number"` (1 ngang, 2 huyền, 3 ngã, 4 hỏi, 5 sắc, 6 nặng — quy ước viG2P để đối chiếu) | `"none"`.
+  - `tone_format="contour"` (mặc định, ký hiệu Chao) | `"number"` (1 ngang, 2 huyền, 3 ngã, 4 hỏi, 5 sắc, 6 nặng — quy ước viG2P để đối chiếu) | `"number8"` (như "number" nhưng 7 = sắc nhập, 8 = nặng nhập cho âm tiết kết thúc `p/t/c/ch` — quy ước gắn nhãn Praat) | `"none"`.
 - `text_to_phonemes(...)` trả một tuple cho mỗi âm tiết; token OOV trả tuple rỗng để tầng ngoài quyết định.
 - Bảng theo vùng:
   - **Bắc (Hà Nội)**: gộp `d/gi/r → z`, `ch/tr → tɕ`, `s/x → s`; thanh ˧, ˨˩, ˧˥, ˧˩˧, ˧ˀ˥, ˧ˀ˨ʔ.

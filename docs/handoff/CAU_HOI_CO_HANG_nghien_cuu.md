@@ -253,3 +253,16 @@
   kiểu đọc mặt chữ vs IPA (`data/module/status/tutorial`); cụm phụ âm 3 âm ("subscribe");
   style bảng tên chữ (tên-chuẩn vs ngắn) + đồng bộ `oov.py` ↔ `stem.py`.
 - (Nhãn `anh/ach` giữ SGK — đã thống nhất, không đổi; đo formant kiểm chứng sau khi có model.)
+
+## 7. (18/10) Cô gửi spec gắn nhãn Praat — thuật ngữ "thanh nhập" + mã 7/8
+
+- File `Prt_TextGrid.docx` (cô gửi 18/10) là **hướng dẫn gắn nhãn**: tạo Praat TextGrid
+  4 tier (nguyên âm / âm tiết / phụ âm / thanh điệu), mã thanh 1–8 cho từng âm tiết.
+- 1–6 trùng đúng quy ước **viG2P** dự án đang dùng (ngã = 3, hỏi = 4);
+  **7 = sắc nhập, 8 = nặng nhập** cho âm tiết kết thúc /p, t, k/ — tức "thanh nhập"
+  của **phân tích 8 thanh** (nhập thanh), KHÔNG phải hai thanh mới.
+- Đã áp dụng: `g2p.py` thêm `tone_format="number8"` (+ test) để xuất đúng mã khi đối
+  chiếu với nhãn ngoài; ràng buộc coda tắc ↔ chỉ sắc/nặng đã có sẵn (`validate()`);
+  `GLOSSARY.md` thêm mục "Thanh nhập".
+- Liên hệ điểm yếu đã biết: "SẮC-tắc" là ô tệ nhất trong chẩn đoán dữ liệu (§42.1) —
+  nếu cô gắn nhãn dữ liệu theo spec này, tách nhập khi báo cáo là hướng dùng tiếp.
