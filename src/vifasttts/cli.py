@@ -54,7 +54,7 @@ def g2p_cmd(
     text: str = typer.Argument(..., help="Câu cần phiên âm"),
     dialect: str = typer.Option("north", help="north, central hoặc south"),
     style: str = typer.Option("broad", help="broad hoặc narrow"),
-    tone_format: str = typer.Option("contour", help="contour | number | none"),
+    tone_format: str = typer.Option("contour", help="contour | number | number8 | none"),
 ) -> None:
     """Phiên âm IPA từng âm tiết (chỉ để phân tích, không nằm trong runtime)."""
     from vifasttts.frontend.g2p import syllable_to_phonemes, to_phoneme_string
