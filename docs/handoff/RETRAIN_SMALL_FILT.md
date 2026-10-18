@@ -33,7 +33,7 @@
 - `446460a` — tools QC + filter (+ test); artifacts: `artifacts/clip_qc/{clip_quality,drop_list,filter_report}.json`
 - `12b8f5f` — `tools/watchdog_resume_train.sh` (tự resume qua launchd) + §6 sự cố
 - `45909aa` + `a03af29` — mốc b8 trên val lọc (`eval/baselines/b8_filt.json` + ghim sha256)
-- (sẽ cập nhật) — kết quả train + bench (§5 + ACOUSTIC_V2 §46)
+- `58ad65b` — kết quả train + bench (§5 + ACOUSTIC_V2 §46)
 
 ## 4. Kế hoạch đo sau khi train xong (chuẩn bị sẵn)
 
