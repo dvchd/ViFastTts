@@ -1697,5 +1697,22 @@ khuếch đại**.
 **Chờ tai (đã dựng)**: `/denoise_check/` — 3 clip từ 2 video "nguyên" vs 3 clip video thường (đều có
 ngã/nặng) ⇒ nếu nhóm nguyên khác rõ: kế hoạch **thu âm mới không lọc rè** (đuôi hiếm + ngã/nặng) là
 hướng số 1; nếu giống nhau: xác nhận giới hạn biểu diễn (hop 256/Vocos).
+
+### 48.1 Tai người dùng nghe `/denoise_check/` + test "video nhiễu trong train" (19/10)
+
+Tai: *"video không lọc rè nguyên; video thường nghe mượt nhưng kỹ vẫn hơi nghe tiếng lấy hơi"* ⇒ nghi
+vấn mới: **video thu bằng điện thoại / quên bật lọc trên OBS lọt vào train làm model nhiễu theo**.
+
+**Số liệu (QC nền nhiễu theo video — lưỡng cực rõ):** 23 video ở −74,9…−85,9 dB (median −80,6);
+**2 ngoại lệ**: `4kyqfOypVWI` (−52,5 dB · SNR 32,5) + `lRojc8KDJ6k` (−51,0 dB · SNR 31,5).
+Trong **train chỉ có `4kyqfOypVWI`: 448 row = 4,6%** (`lRojc8KDJ6k` chỉ ở val/holdout).
+⚠️ Bài học: bộ lọc QC cũ bắt *hiss* (hf_ratio_quiet/flatness) — **không bắt nền nhiễu rộng** → 2 video
+này lọt qua cả bản `_filt`.
+
+**Thí nghiệm (đang chạy 19/10 sáng)**: manifest `train_clean_v2_dur_seg_slot4_dropnoise.jsonl`
+(9.763 → 9.315 row, bỏ đúng 448 row của `4kyqfOypVWI`), resume b8@46k→70k (một biến số), probe ĐẠT
+(0,25 s/bước) → run `runs/acoustic_v2_b8_dropnoise` + chain tự bench/CER-100/probe đuôi hiếm/demo
+(`/dropnoise/`) → báo cáo `docs/handoff/DROPNOISE_19_10.md`. Nếu creak tốt lên ⇒ mở rộng: lọc lại
+theo **nền nhiễu rộng** (không chỉ hiss) + xét cả dữ liệu **Vocos** (Vocos cũng đã học video nhiễu).
 - Tai người: `artifacts/listen_small_filt/index.html` (b8@46k vs 38k vs 60k, cùng Vocos + sh25 α=1,5;
   4 clip giàu ngã/nặng + 5 cặp tối thiểu + orig/copy) — **không commit** (đúng luật demo).
