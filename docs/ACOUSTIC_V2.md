@@ -1672,5 +1672,30 @@ CER-100 → probe đuôi hiếm → demo nghe. Bảng đầy đủ + cổng: `do
 ⇒ **Chưa ứng viên nào qua ĐỦ bộ cổng §4** (C ≥ 0,78 ∧ Δcreak ∧ CER ≤ 0,22): đòn nào cũng đánh đổi.
 **Tai người (demo `/morning/`: b8 vs 4 best) là bước chốt tiếp theo**; nếu tai chọn bản nào thì mới tính
 chuyện "pha trộn" (ví dụ mel_sharp trên dữ liệu lọc — hướng đang có C cao nhất).
+
+## 48. Kiểm chứng "lọc rè khi thu → train khuếch đại" (19/10 sáng)
+
+Tai người dùng (nghe `/morning/`): *"oss tốt nhất nhưng vẫn có chỗ rè, ngang b8; 'khang' (0 lần trong
+train) đọc đúng, không rè"* + giả thuyết: bản thu đã qua phần mềm lọc rè, còn **rè nền ẩn bị train
+khuếch đại**.
+
+**Đo được:**
+1. **Corpus ĐÃ bị lọc rè rất mạnh**: noise_floor p50 = **−80,6 dB** (p5 −87,5; p95 −62,7) — gần im lặng
+   kỹ thuật số; riêng **2 video còn "nguyên"**: `4kyqfOypVWI` (−52,5 dB · SNR 32,5) và `lRojc8KDJ6k`
+   (−51,0 dB · SNR 31,5) ⇒ ký ức người dùng đúng. Vùng xám chưa lọc (z 4–8): 157 clip hf + 103 flat.
+2. **Model khuếch đại thật**: synth luôn ồn hơn bản thu trên ngã/nặng — Δhnr **−0,9 → −3,2 dB** trên
+   3 bộ clip (val_filt · 2 video nguyên · 1 video thường).
+3. **Nhưng KHÔNG phải copy rè nền**: vùng ngã/nặng của bản thu lại **SẠCH** (HNR +1,1…+1,8; jitter
+   thấp) — không có rè nền ở đó để khuếch đại; model **tự sinh** noise khi render thanh contour (khớp
+   §45.6: mel mờ + Vocos). Test "lọc rè ăn creak": jitter thật nhóm không-lọc ≈ nhóm thường (0,064 vs
+   0,0685 trên nặng); glottalization cao hơn (~2×) nhưng metric không ổn định giữa video ⇒ **chưa kết
+   luận bằng số**.
+4. **"khang" sạch khớp số đo**: khanh/khang có HNR cao nhất trong bộ từ kiểm (+1,48/+0,72) ⇒ cơ chế
+   là **thanh contour (ngã/nặng) → rè**, không phải "từ lạ → rè"; độ hiếm chỉ làm nặng thêm
+   (oversample: HNR hiếm +0,71 → +1,26).
+
+**Chờ tai (đã dựng)**: `/denoise_check/` — 3 clip từ 2 video "nguyên" vs 3 clip video thường (đều có
+ngã/nặng) ⇒ nếu nhóm nguyên khác rõ: kế hoạch **thu âm mới không lọc rè** (đuôi hiếm + ngã/nặng) là
+hướng số 1; nếu giống nhau: xác nhận giới hạn biểu diễn (hop 256/Vocos).
 - Tai người: `artifacts/listen_small_filt/index.html` (b8@46k vs 38k vs 60k, cùng Vocos + sh25 α=1,5;
   4 clip giàu ngã/nặng + 5 cặp tối thiểu + orig/copy) — **không commit** (đúng luật demo).
