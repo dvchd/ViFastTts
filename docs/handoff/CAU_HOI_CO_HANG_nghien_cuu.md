@@ -274,3 +274,17 @@
   (`dataset_v2`, nối vào `train_v2:260`: NGÃ ×2 · NẶNG ×1,5 · coda tắc ×1,5 ⇒ sắc-tắc ×1,5 ·
   **nặng-tắc ×2,25**); `tools/r5a_stats.py` đã báo cáo duration theo cặp `(thanh × tắc/mở)`;
   splits theo clip cha — không liên quan thanh. **Không cần đổi gì**.
+
+## 8. (18/10) Audit cặp âm tiết frontend trên corpus — số đo
+
+- Công cụ: `tools/audit_syllable_pairs.py` (abstract ← chữ; IPA Bắc; strict warnings);
+  báo cáo đầy đủ ở `artifacts/frontend_pairs.json`.
+- **2.763 âm tiết duy nhất** (train+val+holdout): **0 fallback**.
+- **28 nhóm gộp** (cùng abstract, khác chữ): toàn biến thể chính tả/đồng âm hợp lệ —
+  i/y (`hi/hy`, `kì/kỳ`…), c/k/q (`ce/ke`, `cờ/kờ`, `kụ/cụ`), `quít/quýt`, `vậy/vậi`,
+  `nghiện/ngyện`, respell Anh (`bio/biu`, `oi/oy`…) — **không có ca "khác âm bị gộp"**.
+- **126 nhóm tách-thừa** (cùng IPA Bắc, khác abstract): đúng 3 họ chủ đích —
+  S/X (33) · CH/TR (44) · D/GI/R (14+11+7+17) — giữ để trung lập phương ngữ; G2P Bắc đã gộp
+  khi phiên âm. → Không còn lớp lỗi kiểu "quốc" trong ngữ liệu hiện tại.
+- 18 âm tiết bị cảnh báo strict (`ngyện`, `giếch`, `buy`, `gen`…): **chính tả dữ liệu**
+  (respell/typo), không phải lỗi parser — danh sách trong báo cáo.
