@@ -49,6 +49,7 @@ indent 2, dòng trống cuối) + `.gitattributes` `eval/baselines/*.json -text`
 | `base40k_old.json` | `2bc3ca93920ace99786dd3e1292d29b6b600dce0e5c8b9b51038b89c2e8337fe` | `19b6e11756284ea86ee88933cc315b34011378b7` (val CŨ) | **DÙNG** — CỔNG CỨNG (mel/dB/rough/tone_C/CER/F0 NGÃ @ val cũ) · rough **60 clip** |
 | `base40k_fixtail.json` | `e29509d7e1f69c319e2f730b9f28d3aaa4d5cb34cc250574d9326141a5e2b9b9` | `cdbbd659116ae9f948c56152be5b08ea7fa08115` (val fixtail; old `19b6e117…`) | **DÙNG** — mel_gap + syl_z + **mel_z_fix/mel_db_fix (cùng nhãn)** + CỔNG MỤC TIÊU pause (val fixtail) · rough 60 clip |
 | `base40k_fixgap.json` | `cf7708644f6396028452e746258a955bf848f3ea74521ffad3d20273bf024036` | `5ec5f139ce56a763d90af7de7a59956f712ee88c` (val fixgap) | **KHÔNG DÙNG** (thay bởi fixtail; bản trên đĩa: `artifacts/bench/legacy/`) |
+| `b8_filt.json` | `da74c25310b576eb1f0743c98537877f1e668d5568830cff16762901697a0e9d` | `28512bfd4bde24e07005b96dba1f9d8e75fef0d9` (val lọc) | **DÙNG** — mốc so run lọc `small_filt` vs `b8` (mel/dB/rough/tone_C/CER/F0 NGÃ @ val lọc · old = fixgap = val lọc · holdout lọc) |
 
 Kiểm H1 (base 40k): `syl_z` val cũ **0,6612** → **fixtail 0,6621** (chênh **+0,14%**) · `gap_z` 1,9493 → **2,1529** (giá trị fixtail; bản fixgap cũ 2,3862 — KHÔNG dùng)
 ⇒ mọi phần tăng của `mel_l1_z` tổng nằm ở khung gap (khung âm tiết không đổi) — §44.6.
