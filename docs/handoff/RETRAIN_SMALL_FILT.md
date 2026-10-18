@@ -68,6 +68,11 @@ chi tiết + đọc đúng ở `docs/ACOUSTIC_V2.md` §46):
 - **Tai người 18/10 (nghe hết 3 bản A/B qua tunnel)**: *"ngang ngang nhau — chỗ nét vẫn nét, chỗ rè vẫn rè"*
   ⇒ không bản nào thắng tai; cổng cũng trượt ⇒ **giữ b8 làm daily driver**; kết luận bước này:
   **lọc dữ liệu chưa tạo khác biệt nghe được** (mức thắng thanh +0,04–0,06 acc **dưới ngưỡng nghe**).
+- **Đòn kế tiếp (18/10 tối)**: adversarial T4.1 retry **phân kỳ lần 3** ở probe (600 bước, loss → 7,7
+  triệu — chi tiết `docs/ACOUSTIC_V2.md` §46.4) ⇒ bỏ; chuyển **`mel_sharp` toàn cục ×2**
+  (`configs/small_codelung_v2_melsharp.yaml`, resume b8/best@46k → 70k, probe ĐẠT) — run
+  `runs/acoustic_v2_b8_melsharp` (watchdog `vifasttts.melsharp`). Kèm: **quét α làm nét cho tai**
+  (α=1,5 vs 3,0) qua tunnel — kết quả tai quyết định bước tiếp.
 - Nhưng **thanh/F0/nét thắng rõ** (C 0,738→0,78–0,80 ≈ base40k; F0 NGÃ −19 cents) — đúng điểm đau ⇒
   **tai người A/B vẫn là chốt cuối** (§37).
 - CER-100 đo lại vì bẫy ±0,03: b8 0,2126 < 38k 0,2498 ≈ 60k 0,2503 < base40k 0,2615 ⇒ bản lọc ở mức

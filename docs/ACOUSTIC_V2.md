@@ -1602,5 +1602,24 @@ gần như hết mất mát).
   **giữ b8**; mức thắng thanh đo được (+0,04–0,06 acc) **dưới ngưỡng nghe** trong phiên nghe thường.
   ⇒ bài học: cổng đo luôn phải kèm tai; hướng tiếp: **adversarial T4.1 retry @b8** (đang chạy) +
   **quét α làm nét cho tai** (1,5 vs 3,0) + cân nhắc **mở rộng dữ liệu (≥40h)** để mở base/large.
+
+### 46.4 T4.1 adversarial — phân kỳ lần 3 (probe 18/10, batch 8) — KHÔNG chạy dài
+
+Probe 600 bước (resume `b8/best@46k`, `--adversarial`, `--max-steps 70000`; timing rút gọn
+warm-up D 100 / ramp 200 để chạm đúng pha nguy hiểm — config `artifacts/_adv_probe/config_probe.yaml`):
+
+| Bước | adv (trọng số) | loss tổng | mel | d (D) |
+|---|---|---|---|---|
+| 46.300 | 1,56 | 11,0 | 1,12 | 0,96 |
+| 46.350 | 134,6 | **580** | 277 | 0,32 |
+| 46.400 | 9.398 | **34.693** | 18.215 | 0,10 |
+| 46.500 | 103.357 | **736.947** | 473.723 | 2,4 |
+| 46.600 | 2.425.391 | **7,7 triệu** | 3,99 triệu | 0,03 |
+
+⇒ bce + D-LR 1e-4 + spectral-norm + warm-up **vẫn không đủ**; GAN lần 3 phân kỳ đúng lúc trọng số
+adversarial đạt ~1 (D thắng: d→0,03). **Không chạy dài.** Hướng thay (stable trước): **`mel_sharp`
+toàn cục** (weight 1,0→2,0) — E4c mới thử bản *cục bộ* (creak-boost) và không ăn thua; global chưa thử.
+Adversarial chỉ quay lại với thiết kế mới (weight ≤0,25 / D chậm hơn / R1 penalty).
+Kèm: **quét α làm nét cho tai** (b8, α=1,5 vs 3,0 — link tạm qua tunnel) — kết quả tai quyết định bước tiếp.
 - Tai người: `artifacts/listen_small_filt/index.html` (b8@46k vs 38k vs 60k, cùng Vocos + sh25 α=1,5;
   4 clip giàu ngã/nặng + 5 cặp tối thiểu + orig/copy) — **không commit** (đúng luật demo).
