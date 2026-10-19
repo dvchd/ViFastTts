@@ -1714,5 +1714,57 @@ này lọt qua cả bản `_filt`.
 (0,25 s/bước) → run `runs/acoustic_v2_b8_dropnoise` + chain tự bench/CER-100/probe đuôi hiếm/demo
 (`/dropnoise/`) → báo cáo `docs/handoff/DROPNOISE_19_10.md`. Nếu creak tốt lên ⇒ mở rộng: lọc lại
 theo **nền nhiễu rộng** (không chỉ hiss) + xét cả dữ liệu **Vocos** (Vocos cũng đã học video nhiễu).
+
+### 48.2 Kết quả screening "bỏ video nhiễu" (19/10) — mel tốt lên, creak proxies lẫn với độ nét
+
+| | b8 | dropnoise best@47k | mel_sharp best@63k |
+|---|---|---|---|
+| mel_z | 1,1580 | **1,1520** | **1,1494** |
+| dB | 8,637 | **8,598** | 8,600 |
+| rough | 0,3423 | **0,3524** | 0,3420 |
+| tone C | 0,7374 | 0,7504 | 0,7439 |
+| CER-20/100 | **0,1977/0,2126** | 0,2021/0,2382 | 0,2087/0,2465 |
+| dur MAE | 4,742 | **4,718** | 4,796 |
+| Δjitter | **+0,0294** | +0,0431 | +0,0452 |
+| cổng | — | **9/10** | **10/10** |
+| val 40-hàng | 0,6267 | **0,6243** | 0,6249 |
+
+- **Ủng hộ giả thuyết "video nhiễu kéo model"** ở mặt mel: mel_z/dB/rough/tone/dur đều tốt hơn b8;
+  val tốt nhất từ trước tới nay; 9/10 cổng.
+- **Nhưng creak proxies xấu đi** (Δjitter +0,043; probe đuôi hiếm HNR tụt) — và **phát hiện phương
+  pháp**: model "nét hơn" (rough ↑) đo "jitter ↑" (msh/os/oss đều vậy) ⇒ thước rè **lẫn với độ nét**;
+  tai người (`/dropnoise/`) là chốt.
+
+## 49. Chẩn đoán pause + kế hoạch "Data v3" (19/10)
+
+### 49.1 Nhịp nghỉ trong dữ liệu (đo 19/10)
+
+- Train: 212.974 gap; p90 0,31s · p99 1,82s · **max 6,91s**; ≥1s: 3,24% · ≥2s: 0,77%.
+- **29,6% segment (2.893/9.763) có gap nội bộ ≥1,5s** — ví dụ `4kyqfOypVWI_0011__s00`
+  ("Rồi đợi nó gen nốt đã đê", 6 âm tiết) chứa **gap 6,91s** giữa câu; `4kyqfOypVWI_0010__s00`
+  chứa gap 4,79s sau âm tiết đầu.
+- Nguyên nhân: `cut_segments.py` cắt tại SIL **theo ranh giới CÂU** (regex + MFA) — pause *suy nghĩ
+  giữa câu* không bị cắt. (Không phải cắt ngẫu nhiên, nhưng thiếu policy pause.)
+- Đầu ra khớp: synth có lặng giữa câu 1,0–2,1s (os/osm tệ nhất **2,14s** ở câu 5 âm tiết không dấu
+  ngắt) — khớp quan sát tai người dùng.
+
+### 49.2 Denoise: DeepFilterNet3 vs RNNoise (đã cài + đo, 19/10)
+
+| Clip (nền gốc) | RNNoise | **DFN3** |
+|---|---|---|
+| 4kyqfOypVWI_0011 (−42,8 dB) | −55,9 | **−71,6** |
+| _0075 (−51,1) | −60,9 | **−82,6** |
+| _0085 (−56,0) | −62,5 | **−78,9** |
+
+DFN kéo clip nhiễu về **đúng mức nền corpus còn lại (~−80 dB)** ⇒ công cụ cho "điều kiện thu đồng
+nhất". Clip sạch (fx303iiDb7M −91…−112 dB): DFN giữ sạch (zero hoá khung lặng — corpus vốn đã gated).
+A/B tai: `/denoise_try2/` (6 clip × orig/RNNoise/DFN).
+
+### 49.3 Kế hoạch Data v3 (từ `raw/` — chờ chốt policy)
+
+B1 **DFN3 offline toàn bộ 25 video** (đồng nhất) → B2 **VAD (Silero)** tách tiếng/nghỉ → B3 **cắt lại
+theo policy pause** (cắt ≥1,2–1,5s; tuỳ chọn rút lặng 0,5–1,2s về ~0,5s) → B4 chuẩn hoá loudness
+(tool cũ) → B5 **MFA re-align** + QC + giữ split video cũ → B6 **cache v4** → **train từ đầu** → bench
+so b8. Ước lượng ~1–2 ngày chủ yếu tự động + train 5–6h.
 - Tai người: `artifacts/listen_small_filt/index.html` (b8@46k vs 38k vs 60k, cùng Vocos + sh25 α=1,5;
   4 clip giàu ngã/nặng + 5 cặp tối thiểu + orig/copy) — **không commit** (đúng luật demo).
