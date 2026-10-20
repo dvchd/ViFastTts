@@ -1768,3 +1768,34 @@ theo policy pause** (cắt ≥1,2–1,5s; tuỳ chọn rút lặng 0,5–1,2s v�
 so b8. Ước lượng ~1–2 ngày chủ yếu tự động + train 5–6h.
 - Tai người: `artifacts/listen_small_filt/index.html` (b8@46k vs 38k vs 60k, cùng Vocos + sh25 α=1,5;
   4 clip giàu ngã/nặng + 5 cặp tối thiểu + orig/copy) — **không commit** (đúng luật demo).
+
+## §50. R/T — Data v3.1 (audio b8 + CHỈ cap pause 0,7s): trượt y hệt v3 ⇒ **DFN vô can, cap pause là thủ phạm** (20/10/2026)
+
+**Thiết kế**: 1 biến số duy nhất so với b8 — audio v2 (đúng bản b8, KHÔNG DFN) + cắt mọi gap >66 frame
+về 66 (0,704s). Chain: `tools/chain_data_v31.sh` (build → cắt segment → seg4 → QC → cache v31 → train).
+**Kết quả (train 43k/60k, dừng vì đã đủ kết luận)**:
+
+| chỉ số (cùng val v31, 300 segment) | v31 | b8 (chấm lại) | mốc b8 trên val v2 |
+|---|---|---|---|
+| mel_l1_z | 1,9221 | 1,9156 | **1,1494** |
+| độ nét `rough` | **0,189** | **0,325** | 0,34 |
+| thanh C | **0,439** | **0,730** | 0,762 (trần thật 0,799) |
+| dB | 15,18 | 15,08 | 8,5 |
+
+- Val curve: v31 kẹt **2,15→2,21** từ 1k→42k (v3: 2,03→2,07; v2 small_filt: 0,83→0,65) ⇒ **train hỏng giống hệt v3**.
+- Audit dữ liệu v31: timeline khớp tuyệt đối (lead+dur+gap=T, lệch 0), seg=dur, onset≈lead+6–8 frame,
+  mức −26 dBFS ⇒ **cấu trúc đúng**; overfit 6 mẫu (cả clip sạch lẫn clip nhiễu v3) đều học được (mel 0,28)
+  ⇒ data/pipeline không hỏng.
+- Recipe "sane" (lr 5e-4, clip 5, bỏ phase A) trên full v3: val 1,93 vs 1,96 ⇒ **không phải recipe**.
+
+**Kết luận**:
+1. **DFN vô can** — v31 không có DFN vẫn trượt y hệt ⇒ loại nghi phạm DFN.
+2. **Cap pause ở mức dữ liệu (sửa audio + timeline) là thủ phạm**: model v31 bị **mờ + mất thanh**
+   (rough 0,19 · thanh C 0,44) y như v3; ngay b8 (model tốt) chấm trên val v31 cũng lệch mel_z
+   (1,92 vs 1,15) do layout pause khác ⇒ metric dễ bị lẫn khi so chéo kiểu dữ liệu.
+3. Cơ chế chính xác chưa chốt (ứng viên: frame mel ở mối nối, gap đồng loạt 66, mật độ segment) —
+   nhưng **đường sửa nên là KHÔNG sửa audio**.
+
+**Next**: **v3.2 = audio/cache b8 NGUYÊN BẢN + cắt segment tại gap >0,7s (clause-level) + pause lúc
+suy luận** (chunking sẵn có 0,15/0,08/0,05 + dấu câu). Không rebuild cache → train nhanh.
+Cổng: mel_z ≤ b8±10% · rough ≥0,30 · thanh C ≥0,70 · lặng giữa câu ≤0,6s.
