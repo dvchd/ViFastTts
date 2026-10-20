@@ -67,15 +67,16 @@ def normalize(wav: np.ndarray) -> np.ndarray:
 
 
 def load_old_seg(path: str) -> dict[str, dict[str, Any]]:
-    """Gom segment cũ theo `parent`: danh sách (thứ tự âm tiết, seg4, method...)."""
+    """Gom nhãn seg cũ theo clip: dạng segment (có `parent` + `frame_range`) hoặc clip-level (holdout)."""
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for line in (ROOT / path).read_text(encoding="utf-8").splitlines():
         if line.strip():
             row = json.loads(line)
-            grouped[str(row["parent"])].append(row)
+            grouped[str(row.get("parent") or row["id"])].append(row)
     merged: dict[str, dict[str, Any]] = {}
     for parent, segs in grouped.items():
-        segs.sort(key=lambda r: int(r["frame_range"][0]))
+        if segs[0].get("parent") is not None:  # dạng segment: sắp theo thứ tự âm tiết
+            segs.sort(key=lambda r: int(r["frame_range"][0]))
         merged[parent] = {
             "syllables": [s for seg in segs for s in seg["syllables"]],
             "seg4": [d for seg in segs for d in seg.get("seg_durations", [])],
@@ -156,6 +157,8 @@ def main() -> None:
     parser.add_argument("--old-seg", required=True)
     parser.add_argument("--denoised-dir", default="data/codelung/v3/denoised")
     parser.add_argument("--out-dir", default="data/codelung/v3")
+    parser.add_argument("--audio-prefix", default="data/codelung/v3/audio",
+                        help="tiền tố `audio_path` ghi vào manifest (v3.1 dùng data/codelung/v31/audio)")
     args = parser.parse_args()
 
     denoised_dir = ROOT / args.denoised_dir
@@ -177,6 +180,7 @@ def main() -> None:
                 else:
                     skipped_mismatch += 1
                 continue
+            built["audio_path"] = f"{args.audio_prefix}/{Path(str(row['audio_path'])).name}"
             kept.append(built)
         name = Path(manifest).stem.replace("_clean_v2_dur", "")
         out_path = out_dir / f"{name}_clean_v2_dur.jsonl"
