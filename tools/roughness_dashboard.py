@@ -108,6 +108,8 @@ def main() -> None:
     parser.add_argument("--clips", type=int, default=8)
     parser.add_argument("--device", default="mps")
     parser.add_argument("--sharpen-alpha", type=float, default=1.5)
+    parser.add_argument("--filter-syllable", default=None,
+                        help="Chỉ lấy segment chứa chuỗi này (vd 'mới')")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
@@ -127,7 +129,11 @@ def main() -> None:
     out = Path(args.out)
     rows_page: list[dict] = []
 
-    for index in range(min(args.clips, len(dataset))):
+    indices = list(range(len(dataset)))
+    if args.filter_syllable:
+        indices = [i for i in indices if args.filter_syllable in str(dataset.rows[i].get("text", ""))]
+        print(f"[roughness] lọc '{args.filter_syllable}': {len(indices)} segment")
+    for index in indices[: args.clips]:
         row = dataset.rows[index]
         item = dataset[index]
         features = item["features"].unsqueeze(0).to(engine.device)
@@ -176,7 +182,11 @@ def main() -> None:
             syllable_end = min(n, (cursor + dur) * _HOP + 400)
             _write_wav(clip_dir / "real" / f"{name}.wav", real[syllable_start:syllable_end])
             _write_wav(clip_dir / "synth" / f"{name}.wav", synth[syllable_start:syllable_end])
+            tail_start = int((cursor + dur * 0.5) * _HOP)
+            tail_end = int((cursor + dur) * _HOP)
             page_rows.append({"i": i, "raw": raw, "tone": tone, "real": real_m, "synth": synth_m,
+                              "tail_real": syllable_metrics(real, tail_start, tail_end),
+                              "tail_synth": syllable_metrics(synth, tail_start, tail_end),
                               "name": name})
             cursor += dur + (gaps[i] if i < len(gaps) else 0)
         if page_rows:
@@ -203,11 +213,14 @@ def main() -> None:
         lines.append(f"<div class='clip'><h2>{html.escape(clip['id'])} <small>{html.escape(clip['text'])}…</small></h2>")
         lines.append("<table><tr><th>#</th><th>âm tiết</th><th>thanh</th><th>thật</th><th>synth</th>"
                      "<th>CPP thật</th><th>CPP synth</th><th>ΔCPP</th><th>HNR thật</th><th>HNR synth</th>"
-                     "<th>ΔHNR</th><th>jitter thật</th><th>jitter synth</th><th>AP 2–6k thật</th><th>AP 2–6k synth</th></tr>")
+                     "<th>ΔHNR</th><th>jitter thật</th><th>jitter synth</th><th>AP 2–6k thật</th><th>AP 2–6k synth</th><th>CPP đuôi thật</th><th>CPP đuôi synth</th><th>ΔCPP đuôi</th></tr>")
         for r in clip["rows"]:
             d_cpp = r["synth"]["cpp"] - r["real"]["cpp"]
             d_hnr = r["synth"]["hnr"] - r["real"]["hnr"]
-            cls = " class='bad'" if d_cpp <= -2.0 else (" class='warn'" if d_cpp <= -1.0 else "")
+            tail_r, tail_s = r.get("tail_real"), r.get("tail_synth")
+            d_tail = (tail_s["cpp"] - tail_r["cpp"]) if tail_r and tail_s else float("nan")
+            worst = min(d_cpp, d_tail if np.isfinite(d_tail) else d_cpp)
+            cls = " class='bad'" if worst <= -2.0 else (" class='warn'" if worst <= -1.0 else "")
             lines.append(
                 f"<tr{cls}><td>{r['i']}</td><td>{html.escape(r['raw'])}</td><td>{html.escape(r['tone'])}</td>"
                 f"<td><audio controls preload='none' src='clips/{clip['id']}/real/{r['name']}.wav'></audio></td>"
@@ -215,7 +228,10 @@ def main() -> None:
                 f"<td>{fmt(r['real']['cpp'])}</td><td>{fmt(r['synth']['cpp'])}</td>"
                 f"<td><b>{d_cpp:+.2f}</b></td><td>{fmt(r['real']['hnr'])}</td><td>{fmt(r['synth']['hnr'])}</td>"
                 f"<td>{d_hnr:+.2f}</td><td>{fmt(r['real']['jitter'])}</td><td>{fmt(r['synth']['jitter'])}</td>"
-                f"<td>{fmt(r['real']['ap_2_6k'], 3)}</td><td>{fmt(r['synth']['ap_2_6k'], 3)}</td></tr>")
+                f"<td>{fmt(r['real']['ap_2_6k'], 3)}</td><td>{fmt(r['synth']['ap_2_6k'], 3)}</td>"
+                f"<td>{fmt(tail_r['cpp']) if tail_r else '—'}</td>"
+                f"<td>{fmt(tail_s['cpp']) if tail_s else '—'}</td>"
+                f"<td>{d_tail:+.2f}</td></tr>")
         lines.append("</table></div>")
     lines.append("</body></html>")
     out.mkdir(parents=True, exist_ok=True)
@@ -230,6 +246,18 @@ def main() -> None:
         d_hnr = np.array([r["synth"]["hnr"] - r["real"]["hnr"] for r in all_rows])
         print(f"\nTổng {len(all_rows)} âm tiết · ΔCPP trung vị {np.median(d_cpp):+.2f} dB "
               f"(≤−2 dB: {(d_cpp <= -2).sum()}) · ΔHNR trung vị {np.median(d_hnr):+.2f} dB")
+        tails = np.array([r["tail_synth"]["cpp"] - r["tail_real"]["cpp"] for r in all_rows
+                          if r.get("tail_real") and r.get("tail_synth")], dtype=np.float64)
+        tails = tails[np.isfinite(tails)]
+        if tails.size:
+            print(f"Đuôi âm tiết: ΔCPP trung vị {np.median(tails):+.2f} dB · ≤−2 dB: {(tails <= -2).sum()}/{tails.size}")
+            for tone in ("NGANG", "HUYEN", "SAC", "HOI", "NGA", "NANG"):
+                sel = [r for r in all_rows if r["tone"] == tone and r.get("tail_real") and r.get("tail_synth")]
+                if sel:
+                    vals = np.array([r["tail_synth"]["cpp"] - r["tail_real"]["cpp"] for r in sel], dtype=np.float64)
+                    vals = vals[np.isfinite(vals)]
+                    if vals.size:
+                        print(f"  đuôi {tone:6s} n={vals.size:3d} · ΔCPP {np.median(vals):+.2f}")
     print(f"Xong: mở {out / 'index.html'}")
 
 
