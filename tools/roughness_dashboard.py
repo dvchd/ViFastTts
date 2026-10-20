@@ -217,6 +217,9 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     (out / "index.html").write_text("\n".join(lines), encoding="utf-8")
 
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "metrics.json").write_text(json.dumps(rows_page, ensure_ascii=False, indent=1), encoding="utf-8")
+
     all_rows = [r for clip in rows_page for r in clip["rows"]]
     if all_rows:
         d_cpp = np.array([r["synth"]["cpp"] - r["real"]["cpp"] for r in all_rows])
