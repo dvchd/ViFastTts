@@ -1799,3 +1799,29 @@ về 66 (0,704s). Chain: `tools/chain_data_v31.sh` (build → cắt segment → 
 **Next**: **v3.2 = audio/cache b8 NGUYÊN BẢN + cắt segment tại gap >0,7s (clause-level) + pause lúc
 suy luận** (chunking sẵn có 0,15/0,08/0,05 + dấu câu). Không rebuild cache → train nhanh.
 Cổng: mel_z ≤ b8±10% · rough ≥0,30 · thanh C ≥0,70 · lặng giữa câu ≤0,6s.
+
+## §51. Chế độ "đọc đều" ở runtime — pause CỐ ĐỊNH theo dấu câu (20/10/2026)
+
+**Vấn đề**: b8 tự đặt pause nội câu (0,6–1,1s, có khi sai chỗ); bản "flat" trước chỉ chặn pause
+model (gate 0,999) nhưng **không có pause dấu câu** → đọc dính hoàn toàn.
+
+**Giải pháp** (không đổi model, không đổi dữ liệu):
+- `frontend/chunking.py`: `split_clauses` (cắt tại **mọi** dấu câu, giữ dấu ở cuối mảnh) +
+  `steady_pause_seconds` — hằng số `STEADY_PAUSE_DEFAULT=0,08` · `STEADY_PAUSE_COMMA=0,25` ·
+  `STEADY_PAUSE_PERIOD=0,55`.
+- `Synthesizer.iter_synthesize_steady/synthesize_steady` (PyTorch) và `steady=True` trong
+  `iter_synthesize_onnx/synthesize_onnx` (ONNX); gate mặc định 0,999 (chặn pause model học).
+- CLI `synthesize`/`synthesize-onnx`: `--steady --pause-comma 0.25 --pause-period 0.55
+  --pause-default 0.08` (và `--gate-threshold` mặc định đổi theo chế độ).
+- Tool demo (đã promote): `tools/steady_demo.py` + `examples/steady_texts.json`.
+
+**Số đo demo** (b8 best, sh25 α=1,5; lặng ≥0,15s đo trên WAV):
+
+| bản | pause đo được | nhận xét |
+|---|---|---|
+| normal (gate 0,5) | 0,62–1,10s, 1–6 khoảng, có chỗ giữa mệnh đề | pause model học, không đều |
+| flat (gate 0,999) | **0** khoảng ≥0,15s | dính hoàn toàn |
+| **steady** | **chấm 0,59–0,63s · phẩy 0,27–0,32s** | đúng chính sách, đều |
+
+Nghe: `artifacts/listen_small_filt/steady/index.html` (không commit).
+Test: `tests/test_chunking.py` (split/steady pause) + `tests/test_steady_mode.py` (chèn nghỉ + gate).

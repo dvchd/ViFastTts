@@ -330,8 +330,14 @@ def synthesize_cmd(
     output: str = typer.Option(..., help="File WAV đầu ra"),
     dialect: str = typer.Option("north", help="north, central hoặc south"),
     speed: float = typer.Option(1.0, help="Tốc độ đọc (1.0 là gốc)"),
-    gate_threshold: float = typer.Option(0.5, "--gate-threshold",
-                                          help="Ngưỡng gate pause (V11.A7; mặc định 0.5)"),
+    gate_threshold: float | None = typer.Option(None, "--gate-threshold",
+                                          help="Ngưỡng gate pause (mặc định 0.5; khi --steady mặc định 0.999)"),
+    steady: bool = typer.Option(False, "--steady",
+                                help="Chế độ đọc đều: cắt tại dấu câu + nghỉ CỐ ĐỊNH (không dùng pause model học)"),
+    pause_comma: float = typer.Option(0.25, "--pause-comma", help="Nghỉ sau phẩy/chấm phẩy (giây, --steady)"),
+    pause_period: float = typer.Option(0.55, "--pause-period", help="Nghỉ sau chấm/hỏi/than (giây, --steady)"),
+    pause_default: float = typer.Option(0.08, "--pause-default",
+                                        help="Nghỉ mặc định khi mảnh không có dấu câu (giây, --steady)"),
     sharpen_alpha: float = typer.Option(1.5, "--sharpen-alpha",
                                          help="Làm nét mel = sh25 (1.5 = mức người dùng chọn; 0 = tắt)"),
     vocoder_checkpoint: str | None = typer.Option(None, help="Checkpoint vocoder (tùy chọn)"),
@@ -340,15 +346,30 @@ def synthesize_cmd(
     max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
     device: str = typer.Option("auto", help="auto | cpu | cuda | mps"),
 ) -> None:
-    """Tổng hợp WAV bằng PyTorch (chunk câu dài, override, chuẩn hoá đỉnh tuỳ chọn)."""
-    from vifasttts.infer import load_overrides, synthesize
-    samples, sample_rate = synthesize(
-        load_config(config), checkpoint, text, output,
-        dialect=dialect, speed=speed, gate_threshold=gate_threshold,
-        sharpen_alpha=sharpen_alpha, vocoder_checkpoint=vocoder_checkpoint,
-        overrides=load_overrides(overrides) if overrides else None,
-        peak_normalize=peak_normalize, max_chars=max_chars, device=device,
-    )
+    """Tổng hợp WAV bằng PyTorch (chunk câu dài, override, chuẩn hoá đỉnh tuỳ chọn).
+
+    `--steady`: chế độ "đọc đều" — model không tự đặt pause nội câu (gate 0,999),
+    runtime chèn nghỉ cố định: phẩy 0,25s · chấm/hỏi/than 0,55s (chỉnh bằng
+    `--pause-comma/--pause-period/--pause-default`).
+    """
+    from vifasttts.infer import Synthesizer, load_overrides
+
+    gate = gate_threshold if gate_threshold is not None else (0.999 if steady else 0.5)
+    engine = Synthesizer(load_config(config), checkpoint, vocoder_checkpoint, device=device)
+    overrides_dict = load_overrides(overrides) if overrides else None
+    if steady:
+        samples, sample_rate = engine.synthesize_steady(
+            text, output, dialect=dialect, speed=speed, gate_threshold=gate,
+            sharpen_alpha=sharpen_alpha, overrides=overrides_dict,
+            peak_normalize=peak_normalize, max_chars=max_chars,
+            pause_comma=pause_comma, pause_period=pause_period, pause_default=pause_default,
+        )
+    else:
+        samples, sample_rate = engine.synthesize(
+            text, output, dialect=dialect, speed=speed, gate_threshold=gate,
+            sharpen_alpha=sharpen_alpha, overrides=overrides_dict,
+            peak_normalize=peak_normalize, max_chars=max_chars,
+        )
     typer.echo(f"Đã ghi {output} ({samples} mẫu @ {sample_rate} Hz)")
 
 
@@ -360,22 +381,35 @@ def synthesize_onnx_cmd(
     output: str = typer.Option(..., help="File WAV đầu ra"),
     dialect: str = typer.Option("north", help="north, central hoặc south"),
     speed: float = typer.Option(1.0, help="Tốc độ đọc (xấp xỉ bằng co giãn mel)"),
-    gate_threshold: float = typer.Option(0.5, "--gate-threshold",
-                                          help="Ngưỡng gate pause (V11.A7; mặc định 0.5)"),
+    gate_threshold: float | None = typer.Option(None, "--gate-threshold",
+                                          help="Ngưỡng gate pause (mặc định 0.5; khi --steady mặc định 0.999)"),
+    steady: bool = typer.Option(False, "--steady",
+                                help="Chế độ đọc đều: cắt tại dấu câu + nghỉ CỐ ĐỊNH"),
+    pause_comma: float = typer.Option(0.25, "--pause-comma", help="Nghỉ sau phẩy/chấm phẩy (giây, --steady)"),
+    pause_period: float = typer.Option(0.55, "--pause-period", help="Nghỉ sau chấm/hỏi/than (giây, --steady)"),
+    pause_default: float = typer.Option(0.08, "--pause-default",
+                                        help="Nghỉ mặc định khi mảnh không có dấu câu (giây, --steady)"),
     overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc'"),
     peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
     max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
     provider: str = typer.Option("auto", help="auto | cpu | cuda | coreml | tensorrt"),
 ) -> None:
-    """Tổng hợp bằng ONNX Runtime + numpy (không cần PyTorch)."""
+    """Tổng hợp bằng ONNX Runtime + numpy (không cần PyTorch).
+
+    `--steady`: chế độ "đọc đều" — model không tự đặt pause nội câu (gate 0,999),
+    runtime chèn nghỉ cố định: phẩy 0,25s · chấm/hỏi/than 0,55s.
+    """
     from vifasttts.infer import load_overrides
     from vifasttts.runtime.onnx_engine import synthesize_onnx
 
+    gate = gate_threshold if gate_threshold is not None else (0.999 if steady else 0.5)
     samples, sample_rate = synthesize_onnx(
         text, acoustic, output, vocoder_path=vocoder,
-        dialect=dialect, speed=speed, gate_threshold=gate_threshold,
+        dialect=dialect, speed=speed, gate_threshold=gate,
         overrides=load_overrides(overrides) if overrides else None,
         peak_normalize=peak_normalize, max_chars=max_chars, provider=provider,
+        steady=steady, pause_comma=pause_comma, pause_period=pause_period,
+        pause_default=pause_default,
     )
     typer.echo(f"Đã ghi {output} ({samples} mẫu @ {sample_rate} Hz)")
 

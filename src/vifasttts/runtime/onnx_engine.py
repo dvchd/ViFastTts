@@ -16,7 +16,15 @@ from typing import Any
 
 import numpy as np
 
-from vifasttts.frontend.chunking import chunk_text, pause_seconds
+from vifasttts.frontend.chunking import (
+    STEADY_PAUSE_COMMA,
+    STEADY_PAUSE_DEFAULT,
+    STEADY_PAUSE_PERIOD,
+    chunk_text,
+    pause_seconds,
+    split_clauses,
+    steady_pause_seconds,
+)
 from vifasttts.frontend.normalizer import NormalizerOptions
 from vifasttts.frontend.pipeline import parse_text
 from vifasttts.frontend.vocab import ComponentVocabs
@@ -206,10 +214,15 @@ def synthesize_onnx(
     max_chars: int = 400,
     sample_rate: int | None = None,
     provider: str = "auto",
+    steady: bool = False,
+    pause_comma: float = STEADY_PAUSE_COMMA,
+    pause_period: float = STEADY_PAUSE_PERIOD,
+    pause_default: float = STEADY_PAUSE_DEFAULT,
 ) -> tuple[int, int]:
     """text → WAV bằng ONNX Runtime + numpy (không cần PyTorch).
 
     `provider`: auto|cpu|cuda|coreml|tensorrt — xem `resolve_providers`.
+    `steady`: chế độ "đọc đều" — nghỉ cố định theo dấu câu (`iter_synthesize_onnx`).
     """
     from vifasttts.infer import write_wav
 
@@ -219,6 +232,8 @@ def synthesize_onnx(
         text, acoustic_path, vocoder_path=vocoder_path, dialect=dialect, speed=speed,
         gate_threshold=gate_threshold,
         overrides=overrides, max_chars=max_chars, sample_rate=sample_rate, provider=provider,
+        steady=steady, pause_comma=pause_comma, pause_period=pause_period,
+        pause_default=pause_default,
     ):
         rate = chunk_rate
         pieces.append(audio)
@@ -240,14 +255,22 @@ def iter_synthesize_onnx(
     max_chars: int = 400,
     sample_rate: int | None = None,
     provider: str = "auto",
+    steady: bool = False,
+    pause_comma: float = STEADY_PAUSE_COMMA,
+    pause_period: float = STEADY_PAUSE_PERIOD,
+    pause_default: float = STEADY_PAUSE_DEFAULT,
 ) -> Iterator[tuple[np.ndarray, int]]:
-    """Streaming ONNX: yield (waveform numpy, sample_rate) từng đoạn + khoảng nghỉ."""
+    """Streaming ONNX: yield (waveform numpy, sample_rate) từng đoạn + khoảng nghỉ.
+
+    `steady=True`: cắt tại mọi dấu câu + nghỉ cố định (`pause_comma` sau phẩy;
+    `pause_period` sau chấm/hỏi/than; `pause_default` cho phần còn lại).
+    """
     acoustic = OnnxAcousticModel(acoustic_path, provider)
     vocoder = OnnxVocoder(vocoder_path, sample_rate=sample_rate, provider=provider)
     rate = sample_rate or vocoder.sample_rate or int(acoustic.metadata.get("sample_rate", 24000))
     options = NormalizerOptions(dialect=dialect, exact_overrides=dict(overrides or {}))  # type: ignore[arg-type]
 
-    chunks = chunk_text(text, max_chars=max_chars)
+    chunks = split_clauses(text, max_chars=max_chars) if steady else chunk_text(text, max_chars=max_chars)
     if not chunks:
         raise ValueError("Không có âm tiết nào để tổng hợp")
     rendered_any = False
@@ -262,7 +285,9 @@ def iter_synthesize_onnx(
         yield vocoder.waveform(mel), rate
         rendered_any = True
         if index < len(chunks) - 1:
-            pause = int(rate * pause_seconds(chunk))
+            seconds = (steady_pause_seconds(chunk, comma=pause_comma, period=pause_period,
+                                            default=pause_default) if steady else pause_seconds(chunk))
+            pause = int(rate * seconds)
             if pause:
                 yield np.zeros(pause, dtype=np.float32), rate
     if not rendered_any:  # pragma: no cover - chunk_text đã bảo đảm không rỗng

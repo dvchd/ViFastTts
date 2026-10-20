@@ -15,7 +15,15 @@ from pathlib import Path
 import numpy as np
 
 from vifasttts.config import validate_config
-from vifasttts.frontend.chunking import chunk_text, pause_seconds
+from vifasttts.frontend.chunking import (
+    STEADY_PAUSE_COMMA,
+    STEADY_PAUSE_DEFAULT,
+    STEADY_PAUSE_PERIOD,
+    chunk_text,
+    pause_seconds,
+    split_clauses,
+    steady_pause_seconds,
+)
 from vifasttts.frontend.pipeline import parse_text
 
 
@@ -224,6 +232,79 @@ class Synthesizer:
         pieces = [audio for audio, _ in self.iter_synthesize(
             text, dialect=dialect, speed=speed, gate_threshold=gate_threshold,
             sharpen_alpha=sharpen_alpha, overrides=overrides, max_chars=max_chars,
+        )]
+        waveform = postprocess(np.concatenate(pieces), self.sample_rate,
+                               target_db=-3.0 if peak_normalize else None)
+        write_wav(output, waveform, self.sample_rate)
+        return int(waveform.size), self.sample_rate
+
+    def iter_synthesize_steady(
+        self,
+        text: str,
+        *,
+        dialect: str = "north",
+        speed: float = 1.0,
+        gate_threshold: float = 0.999,
+        sharpen_alpha: float = 0.0,
+        overrides: dict[str, str] | None = None,
+        max_chars: int = 400,
+        pause_comma: float = STEADY_PAUSE_COMMA,
+        pause_period: float = STEADY_PAUSE_PERIOD,
+        pause_default: float = STEADY_PAUSE_DEFAULT,
+    ) -> Iterator[tuple[np.ndarray, int]]:
+        """Chế độ "đọc đều": nghỉ CỐ ĐỊNH theo dấu câu, chặn pause model học.
+
+        Cắt tại mọi dấu câu (`split_clauses`); mỗi mảnh tổng hợp với
+        `gate_threshold` cao (mặc định 0,999 — gần như chặn hết pause nội câu),
+        rồi chèn khoảng nghỉ: sau phẩy `pause_comma`, sau chấm/hỏi/than
+        `pause_period`, mảnh không dấu `pause_default`.
+        """
+        from vifasttts.frontend.normalizer import NormalizerOptions
+
+        options = NormalizerOptions(dialect=dialect, exact_overrides=dict(overrides or {}))  # type: ignore[arg-type]
+        chunks = split_clauses(text, max_chars=max_chars)
+        if not chunks:
+            raise ValueError("Không có âm tiết nào để tổng hợp")
+        rendered_any = False
+        for index, chunk in enumerate(chunks):
+            rendered = self._render(chunk, dialect, speed, options,
+                                    gate_threshold=gate_threshold, sharpen_alpha=sharpen_alpha)
+            if rendered is None:
+                continue
+            rendered_any = True
+            yield rendered, self.sample_rate
+            if index < len(chunks) - 1:
+                seconds = steady_pause_seconds(chunk, comma=pause_comma,
+                                               period=pause_period, default=pause_default)
+                silence = int(self.sample_rate * seconds)
+                if silence:
+                    yield np.zeros(silence, dtype=np.float32), self.sample_rate
+        if not rendered_any:
+            raise ValueError("Không có âm tiết nào để tổng hợp")
+
+    def synthesize_steady(
+        self,
+        text: str,
+        output: str | Path,
+        *,
+        dialect: str = "north",
+        speed: float = 1.0,
+        gate_threshold: float = 0.999,
+        sharpen_alpha: float = 0.0,
+        overrides: dict[str, str] | None = None,
+        peak_normalize: bool = False,
+        max_chars: int = 400,
+        pause_comma: float = STEADY_PAUSE_COMMA,
+        pause_period: float = STEADY_PAUSE_PERIOD,
+        pause_default: float = STEADY_PAUSE_DEFAULT,
+    ) -> tuple[int, int]:
+        """Ghép các mảnh "đọc đều" (pause cố định theo dấu câu), ghi WAV."""
+        from vifasttts.runtime.postprocess import postprocess
+
+        pieces = [audio for audio, _ in self.iter_synthesize_steady(
+            text, dialect=dialect, speed=speed, gate_threshold=gate_threshold,
+            sharpen_alpha=sharpen_alpha, overrides=overrides, max_chars=max_chars,
+            pause_comma=pause_comma, pause_period=pause_period, pause_default=pause_default,
         )]
         waveform = postprocess(np.concatenate(pieces), self.sample_rate,
                                target_db=-3.0 if peak_normalize else None)
