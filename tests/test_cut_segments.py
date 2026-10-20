@@ -56,6 +56,31 @@ def test_cut_manifest_xuat_segment_co_frame_range(tmp_path: Path):
     _ = segments[1].get("pauses", True)  # pauses không bắt buộc giữ trong row segment
 
 
+def test_cut_manifest_max_gap_tach_tai_pause_dai(tmp_path: Path):
+    """v3.2: gap dài (> trần) thành RANH GIỚI segment; gap đuôi bị cắt cụt; bất biến giữ nguyên."""
+    # durations [6,6,6,6] + gaps [3,40,3,0] → spans [(0,6),(9,15),(55,61),(64,70)]; gap dài sau âm tiết 1.
+    row = {
+        "id": "v1_0003", "audio_path": "/tmp/khong_can_audio.wav", "text": "a b c d",
+        "syllables": [{"raw": x} for x in ("a", "b", "c", "d")],
+        "durations": [6, 6, 6, 6], "gaps": [3, 40, 3, 0], "lead_frames": 0,
+    }
+    manifest = tmp_path / "m4.jsonl"
+    manifest.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
+    stats = cut_manifest(manifest, tmp_path / "m4_seg.jsonl", min_frames=10, max_frames=100,
+                         floor_frames=0, max_gap_frames=20)
+    segments = [json.loads(line) for line in (tmp_path / "m4_seg.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert stats["segments"] == 2 and stats["long_gaps"] == 1
+    # Đoạn 1: dừng ngay sau âm tiết 1, gap đuôi 40 → cắt cụt còn 20
+    assert segments[0]["durations"] == [6, 6] and segments[0]["gaps"] == [3, 20]
+    assert segments[0]["frame_range"] == [0, 35]
+    # Đoạn 2: bắt đầu ở âm tiết 2 (frame 55), không nuốt pause dài
+    assert segments[1]["frame_range"] == [55, 70]
+    for segment in segments:
+        span = segment["frame_range"][1] - segment["frame_range"][0]
+        assert sum(segment["durations"]) + sum(segment["gaps"]) == span
+        assert max(segment["gaps"][:-1], default=0) <= 20  # không còn gap nội bộ dài
+
+
 def test_cut_manifest_tach_gaps_va_lead(tmp_path: Path):
     # durations [12,3,12] + gaps [4,10,5] + lead 7 → spans [(7,19),(23,26),(36,48)] (T=53).
     # A2 (§43.1): segment **gồm pause đuôi** ⇒ segment (0,2) frame_range [7,36] (bỏ lead 7 nhưng

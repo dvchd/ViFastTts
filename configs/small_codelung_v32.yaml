@@ -1,0 +1,156 @@
+# ViFastTts — acoustic **v3.2**: audio/cache b8 NGUYÊN BẢN + segment cắt tại gap >60 frame
+# (0,64 s) — pause dài thành ranh giới segment, không sửa audio (§50–§52).
+# ViFastTts — acoustic **v2** (5 slot O/M/N/C/G + phonation). Dùng cho cache v3 + train v2.
+# Khác `small_codelung.yaml` (B0/v1) CHỈ ở block phonation (+ use_phonation) — khoá cache
+# `feature_cache_key` gồm mel/sample_rate/f0/phonation nên cache v3 **không đè** cache v2.
+# Quyết định R6 (docs/ACOUSTIC_V2.md §20): bật phonation, kênh hnr/glottalization/jitter/aper.
+project: ViFastTts
+seed: 42
+language: vi
+sample_rate: 24000
+
+# Run thật: small (6,1M) trên dataset kênh @codelung (13.225 clip · 51,07 giờ).
+# Đo thật trên Mac mini M6: model MPS 0,478 s/bước, dataloader 6,31 s/batch (nghẽn)
+# → cache feature trước (cache-features --workers 8), sau đó 60k bước ≈ 9-10h.
+# Xem docs/TRAINING_RUN_CODELUNG.md.
+input:
+  unit: syllable
+  features: [onset, medial, nucleus, coda, tone, boundary, punctuation]
+  dialect_conditioning: false
+  speaker_conditioning: false
+  style_conditioning: false
+
+mel:
+  n_fft: 1024
+  win_length: 1024
+  hop_length: 256
+  n_mels: 100
+  f_min: 0
+  f_max: 12000
+  # Biểu diễn mel khớp CHÍNH XÁC `charactr/vocos-mel-24khz` (R7-1, docs/VOCODER_VOCOS.md):
+  #  - norm: none   → tam giác thô, không chuẩn hoá Slaney (torchaudio/mel Vocos norm=None);
+  #  - clamp 1e-7   → `safe_log` của Vocos (log(clamp(x, 1e-7))), giữ z-score làm affine khử được.
+  # Đổi bất kỳ mục nào ở đây = đổi mel_hash → tính lại stats + cache (rẻ trong lần dựng lại này).
+  norm: none
+  log_magnitude: true
+  log_floor: 1e-7
+  log_floor_mode: clamp
+  normalize_path: data/codelung/mel_stats.json
+
+# F0: pyworld harvest + stonemask (thay autocorrelation — tránh lỗi quãng tám), cần extra 'f0'.
+f0:
+  method: pyworld
+  f_min: 70
+  f_max: 400
+  interpolate: true
+
+model:
+  component_dim: 64
+  hidden_size: 192
+  encoder_layers: 4
+  decoder_layers: 2
+  attention_heads: 4
+  ffn_size: 768
+  conv_kernel_size: 15
+  dropout: 0.1
+  duration_layers: 3
+  variance_layers: 3
+  use_phonation: true   # v2: variance head nhận 3 kênh chọn ở R6 (hnr · jitter · glottalization)
+  use_postnet: true   # F2: 5 lớp conv residual làm nét mel (+1,24M tham số); loss dùng cả mel trước
+
+training:
+  batch_size: 8           # gộp **cùng N** bằng SameNBatchSampler (batch 1 = thấy ít mẫu/giờ)
+  learning_rate: 0.0002
+  weight_decay: 0.0001
+  max_steps: 60000
+  phase_a_steps: 2000        # §11: đóng băng embedding/encoder/duration, LR 0.25×
+  phase_a_lr_scale: 0.25
+  phase_b_warmup_steps: 2000 # §11: mở khóa → warm-up LR lên base rồi cosine
+  warmup_steps: 6000         # (v1) — train-v2 không dùng
+  lr_schedule: cosine
+  min_lr_ratio: 0.05
+  lr_decay_steps: 60000   # mốc cuối TOÀN CỤC cho cosine (không phải mốc cuối mỗi khối)
+  early_stop_patience: 0  # đủ dài để cosine phát huy (val chững từ 8k; nếu tới ~33k vẫn không cải thiện mới dừng)
+  grad_clip: 1.0
+  log_every: 50
+  validate_every: 1000
+  validate_batches: 40   # MPS: validation dài làm phình bộ nhớ Metal → lấy 40 batch
+  save_every: 1000
+  num_workers: 0         # batch 1 + cache đọc trực tiếp; nhiều worker dễ trùng đọc cache
+  mixed_precision: false
+  device: auto
+  cache_features: false
+  cache_dir: cache/codelung_v2   # cache v3 (phonation) — cùng thư mục, khoá theo config
+
+f0_stats_path: data/codelung/f0_stats_v2.json  # ngoài block `f0` — tránh đổi khoá cache v3
+
+adversarial:              # T4.1 — mel discriminator đa thang, TRAIN-ONLY (D tách khỏi checkpoint/ONNX)
+  enabled: false          # bật bằng `--adversarial` (resume sau khi L1 hội tụ)
+  start_step: 0           # TƯƠNG ĐỐI so với bước lúc resume (0 = bật ngay, có warm-up D)
+  d_warmup_steps: 1000    # chỉ train D trong ngần này bước đầu (pattern warm-up D)
+  mode: bce             # BCE (gradient bão hoà) — lsgan đã gây phân kỳ vì logits D phình to
+  d_learning_rate: 0.0001    # hạ từ 2e-4 sau lần phân kỳ đầu (D thắng quá nhanh)
+  ramp_steps: 2000           # trọng số adversarial 0→1 tuyến tính sau warm-up D
+  spectral_norm: true        # chuẩn hoá phổ conv của D (chặn Jacobian → grad G không nổ)
+  mel_adv_weight: 1.0
+  feature_matching_weight: 1.0
+  grad_clip_d: 5.0
+  scales: [1, 2, 4]
+  channels: 64
+  layers: 3
+
+phonation:
+  # R6 (docs/ACOUSTIC_V2.md §20): 3/5 ứng viên đạt cổng AUC ≥ 0,7 → bật cho cache v3 + train v2.
+  # Đạt: hnr 0,869 · jitter 0,864 · glottalization 0,763. Rớt: tilt 0,521 · aper(1–4 kHz) 0,576.
+  enabled: true
+  channels: [hnr, glottalization, jitter]
+
+vocoder_training:
+  # Fine-tune Vocos thật từ checkpoint MIT `charactr/vocos-mel-24khz` (R7-1 → R8):
+  # tải bằng `python tools/fetch_vocos_pretrained.py`, đo 0,653 s/bước MPS (b8·crop64·D ch16).
+  # Quy trình + cổng nghiệm thu: docs/VOCODER_VOCOS.md.
+  batch_size: 8
+  learning_rate: 0.00005         # G pretrained: khởi đầu 5e-5 (chưa dùng 1e-4)
+  discriminator_learning_rate: 0.0002   # D random init: học nhanh hơn G
+  max_steps: 10000               # mel thật: 5–10k (giữ chỉ khi hơn bước 0); GTA sau acoustic: +2–5k
+  warmup_steps: 0
+  lr_schedule: cosine
+  min_lr_ratio: 0.1
+  lr_decay_steps: 10000          # mốc cuối TOÀN CỤC cho cosine (chạy theo khối)
+  d_warmup_steps: 1000           # 1k bước đầu: chỉ train D, G đóng băng
+  num_workers: 6
+  log_every: 100
+  save_every: 1000
+  crop_frames: 64                # 0,68 giây @ hop 256 (gần độ dài segment train Vocos gốc)
+  generator: vocos_pretrained    # Vocos thật: head iSTFT hop mel, KHÔNG upsample
+  hidden: 512                    # dim checkpoint (512/1536/8 lớp)
+  intermediate_dim: 1536
+  generator_blocks: 8
+  pretrained_path: artifacts/pretrained/vocos-mel-24khz/pytorch_model.bin
+  pretrained_sha256: 97ec976ad1fd67a33ab2682d29c0ac7df85234fae875aefcc5fb215681a91b2a
+  discriminator: mpd_mrd         # MPD đầy đủ 2/3/5/7/11 + MRD (giữ nguyên)
+  discriminator_channels: 16     # ch=16 (D 7,7M) 0,65 s/bước; ch=32 loại (1,5 s/bước)
+  device: auto
+  grad_clip: 5.0
+  adv_loss: lsgan                # loss relu(1∓d) — đúng recipe đã train checkpoint
+  mrd_weight: 0.1                # MRD đóng góp 0.1× (Vocos gốc: mrd_loss_coeff=0.1)
+  mel_weight: 45.0               # mel L1 log-magnitude THÔ (đúng thang gốc Vocos)
+  feature_matching_weight: 1.0
+  adversarial_weight: 1.0
+  stft_weight: 0.0               # Vocos gốc không dùng MR-STFT loss cho G
+
+loss_weights:
+  mel: 1.0
+  mel_pre: 0.2    # F2: loss phụ trên mel trước postnet
+  mel_sharp: 1.0  # T4.1 (bản ổn định): khớp độ gồ ghề mel (|Δ| thời gian + tần số)
+  duration: 1.0
+  ratio: 1.0      # v2: CE phân bố slot (mask inactive + d_syl < 3 — B5)
+  f0: 1.0         # v2: L1 hệ số hình dạng s_k (z-score, mask Addendum 6 × k_mask)
+  f0_delta: 0.5   # T3.2: khớp độ dốc contour (độc lập độ dài/s0)
+  f0_prior: 0.1   # T3.2: prior mềm theo thanh cho nucleus (z-space)
+  vuv: 0.5
+  energy: 0.5
+  phonation: 0.5  # v2: L1 trên segment hữu thanh (cache v3, R6)
+  tone: 0.1       # F3: hạ từ 0.25 (aux nhẹ; mask bỏ SIL khi có SIL ở bước 4)
+  pause_gate: 0.5     # v2: BCE gate (gap ≥ 3 frame)
+  pause_gap: 0.5      # v2: MSE log1p(gap) chỉ khi gate = 1
