@@ -155,6 +155,10 @@ def main() -> None:
         n = min(real.size, synth.size)
         real, synth = real[:n], synth[:n]
 
+        real_mel = item["mel"].numpy()
+        pred_mel = outputs["mel"][0].float().cpu().numpy()
+        T_MEL = min(len(real_mel), len(pred_mel))
+        real_mel, pred_mel = real_mel[:T_MEL], pred_mel[:T_MEL]
         syllables = row["syllables"]
         durations = [int(d) for d in row["durations"]]
         gaps = [int(g) for g in row["gaps"]]
@@ -182,9 +186,16 @@ def main() -> None:
             syllable_end = min(n, (cursor + dur) * _HOP + 400)
             _write_wav(clip_dir / "real" / f"{name}.wav", real[syllable_start:syllable_end])
             _write_wav(clip_dir / "synth" / f"{name}.wav", synth[syllable_start:syllable_end])
+            flux_real = flux_synth = float("nan")
+            if i > 0:
+                lo, hi = max(0, cursor - 1), min(T_MEL, cursor + 2)
+                if hi - lo >= 2:
+                    flux_real = float(np.abs(np.diff(real_mel[lo:hi], axis=0)).mean())
+                    flux_synth = float(np.abs(np.diff(pred_mel[lo:hi], axis=0)).mean())
             tail_start = int((cursor + dur * 0.5) * _HOP)
             tail_end = int((cursor + dur) * _HOP)
             page_rows.append({"i": i, "raw": raw, "tone": tone, "real": real_m, "synth": synth_m,
+                              "flux_real": flux_real, "flux_synth": flux_synth,
                               "tail_real": syllable_metrics(real, tail_start, tail_end),
                               "tail_synth": syllable_metrics(synth, tail_start, tail_end),
                               "name": name})
