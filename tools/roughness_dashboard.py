@@ -170,8 +170,12 @@ def main() -> None:
                 cursor += dur + (gaps[i] if i < len(gaps) else 0)
                 continue
             name = f"{i:02d}_{raw}"
-            _write_wav(clip_dir / "real" / f"{name}.wav", real[max(0, nucleus_start - 800):nucleus_end + 800])
-            _write_wav(clip_dir / "synth" / f"{name}.wav", synth[max(0, nucleus_start - 800):nucleus_end + 800])
+            # Phát TRỌN âm tiết (cả coda) — trước đây cắt ở nucleus+33 ms làm mất coda,
+            # dễ nghe nhầm "mình" thành "mìn".
+            syllable_start = max(0, cursor * _HOP - 400)
+            syllable_end = min(n, (cursor + dur) * _HOP + 400)
+            _write_wav(clip_dir / "real" / f"{name}.wav", real[syllable_start:syllable_end])
+            _write_wav(clip_dir / "synth" / f"{name}.wav", synth[syllable_start:syllable_end])
             page_rows.append({"i": i, "raw": raw, "tone": tone, "real": real_m, "synth": synth_m,
                               "name": name})
             cursor += dur + (gaps[i] if i < len(gaps) else 0)
