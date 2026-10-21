@@ -331,7 +331,7 @@ def synthesize_cmd(
     dialect: str = typer.Option("north", help="north, central hoặc south"),
     speed: float = typer.Option(1.0, help="Tốc độ đọc (1.0 là gốc)"),
     gate_threshold: float | None = typer.Option(None, "--gate-threshold",
-                                          help="Ngưỡng gate pause (mặc định 0.5; khi --steady mặc định 0.999)"),
+                                          help="Ngưỡng gate pause (mặc định 0.5; khi --steady mặc định 1.01 = chặn tuyệt đối)"),
     steady: bool = typer.Option(False, "--steady",
                                 help="Chế độ đọc đều: cắt tại dấu câu + nghỉ CỐ ĐỊNH (không dùng pause model học)"),
     pause_comma: float = typer.Option(0.25, "--pause-comma", help="Nghỉ sau phẩy/chấm phẩy (giây, --steady)"),
@@ -351,16 +351,18 @@ def synthesize_cmd(
                                         help="6d: chuẩn hoá độ to TỪNG chunk trên log-mel (mặc định tắt)"),
     f0_scale: float = typer.Option(1.0, "--f0-scale",
                                    help="8b: giãn biên độ f0 quanh trung bình câu (1.0 = tắt; thử 1,25 / 1,45)"),
+    duration_clamp: bool = typer.Option(False, "--duration-clamp",
+                                        help="Kẹp duration dự đoán vào [p10,p90] corpus của âm tiết (mặc định tắt)"),
 ) -> None:
     """Tổng hợp WAV bằng PyTorch (chunk câu dài, override, chuẩn hoá đỉnh tuỳ chọn).
 
-    `--steady`: chế độ "đọc đều" — model không tự đặt pause nội câu (gate 0,999),
+    `--steady`: chế độ "đọc đều" — model không tự đặt pause nội câu (gate 1,01 = chặn tuyệt đối),
     runtime chèn nghỉ cố định: phẩy 0,25s · chấm/hỏi/than 0,55s (chỉnh bằng
     `--pause-comma/--pause-period/--pause-default`).
     """
     from vifasttts.infer import Synthesizer, load_overrides
 
-    gate = gate_threshold if gate_threshold is not None else (0.999 if steady else 0.5)
+    gate = gate_threshold if gate_threshold is not None else (1.01 if steady else 0.5)
     engine = Synthesizer(load_config(config), checkpoint, vocoder_checkpoint, device=device)
     overrides_dict = load_overrides(overrides) if overrides else None
     if steady:
@@ -370,13 +372,14 @@ def synthesize_cmd(
             peak_normalize=peak_normalize, max_chars=max_chars,
             pause_comma=pause_comma, pause_period=pause_period, pause_default=pause_default,
             target_lufs=target_lufs, chunk_loudness=chunk_loudness, f0_scale=f0_scale,
+            duration_clamp=duration_clamp,
         )
     else:
         samples, sample_rate = engine.synthesize(
             text, output, dialect=dialect, speed=speed, gate_threshold=gate,
             sharpen_alpha=sharpen_alpha, overrides=overrides_dict,
             peak_normalize=peak_normalize, max_chars=max_chars, target_lufs=target_lufs,
-            chunk_loudness=chunk_loudness, f0_scale=f0_scale,
+            chunk_loudness=chunk_loudness, f0_scale=f0_scale, duration_clamp=duration_clamp,
         )
     typer.echo(f"Đã ghi {output} ({samples} mẫu @ {sample_rate} Hz)")
 
@@ -390,7 +393,7 @@ def synthesize_onnx_cmd(
     dialect: str = typer.Option("north", help="north, central hoặc south"),
     speed: float = typer.Option(1.0, help="Tốc độ đọc (xấp xỉ bằng co giãn mel)"),
     gate_threshold: float | None = typer.Option(None, "--gate-threshold",
-                                          help="Ngưỡng gate pause (mặc định 0.5; khi --steady mặc định 0.999)"),
+                                          help="Ngưỡng gate pause (mặc định 0.5; khi --steady mặc định 1.01 = chặn tuyệt đối)"),
     steady: bool = typer.Option(False, "--steady",
                                 help="Chế độ đọc đều: cắt tại dấu câu + nghỉ CỐ ĐỊNH"),
     pause_comma: float = typer.Option(0.25, "--pause-comma", help="Nghỉ sau phẩy/chấm phẩy (giây, --steady)"),
@@ -406,13 +409,13 @@ def synthesize_onnx_cmd(
 ) -> None:
     """Tổng hợp bằng ONNX Runtime + numpy (không cần PyTorch).
 
-    `--steady`: chế độ "đọc đều" — model không tự đặt pause nội câu (gate 0,999),
+    `--steady`: chế độ "đọc đều" — model không tự đặt pause nội câu (gate 1,01 = chặn tuyệt đối),
     runtime chèn nghỉ cố định: phẩy 0,25s · chấm/hỏi/than 0,55s.
     """
     from vifasttts.infer import load_overrides
     from vifasttts.runtime.onnx_engine import synthesize_onnx
 
-    gate = gate_threshold if gate_threshold is not None else (0.999 if steady else 0.5)
+    gate = gate_threshold if gate_threshold is not None else (1.01 if steady else 0.5)
     samples, sample_rate = synthesize_onnx(
         text, acoustic, output, vocoder_path=vocoder,
         dialect=dialect, speed=speed, gate_threshold=gate,

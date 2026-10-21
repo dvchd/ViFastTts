@@ -15,7 +15,7 @@ class _Stub(Synthesizer):
         self.sample_rate = 1000  # để đếm mẫu = đếm ms
 
     def _render(self, text, dialect, speed, options, gate_threshold=0.5, sharpen_alpha=0.0,
-                chunk_loudness=False, f0_scale=1.0):
+                chunk_loudness=False, f0_scale=1.0, duration_clamp=False):
         return np.ones(10, dtype=np.float32)
 
 
@@ -31,13 +31,13 @@ def test_steady_pauses_by_punctuation():
 
 
 def test_steady_custom_pauses_and_gate_passthrough():
-    """Tham số pause tuỳ chỉnh có tác dụng; gate mặc định 0,999 được truyền xuống `_render`."""
+    """Tham số pause tuỳ chỉnh có tác dụng; gate mặc định 1,01 được truyền xuống `_render`."""
     engine = _Stub()
     gates: list[float] = []
     original = engine._render
 
     def spy(text, dialect, speed, options, gate_threshold=0.5, sharpen_alpha=0.0,
-            chunk_loudness=False, f0_scale=1.0):
+            chunk_loudness=False, f0_scale=1.0, duration_clamp=False):
         gates.append(gate_threshold)
         return original(text, dialect, speed, options, gate_threshold, sharpen_alpha)
 
@@ -46,7 +46,7 @@ def test_steady_custom_pauses_and_gate_passthrough():
         "A, b. C", pause_comma=0.3, pause_period=0.7, pause_default=0.12)]
     assert pieces[1].size == 300
     assert pieces[3].size == 700
-    assert gates and all(gate == 0.999 for gate in gates)
+    assert gates and all(gate == 1.01 for gate in gates)
 
 
 def test_steady_empty_text_raises():

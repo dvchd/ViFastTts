@@ -159,6 +159,8 @@ class Synthesizer:
         self.chunk_target_db: float | None = None
         self._mel_mean: np.ndarray | None = None
         self._mel_std: np.ndarray | None = None
+        # Kẹp duration theo prior corpus (tuỳ chọn, mặc định TẮT) — sửa ngoại lai như "rồi" 42 frame.
+        self._duration_prior: dict | None = None
 
         mel_config = config["mel"]
         vocoder_training = config.get("vocoder_training", {})
@@ -181,6 +183,35 @@ class Synthesizer:
             )
         self.vocoder.to(self.device)
         self.vocoder.eval()
+
+    def _clamp_durations(self, items, durations, speed: float = 1.0):
+        """Kẹp duration dự đoán vào [p10, p90] corpus của chính âm tiết; None nếu không đổi."""
+        import json
+
+        if self._duration_prior is None:
+            path = Path(self.config.get("duration_prior_path",
+                                        "data/codelung/duration_prior_v2.json"))
+            self._duration_prior = (json.loads(path.read_text(encoding="utf-8"))
+                                    if path.exists() else {})
+        clamped = durations.clone()
+        changed = False
+        for index, item in enumerate(items):
+            if index >= clamped.numel():
+                break
+            key = str(getattr(item, "normalized", None) or getattr(item, "raw", "")).lower()
+            prior = self._duration_prior.get(key)
+            if not prior:
+                continue
+            low = max(1, round(float(prior["p10"]) / max(speed, 1e-3)))
+            high = max(low, round(float(prior["p90"]) / max(speed, 1e-3)))
+            value = int(clamped[index])
+            if value > high:
+                clamped[index] = high
+                changed = True
+            elif value < low:
+                clamped[index] = low
+                changed = True
+        return clamped if changed else None
 
     def _apply_chunk_loudness(self, mel):
         """Dịch đều log-mel của chunk về mức hữu thanh mục tiêu (6d, ±4 dB)."""
@@ -209,7 +240,8 @@ class Synthesizer:
 
     def _render(self, text: str, dialect: str, speed: float, options,
                 gate_threshold: float = 0.5, sharpen_alpha: float = 0.0,
-                chunk_loudness: bool = False, f0_scale: float = 1.0) -> np.ndarray | None:
+                chunk_loudness: bool = False, f0_scale: float = 1.0,
+                duration_clamp: bool = False) -> np.ndarray | None:
         """Tổng hợp một đoạn: parse → model → vocoder; None nếu đoạn không có âm tiết.
 
         v2 (`v2_slot5`): **một** forward `model(features, speed=[speed])` — speed
@@ -228,8 +260,15 @@ class Synthesizer:
         with torch.no_grad():
             if self.arch == ARCH_V2:
                 speed_t = torch.tensor([float(speed)], dtype=torch.float32, device=self.device)
-                mel = self.model(features, speed=speed_t,
-                                 gate_threshold=gate_threshold, f0_scale=f0_scale)["mel"][0]
+                outputs = self.model(features, speed=speed_t,
+                                     gate_threshold=gate_threshold, f0_scale=f0_scale)
+                if duration_clamp:
+                    clamped = self._clamp_durations(items, outputs["durations"][0], float(speed))
+                    if clamped is not None:
+                        outputs = self.model(features, durations=clamped.unsqueeze(0),
+                                             speed=speed_t, gate_threshold=gate_threshold,
+                                             f0_scale=f0_scale)
+                mel = outputs["mel"][0]
             else:
                 outputs = self.model(features)
                 if speed != 1.0:
@@ -255,6 +294,7 @@ class Synthesizer:
         max_chars: int = 400,
         chunk_loudness: bool = False,
         f0_scale: float = 1.0,
+        duration_clamp: bool = False,
     ) -> Iterator[tuple[np.ndarray, int]]:
         """Yield (waveform, sample_rate) từng đoạn — gồm cả khoảng nghỉ giữa câu."""
         from vifasttts.frontend.normalizer import NormalizerOptions
@@ -267,7 +307,8 @@ class Synthesizer:
         for index, chunk in enumerate(chunks):
             rendered = self._render(chunk, dialect, speed, options,
                                     gate_threshold=gate_threshold, sharpen_alpha=sharpen_alpha,
-                                    chunk_loudness=chunk_loudness, f0_scale=f0_scale)
+                                    chunk_loudness=chunk_loudness, f0_scale=f0_scale,
+                                    duration_clamp=duration_clamp)
             if rendered is None:
                 continue
             rendered_any = True
@@ -294,6 +335,7 @@ class Synthesizer:
         target_lufs: float | None = None,
         chunk_loudness: bool = False,
         f0_scale: float = 1.0,
+        duration_clamp: bool = False,
     ) -> tuple[int, int]:
         """Ghép các đoạn từ `iter_synthesize`, hậu xử lý và ghi WAV."""
         from vifasttts.runtime.postprocess import postprocess
@@ -301,7 +343,7 @@ class Synthesizer:
         pieces = [audio for audio, _ in self.iter_synthesize(
             text, dialect=dialect, speed=speed, gate_threshold=gate_threshold,
             sharpen_alpha=sharpen_alpha, overrides=overrides, max_chars=max_chars,
-            chunk_loudness=chunk_loudness, f0_scale=f0_scale,
+            chunk_loudness=chunk_loudness, f0_scale=f0_scale, duration_clamp=duration_clamp,
         )]
         waveform = postprocess(np.concatenate(pieces), self.sample_rate,
                                target_db=-3.0 if peak_normalize else None)
@@ -315,7 +357,7 @@ class Synthesizer:
         *,
         dialect: str = "north",
         speed: float = 1.0,
-        gate_threshold: float = 0.999,
+        gate_threshold: float = 1.01,
         sharpen_alpha: float = 0.0,
         overrides: dict[str, str] | None = None,
         max_chars: int = 400,
@@ -324,11 +366,12 @@ class Synthesizer:
         pause_default: float = STEADY_PAUSE_DEFAULT,
         chunk_loudness: bool = False,
         f0_scale: float = 1.0,
+        duration_clamp: bool = False,
     ) -> Iterator[tuple[np.ndarray, int]]:
         """Chế độ "đọc đều": nghỉ CỐ ĐỊNH theo dấu câu, chặn pause model học.
 
         Cắt tại mọi dấu câu (`split_clauses`); mỗi mảnh tổng hợp với
-        `gate_threshold` cao (mặc định 0,999 — gần như chặn hết pause nội câu),
+        `gate_threshold` = 1,01 (chặn TUYỆT ĐỐI pause nội câu: gate bão hoà 1,0 vẫn lọt ở 0,999),
         rồi chèn khoảng nghỉ: sau phẩy `pause_comma`, sau chấm/hỏi/than
         `pause_period`, mảnh không dấu `pause_default`.
         """
@@ -342,7 +385,8 @@ class Synthesizer:
         for index, chunk in enumerate(chunks):
             rendered = self._render(chunk, dialect, speed, options,
                                     gate_threshold=gate_threshold, sharpen_alpha=sharpen_alpha,
-                                    chunk_loudness=chunk_loudness, f0_scale=f0_scale)
+                                    chunk_loudness=chunk_loudness, f0_scale=f0_scale,
+                                    duration_clamp=duration_clamp)
             if rendered is None:
                 continue
             rendered_any = True
@@ -364,7 +408,7 @@ class Synthesizer:
         *,
         dialect: str = "north",
         speed: float = 1.0,
-        gate_threshold: float = 0.999,
+        gate_threshold: float = 1.01,
         sharpen_alpha: float = 0.0,
         overrides: dict[str, str] | None = None,
         peak_normalize: bool = False,
@@ -375,6 +419,7 @@ class Synthesizer:
         target_lufs: float | None = None,
         chunk_loudness: bool = False,
         f0_scale: float = 1.0,
+        duration_clamp: bool = False,
     ) -> tuple[int, int]:
         """Ghép các mảnh "đọc đều" (pause cố định theo dấu câu), ghi WAV."""
         from vifasttts.runtime.postprocess import postprocess
@@ -383,7 +428,7 @@ class Synthesizer:
             text, dialect=dialect, speed=speed, gate_threshold=gate_threshold,
             sharpen_alpha=sharpen_alpha, overrides=overrides, max_chars=max_chars,
             pause_comma=pause_comma, pause_period=pause_period, pause_default=pause_default,
-            chunk_loudness=chunk_loudness, f0_scale=f0_scale,
+            chunk_loudness=chunk_loudness, f0_scale=f0_scale, duration_clamp=duration_clamp,
         )]
         waveform = postprocess(np.concatenate(pieces), self.sample_rate,
                                target_db=-3.0 if peak_normalize else None)

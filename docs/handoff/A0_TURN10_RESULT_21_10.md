@@ -359,3 +359,30 @@ Thêm vào danh sách v11/v12:
 - Kèm hướng dẫn thu (cùng micro, TẮT RNNoise, WAV 48 kHz 24-bit, đọc đều, 2 lần/câu).
 - Hạn chế: câu sinh theo **khuôn** (carrier) để phủ âm tiết, không phải văn xuôi tự nhiên; nếu cần
   tự nhiên hơn thì cần một corpus văn bản để chọn câu (chưa có trong repo).
+
+## 15. "rồi" bị KÉO DÀI — tìm ra 2 nguyên nhân, sửa được 1,5
+
+Người dùng nghe trang 8b: không khác gì (đúng như số đo), nhưng "**rồi vẫn bị kéo dài mất tự nhiên**".
+
+Đo đúng trên đường production (d06, chunk "rồi bấm tìm kiếm"):
+
+| | độ dài "rồi" | pause ngay sau "rồi" |
+|---|---|---|
+| **THẬT (corpus)** | median **17** frame (p10 9 · p90 30); đứng đầu câu 23 | 0 |
+| Model (cả v3.2 và P2 @2k) | **42** frame (448 ms) | **29** frame (309 ms) |
+
+2 nguyên nhân:
+1. **Pause nội câu** — `gate_threshold=0,999` KHÔNG chặn được gate bão hoà **1,0**, nên model chèn
+   pause sau "rồi" (vì trong corpus "rồi" hay đứng cuối mệnh đề). Dấu phẩy thật nằm **trước** "rồi".
+2. **Đầu duration** dự đoán 42 frame = **1,4× p90** của chính âm tiết đó.
+
+Đã sửa:
+- **Steady mode dùng gate 1,01** (chặn tuyệt đối mọi pause nội câu) — pause chỉ do runtime đặt theo
+  dấu câu, đúng thiết kế sản phẩm. `0,999 → 1,01` ở `infer.py`, `cli.py`, test.
+- **`--duration-clamp`** (mặc định TẮT): kẹp duration dự đoán vào [p10, p90] corpus của chính âm tiết
+  (chỉ áp cho âm tiết có n ≥ 20). Prior: `data/codelung/duration_prior_v2.json` (923 âm tiết).
+  "rồi": 42 → **30** frame.
+
+Kết quả d06: **5,85 s → 5,49 s** (bỏ pause) → **5,37 s** (+ kẹp).
+Trang nghe 3 biến thể: https://cio-rows-rocks-seq.trycloudflare.com/duration_ab/
+Lưu ý: đổi gate 1,01 ảnh hưởng **mọi** trang nghe steady cũ (dài hơn trước ~0,1–0,6 s/câu).
