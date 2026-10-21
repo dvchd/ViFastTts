@@ -81,3 +81,30 @@ không bị** (cân bằng như v3.2). Khớp đúng tai người dùng: P2 2k r
 
 ## 5. Bổ sung (người dùng nghe): P2 @2k là bản tốt nhất hiện tại
 Tai người dùng: **P2 2k rõ hơn P1, ít rè hơn, ít to tiếng hơn** — khớp bảng mục 4.
+
+## 6. Việc 5b (A0 lượt 7) — drift độ to giữa MỆNH ĐỀ (20 câu mới, free-run đọc đều, α=0)
+
+`drift = max−min RMS (frame hữu thanh) giữa các chunk` của câu; tool `tools/premise_drift.py`,
+bộ câu `examples/drift_texts.json` (20 câu, 2–4 mệnh đề). Bản đầu của tool bị lỗi (tính cả chunk
+lặng ⇒ drift 88 dB) — đã sửa: bỏ chunk < 0,15 s hoặc < −50 dBFS.
+
+| checkpoint | drift median | **drift p90** | std |
+|---|---|---|---|
+| v3.2 | 1,43 | **3,34** | 0,60 |
+| P1 @2k | 1,40 | 3,55 | 0,64 |
+| P1 @4k | 1,92 | 4,41 | 0,85 |
+| P1 @6k | 2,28 | 4,66 | 0,99 |
+| P1 @8k | 2,22 | 5,05 | 0,95 |
+| **P2 @2k** | **1,92** | **4,67** | 0,80 |
+| P2 @4k | 3,75 | **6,27** | 1,48 |
+| P2 @6k | 5,08 | **7,43** | 2,26 |
+
+**Cổng A0: p90 ≤ v3.2 + 2 dB = 5,34 dB.**
+- P1: 2k–8k đều **qua** (3,55 → 5,05), nhưng xấu dần theo bước.
+- P2: 2k qua (4,67); **4k (6,27) và 6k (7,43) vượt cổng 2 mốc liên tiếp** ⇒ theo hard-stop của A0
+  **dừng P2 20k**, giữ **P2 @2k** — đúng bản tai người dùng thích nhất (rõ, ít rè, ít to tiếng).
+- Xu hướng chung: GAN làm **mức tuyệt đối giữa các chunk trôi dần theo số bước** (đúng cơ chế A0 nêu:
+  D chỉ nhìn crop 64 frame, không quan tâm mức tuyệt đối).
+
+**Quyết định tạm thời**: ứng viên production = **P2 @2k EMA** (qua cổng drift, GV EMA 0,724, val EMA
++4,1 %, tai người dùng chọn). P1 giữ 2/4/6/8k làm đối chứng; P2 giữ 2/4/6k.
