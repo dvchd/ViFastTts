@@ -23,7 +23,7 @@ PY=.venv/bin/python
 DFNPY=$HOME/dvchd/.dfn-venv/bin/python
 TRAIN_M=$V3/train_clean_v2_dur_seg_slot4.jsonl
 VAL_M=$V3/val_clean_v2_dur_seg_slot4.jsonl
-HOLD_M=$V3/holdout_clean_v2_dur_seg_slot4.jsonl
+HOLD_M=$V3/holdout_clean_v2_dur.jsonl
 
 say "===== bắt đầu ====="
 
@@ -41,7 +41,7 @@ fi
 if [ ! -f $M/v3_s2.ok ]; then
   $PY tools/v3_build_clips.py \
     --manifests data/codelung/train_clean_v2_dur.jsonl,data/codelung/val_clean_v2_dur.jsonl,data/codelung/holdout_clean_v2_dur.jsonl \
-    --old-seg data/codelung/train_clean_v2_dur_seg_slot4.jsonl,data/codelung/val_clean_v2_dur_seg_slot4.jsonl,data/codelung/holdout_clean_v2_dur_seg_slot4.jsonl \
+    --old-seg data/codelung/train_clean_v2_dur_seg_slot4.jsonl,data/codelung/val_clean_v2_dur_seg_slot4.jsonl,data/codelung/holdout_clean_v2_dur_slot4.jsonl \
     --denoised-dir $V3/denoised --out-dir $V3 >> "$LOG" 2>&1 || { say "S2 LỖI"; exit 1; }
   touch $M/v3_s2.ok; say "S2 xong"
 fi
@@ -49,9 +49,9 @@ fi
 # S3 + S4 — cắt segment + slot4
 if [ ! -f $M/v3_s3.ok ]; then
   $PY tools/cut_segments.py --manifest $V3/train_clean_v2_dur.jsonl --manifest $V3/val_clean_v2_dur.jsonl \
-    --manifest $V3/holdout_clean_v2_dur.jsonl --out-dir $V3 >> "$LOG" 2>&1 || { say "S3 LỖI"; exit 1; }
+    --out-dir $V3 >> "$LOG" 2>&1 || { say "S3 LỖI"; exit 1; }
   $PY tools/v3_segments_slot4.py \
-    --clip-manifests $V3/train_clean_v2_dur.jsonl,$V3/val_clean_v2_dur.jsonl,$V3/holdout_clean_v2_dur.jsonl \
+    --clip-manifests $V3/train_clean_v2_dur.jsonl,$V3/val_clean_v2_dur.jsonl \
     --seg-dir $V3 >> "$LOG" 2>&1 || { say "S4 LỖI"; exit 1; }
   touch $M/v3_s3.ok; say "S3+S4 xong"
 fi

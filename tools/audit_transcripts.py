@@ -76,6 +76,7 @@ def audit(manifest: str | Path, *, sample: int = 200, model: str = "small", seed
             continue
         written = _words(row["text"])
         matcher = difflib.SequenceMatcher(a=written, b=heard, autojunk=False)
+        matched = sum(i2 - i1 for tag, i1, i2, _j1, _j2 in matcher.get_opcodes() if tag == "equal")
         bad: list[dict] = []
         for tag, i1, i2, j1, j2 in matcher.get_opcodes():
             if tag == "equal":
@@ -93,7 +94,8 @@ def audit(manifest: str | Path, *, sample: int = 200, model: str = "small", seed
         total_words += len(written)
         total_bad += len(bad)
         per_clip.append({"id": row.get("id"), "n_words": len(written), "n_heard": len(heard),
-                         "n_mismatch": len(bad), "mismatch": bad[:12],
+                         "n_mismatch": len(bad), "match_rate": matched / max(len(written), 1),
+                         "mismatch": bad[:12],
                          "manifest_text": row["text"][:200],
                          "whisper_text": " ".join(heard)[:200]})
         if index % 25 == 0:
@@ -113,6 +115,11 @@ def audit(manifest: str | Path, *, sample: int = 200, model: str = "small", seed
             "total_mismatch": total_bad,
             "mismatch_rate": total_bad / max(total_words, 1),
             "clips_with_mismatch": sum(1 for item in per_clip if item.get("n_mismatch", 0) > 0),
+            # V11S3: match_rate thấp = NGHI text không khớp audio (khác loại với lỗi chính tả);
+            # ASR yếu ⇒ chỉ tin các ca cực thấp (≤0,4), phần giữa là nhiễu ASR.
+            "clips_match_lt_0p4": sorted(item["id"] for item in per_clip
+                                         if item.get("match_rate", 1.0) < 0.4),
+            "clips_match_lt_0p6": sum(1 for item in per_clip if item.get("match_rate", 1.0) < 0.6),
         },
         "top_pairs": top_pairs[:120],
         "per_clip": per_clip,

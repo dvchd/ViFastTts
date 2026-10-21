@@ -27,22 +27,20 @@ HOP_SECONDS = 256 / 24000
 
 
 def _box_smooth_time(mel, alpha: float):
-    """Làm mờ theo THỜI GIAN: mel ← (1−α)·mel + α·trung bình 3 frame."""
+    """Làm mờ theo THỜI GIAN: mel ← (1−α)·mel + α·trung bình 3 frame (biên lặp lại)."""
     import torch
 
-    kernel = torch.ones(1, 1, 3, 1, device=mel.device) / 3.0
-    padded = torch.nn.functional.pad(mel.t().unsqueeze(0).unsqueeze(0), (1, 1), mode="replicate")
-    smooth = torch.nn.functional.conv2d(padded, kernel).squeeze(0).squeeze(0).t()
+    padded = torch.cat([mel[:1], mel, mel[-1:]], dim=0)
+    smooth = (padded[:-2] + padded[1:-1] + padded[2:]) / 3.0
     return (1.0 - alpha) * mel + alpha * smooth
 
 
 def _box_smooth_freq(mel, alpha: float):
-    """Làm mờ theo TẦN SỐ: mel ← (1−α)·mel + α·trung bình 3 bin."""
+    """Làm mờ theo TẦN SỐ: mel ← (1−α)·mel + α·trung bình 3 bin (biên lặp lại)."""
     import torch
 
-    kernel = torch.ones(1, 1, 1, 3, device=mel.device) / 3.0
-    padded = torch.nn.functional.pad(mel.unsqueeze(0).unsqueeze(0), (1, 1), mode="replicate")
-    smooth = torch.nn.functional.conv2d(padded, kernel).squeeze(0).squeeze(0)
+    padded = torch.cat([mel[:, :1], mel, mel[:, -1:]], dim=1)
+    smooth = (padded[:, :-2] + padded[:, 1:-1] + padded[:, 2:]) / 3.0
     return (1.0 - alpha) * mel + alpha * smooth
 
 

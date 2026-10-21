@@ -156,8 +156,9 @@ mỗi nhánh 4k bước, `energy_weight 1,0` (E1/E2/E3), E2 thêm `lowband_weigh
 | E0 | 6k | — | — | — | **7,71** | |
 | **E1** (energy) | 2k | 1,6436 | 0,6487 | 0,6835 | 3,94 | |
 | **E1** | 4k | **1,6505** | **0,6718** | 0,7253 | **3,76** | **trượt cổng GV ≥ 0,72** |
-| E2 (energy+lowband) | 2k | 1,6162 | 0,6680 | 0,6313 | — | đang chạy |
-| E3 (energy, adv 0,2) | — | — | — | — | — | chờ |
+| **E2** (energy+lowband) | 2k | 1,6268 | 0,6624 | 0,6657 | — | |
+| **E2** | 4k | **1,6178** | **0,6722** | 0,6886 | — | **trượt cổng GV ≥ 0,72** |
+| E3 (energy, adv 0,2) | — | — | — | — | — | **huỷ theo v11** |
 
 \* GV của P2 4k lấy từ val_log của run P2 20k gốc (cùng cấu hình, EMA).
 
@@ -173,3 +174,126 @@ thước drift mới (thước muốn nhiều biến thiên hơn, không phải 
 2. **6d**: bật hay không sau khi nghe A/B.
 3. **P2 @2k** có tiếp tục là production candidate không, khi P2 4k/6k gần giọng thật hơn về drift
    nhưng tai người dùng đã chọn 2k.
+
+## 8. Việc 7 — chẩn đoán 2 lỗi chung của mọi model (d04, d06)
+
+### 8.1 Độ phủ âm tiết trong train (2.1)
+Train v3.2: **220.384 token / 2.552 type**. Các từ cần soi:
+
+| âm tiết | đúng (kể thanh) | cùng vần bỏ thanh | cùng coda |
+|---|---|---|---|
+| **ách** | **1** | 516 | 2.401 |
+| **treo** | **1** | 721 | 5.203 |
+| ếch | 20 | 249 | 2.401 |
+| bấm | 37 | 294 | 5.626 |
+| tường | 27 | 1.263 | 17.878 |
+| ao | 46 | 4.459 | 5.203 |
+| rồi | **1.714** | 3.994 | 26.425 |
+
+Trong 40 câu drift có **62 âm tiết < 10 lần**. ⇒ d04 ("ách", "treo" = 1 lần) là **lỗ hổng độ phủ**,
+không sửa được bằng loss; "rồi" thì rất phổ biến ⇒ lỗi prosody, không phải thiếu dữ liệu.
+
+### 8.2 "rồi" quá trầm (2.2)
+Frontend d06: `rồi` = onset **R**, nucleus **Ô**, coda **J**, tone **HUYEN**, đứng đầu mệnh đề sau
+dấu phẩy (trong steady mode = đầu chunk).
+
+| nguồn | semis (so trung vị segment) | contour (cuối−đầu) | creak% | dur |
+|---|---|---|---|---|
+| **THẬT — đầu mệnh đề** (n=62) | **−1,34** | **−2,50** | **0 %** | 24 |
+| THẬT — giữa (n=282) | −1,77 | −1,88 | 0 % | 16 |
+| THẬT — cuối (n=91) | −2,47 | −2,35 | 0 % | 19 |
+| **Model TF** (n=20, đầu segment) | 0,00 | **−0,78** | **23,1 %** | 27,5 |
+| **Model free-run** (n=20) | 0,00 | −1,16 | **25,4 %** | 24,5 |
+| **v3.2 · d06 free-run** | 0 (108,4 Hz) | **+2,56 (LÊN)** | **19,3 %** | — |
+| **P2 @2k · d06 free-run** | 0 (110,2 Hz) | **+3,13 (LÊN)** | **21,2 %** | — |
+
+**Nén f0 toàn cục** (532/514 âm tiết, TF, v3.2/P2@2k): slope model-vs-thật **0,59 / 0,69**, corr
+**0,67 / 0,66**; dải thật p10–p90 −3,1…+3,3 semitone. Tỉ lệ âm tiết lệch |ΔF0| > 3 semitone:
+**23 %** (v3.2), 10–26 % (P2@2k). **f0 halving trong nhãn: 0,78 %** (HUYEN 0,5 %) ⇒ **không** phải
+nguyên nhân.
+
+**Đọc theo cây quyết định của A0:** TF cũng lệch (creak 23 %, contour −0,78 thay vì −2,5) ⇒ lỗi nằm ở
+**đầu f0/decoder**, không phải duration/free-run. Cụ thể: (a) biên độ f0 bị **nén 31–41 %**;
+(b) ~20–25 % frame mất cao độ (creak) ở đầu chunk; (c) contour **đi lên** thay vì đi xuống.
+
+### 8.3 "ách / ếch" rè (2.3)
+Flatness 2–6 kHz (Wiener entropy; cao = rè). Model (v3.2 / P2@2k) so với **giọng thật cùng từ**:
+
+| từ | model v3.2 | model P2@2k | **thật** | tỉ lệ |
+|---|---|---|---|---|
+| trên | 0,299 | 0,291 | 0,133 | 2,2× |
+| con | 0,294 | 0,256 | 0,123 | 2,3× |
+| thì | 0,347 | 0,285 | 0,140 | 2,3× |
+| ao | 0,401 | 0,363 | 0,143 | 2,7× |
+| cũ | 0,441 | 0,416 | 0,255 | 1,7× |
+| **ách** | 0,335 | 0,258 | 0,190 (n=1) | 1,4–1,8× |
+| **ếch** | 0,243 | 0,204 | 0,194 (n=19) | 1,1–1,3× |
+| treo | 0,285 | 0,297 | 0,270 (n=1) | 1,0–1,1× |
+| tường | 0,266 | 0,279 | 0,149 (n=27) | 1,8× |
+
+**Tách nguồn rè:** cho **mel THẬT** qua vocoder rồi đo lại: thật **0,152** → vocoder **0,177**
+(chỉ +16 %); model đầy đủ 0,25–0,44 ⇒ **rè đến từ MEL DỰ ĐOÁN**, không phải vocoder.
+Với "ách/treo" phần lớn là do **độ phủ 1 lần**; với "trên/con/thì/ao/tường" là lỗi mel toàn cục.
+
+### 8.4 Grad norm từng loss trên encoder (3.1 — đo trước khi đổi f0_delta)
+Batch 8×49 âm tiết, mỗi loss bật riêng weight 1,0, |grad| trên `encoder.*`:
+
+| loss | giá trị | grad enc | % tổng |
+|---|---|---|---|
+| **pause_gate** | 0,993 | **3,848** | **83,4 %** |
+| **pause_gap** | 0,475 | **1,843** | **39,9 %** |
+| **f0_delta** | 6,438 | **1,323** | **28,7 %** |
+| f0_prior | 0,266 | 0,676 | 14,7 % |
+| mel_pre | 0,733 | 0,554 | 12,0 % |
+| mel | 0,714 | 0,498 | 10,8 % |
+| energy | 0,803 | 0,446 | 9,7 % |
+| phonation | 0,548 | 0,246 | 5,3 % |
+| duration | 0,117 | 0,205 | 4,4 % |
+| f0 | 0,574 | 0,146 | 3,2 % |
+| vuv | 0,077 | 0,094 | 2,0 % |
+| mel_sharp | 0,593 | 0,055 | 1,2 % |
+| ratio | 0,866 | 0,037 | 0,8 % |
+| tone | 0,001 | 0,028 | 0,6 % |
+
+⇒ **hai đầu pause chiếm 83 % + 40 % grad encoder** (đúng như lo ngại §43.1), f0_delta 28,7 %,
+mel chỉ 10,8 %. Hạ f0_delta 0,5→0,1 sẽ đưa nó về ~6 % và trả capacity cho mel — **hợp lý**, nhưng
+cần xác nhận vì lỗi f0 hiện tại là **nén biên độ**, không phải delta.
+
+## 9. Sửa thước 4a (v11 §4)
+
+`tools/adv_energy_audit.py`: loại âm tiết có mức THẬT < trung vị segment − 10 dB trước khi tính
+spike rate/MAE và top spike. Chạy lại v3.2 (40 segment):
+
+| | spike rate | MAE | RMS spike | RMS MAE | n |
+|---|---|---|---|---|---|
+| cũ (chưa lọc) | 0,1859 | 2,589 | 0,0776 | 1,769 | 683 |
+| **mới (đã lọc)** | **0,1388** | **2,214** | **0,064** | **1,710** | **641** |
+
+Top spike mới: 7,8 / 7,3 / 7,1 / 6,6 / 6,5 dB (là / lịch / páp / hướng / có) — hết hẳn nhóm
++15…+22 dB của frame thật gần lặng. Số cũ **không dùng để so nữa**.
+
+**P2 @2k (đã lọc, cùng 40 segment): spike 0,140 · MAE 2,199 · n=641 — nhưng RMS spike 0,114
+so với 0,064 của v3.2 (1,78×) và RMS MAE 1,9 vs 1,71.** Tức GAN giữ nguyên mức mel nhưng làm
+**mức waveform lệch nhiều hơn** — khớp với tai người dùng ("2k vẫn méo, 6k méo hơn").
+Đây là lý do nên đo cả RMS, và là cảnh báo cho v3.5: cần kiểm RMS spike sau GAN.
+
+## 10. v3.5 — kế hoạch (CHƯA train)
+
+Theo v11 §3, gộp một lần; các mục cần code mới được đánh dấu:
+
+1. **Mask frame lặng khỏi mel L1** — chỉ giữ ±4 frame quanh biên (code: `slot_losses`/`mel_error`).
+2. **Mel stats tính chỉ trên frame tiếng nói** — đổi `data/codelung/mel_stats.json` + `mel_hash`
+   (đổi khoá cache ⇒ config riêng, không sửa v32).
+3. **f0_delta 0,5 → 0,1** — đo được f0_delta chiếm **28,7 %** grad encoder; hạ còn ~6 % để trả
+   capacity cho mel. **Cần xác nhận**: lỗi f0 hiện tại là nén biên độ (slope 0,59–0,69), không phải
+   delta; nếu hạ quá tay, contour có thể tệ hơn. Đề xuất: 0,3 trước, đo slope/corr, rồi mới 0,1.
+4. **Bỏ phonation loss + conditioning** (5,3 % grad encoder; không cải thiện rè).
+5. **EMA 0,999 toàn bộ train**.
+6. **Slot N nhận embedding coda trực tiếp; slot C nhận embedding nucleus** (code: `slot_ops`/model).
+7. **Giảm áp lực 2 đầu pause**: pause_gate + pause_gap chiếm **83 % + 40 %** grad encoder. Đề xuất
+   `pause_weight` 0,5 → 0,1 và dùng `pos_weight` (đã có `PAUSE_POS_WEIGHT`) thay vì tăng weight.
+8. **Nhãn f0**: halving 0,78 % (HUYEN 0,5 %) ⇒ **không** cần sửa hàng loạt; chỉ log.
+9. **KHÔNG energy loss** (E1/E2 đều trượt GV).
+
+Thứ tự train đề xuất: L1 tới hội tụ (60k) → GAN riêng (adv 0,3 · fm 0 · hinge · warmup 300 ·
+EMA 0,999) → chọn checkpoint sớm (~2k) theo cổng drift ≤ v3.2+2 (đọc **cận trên CI**) + tai.

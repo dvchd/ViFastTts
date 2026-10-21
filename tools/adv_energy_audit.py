@@ -147,18 +147,23 @@ def main() -> None:
             real_rel = np.array(real_energy) - np.median(real_energy)
             rms_syn_rel = np.array(syn_rms) - np.median(syn_rms)
             rms_real_rel = np.array(real_rms) - np.median(real_rms)
-            per_alpha[alpha]["synth"].extend(syn_rel.tolist())
-            per_alpha[alpha]["real"].extend(real_rel.tolist())
-            per_alpha[alpha]["rms_synth"].extend(rms_syn_rel.tolist())
-            per_alpha[alpha]["rms_real"].extend(rms_real_rel.tolist())
-            delta = syn_rel - real_rel
-            for i, value in enumerate(delta):
+            # A0 v11 §4: loại âm tiết có mức THẬT < trung vị segment − 10 dB (frame thật gần lặng
+            # ⇒ lỗi thước, không phải lỗi model — 10/10 top spike cũ đều rơi vào nhóm này).
+            keep = real_rel > -10.0
+            index_map = np.where(keep)[0]
+            per_alpha[alpha]['synth'].extend(syn_rel[keep].tolist())
+            per_alpha[alpha]['real'].extend(real_rel[keep].tolist())
+            per_alpha[alpha]['rms_synth'].extend(rms_syn_rel[keep].tolist())
+            per_alpha[alpha]['rms_real'].extend(rms_real_rel[keep].tolist())
+            delta = (syn_rel - real_rel)[keep]
+            for position, value in enumerate(delta):
                 if value > 3.0:
-                    per_alpha[alpha]["rows"].append({
-                        "segment": str(row["id"]), "syllable": i,
-                        "word": str(row["syllables"][i].get("raw", "")) if i < len(row["syllables"]) else "",
-                        "time": round((lead + sum(durations[:i]) + sum(gaps[:i])) * _HOP / sample_rate, 2),
-                        "delta_db": round(float(value), 2)})
+                    i = int(index_map[position])
+                    per_alpha[alpha]['rows'].append({
+                        'segment': str(row['id']), 'syllable': i,
+                        'word': str(row['syllables'][i].get('raw', '')) if i < len(row['syllables']) else '',
+                        'time': round((lead + sum(durations[:i]) + sum(gaps[:i])) * _HOP / sample_rate, 2),
+                        'delta_db': round(float(value), 2)})
         n_used += 1
 
     summary = {}
