@@ -345,6 +345,10 @@ def synthesize_cmd(
     peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
     max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
     device: str = typer.Option("auto", help="auto | cpu | cuda | mps"),
+    target_lufs: float = typer.Option(-16.0, "--target-lufs",
+                                      help="Chuẩn hoá độ to cả file về LUFS này (0 = tắt)"),
+    chunk_loudness: bool = typer.Option(False, "--chunk-loudness",
+                                        help="6d: chuẩn hoá độ to TỪNG chunk trên log-mel (mặc định tắt)"),
 ) -> None:
     """Tổng hợp WAV bằng PyTorch (chunk câu dài, override, chuẩn hoá đỉnh tuỳ chọn).
 
@@ -363,12 +367,14 @@ def synthesize_cmd(
             sharpen_alpha=sharpen_alpha, overrides=overrides_dict,
             peak_normalize=peak_normalize, max_chars=max_chars,
             pause_comma=pause_comma, pause_period=pause_period, pause_default=pause_default,
+            target_lufs=target_lufs, chunk_loudness=chunk_loudness,
         )
     else:
         samples, sample_rate = engine.synthesize(
             text, output, dialect=dialect, speed=speed, gate_threshold=gate,
             sharpen_alpha=sharpen_alpha, overrides=overrides_dict,
-            peak_normalize=peak_normalize, max_chars=max_chars,
+            peak_normalize=peak_normalize, max_chars=max_chars, target_lufs=target_lufs,
+            chunk_loudness=chunk_loudness,
         )
     typer.echo(f"Đã ghi {output} ({samples} mẫu @ {sample_rate} Hz)")
 
@@ -393,6 +399,8 @@ def synthesize_onnx_cmd(
     peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
     max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
     provider: str = typer.Option("auto", help="auto | cpu | cuda | coreml | tensorrt"),
+    target_lufs: float = typer.Option(-16.0, "--target-lufs",
+                                      help="Chuẩn hoá độ to cả file về LUFS này (0 = tắt)"),
 ) -> None:
     """Tổng hợp bằng ONNX Runtime + numpy (không cần PyTorch).
 
@@ -409,7 +417,7 @@ def synthesize_onnx_cmd(
         overrides=load_overrides(overrides) if overrides else None,
         peak_normalize=peak_normalize, max_chars=max_chars, provider=provider,
         steady=steady, pause_comma=pause_comma, pause_period=pause_period,
-        pause_default=pause_default,
+        pause_default=pause_default, target_lufs=target_lufs,
     )
     typer.echo(f"Đã ghi {output} ({samples} mẫu @ {sample_rate} Hz)")
 
@@ -427,6 +435,8 @@ def synthesize_batch_cmd(
     peak_normalize: bool = typer.Option(False, "--peak-normalize", help="Chuẩn hoá đỉnh -3 dBFS"),
     max_chars: int = typer.Option(400, help="Độ dài tối đa mỗi đoạn (chunk theo câu)"),
     device: str = typer.Option("auto", help="auto | cpu | cuda | mps"),
+    target_lufs: float = typer.Option(-16.0, "--target-lufs",
+                                      help="Chuẩn hoá độ to cả file về LUFS này (0 = tắt)"),
 ) -> None:
     """Tổng hợp nhiều câu từ file → thư mục WAV (nạp model một lần)."""
     from vifasttts.infer import load_overrides, synthesize_batch
@@ -448,6 +458,7 @@ def synthesize_batch_cmd(
         vocoder_checkpoint=vocoder_checkpoint, dialect=dialect, speed=speed,
         overrides=load_overrides(overrides) if overrides else None,
         peak_normalize=peak_normalize, max_chars=max_chars, device=device,
+        target_lufs=target_lufs,
     )
     typer.echo(f"Đã ghi {len(paths)} file vào {output_dir}")
 

@@ -42,6 +42,16 @@ def write_wav(path: str | Path, waveform, sample_rate: int = 24000) -> None:
         fh.writeframes(pcm.tobytes())
 
 
+def _apply_target_lufs(waveform, sample_rate: int, target_lufs: float | None):
+    """Chuẩn hoá độ to CẢ FILE về `target_lufs` (None/0 = tắt), chặn true-peak −1 dBTP."""
+    if not target_lufs:
+        return waveform
+    from vifasttts.runtime.loudness import normalize_loudness
+
+    normalized, _info = normalize_loudness(waveform, sample_rate, target_lufs=float(target_lufs))
+    return normalized
+
+
 #: f0_stats mặc định của repo khi checkpoint v2 thiếu (khớp `tools/eval_acoustic.py`).
 V2_DEFAULT_F0_STATS = "data/codelung/f0_stats_v2.json"
 
@@ -145,6 +155,10 @@ class Synthesizer:
                 )
         self.model.to(self.device)
         self.model.eval()
+        # 6d: mức to mục tiêu theo chunk (trung vị giọng thật) — nạp lười, mặc định TẮT.
+        self.chunk_target_db: float | None = None
+        self._mel_mean: np.ndarray | None = None
+        self._mel_std: np.ndarray | None = None
 
         mel_config = config["mel"]
         vocoder_training = config.get("vocoder_training", {})
@@ -168,8 +182,34 @@ class Synthesizer:
         self.vocoder.to(self.device)
         self.vocoder.eval()
 
+    def _apply_chunk_loudness(self, mel):
+        """Dịch đều log-mel của chunk về mức hữu thanh mục tiêu (6d, ±4 dB)."""
+        import json
+
+        if self._mel_mean is None:
+            stats = json.loads(Path(self.config["mel"]["normalize_path"]).read_text(encoding="utf-8"))
+            self._mel_mean = np.asarray(stats["mean"], dtype=np.float64)
+            self._mel_std = np.asarray(stats["std"], dtype=np.float64)
+            path = Path(self.config.get("chunk_loudness", {}).get(
+                "target_path", "data/codelung/voiced_level_v2.json"))
+            if path.exists():
+                self.chunk_target_db = float(json.loads(path.read_text(encoding="utf-8"))["target_db"])
+            else:
+                warnings.warn(f"Thiếu {path} — tắt chuẩn hoá độ to theo chunk (6d).",
+                              RuntimeWarning, stacklevel=3)
+        if self.chunk_target_db is None:
+            return mel
+        import torch
+
+        from vifasttts.runtime.chunk_loudness import normalize_chunk
+
+        shifted, _info = normalize_chunk(mel.detach().cpu().numpy(), self._mel_mean,
+                                         self._mel_std, self.chunk_target_db)
+        return torch.from_numpy(shifted).to(mel.device, dtype=mel.dtype)
+
     def _render(self, text: str, dialect: str, speed: float, options,
-                gate_threshold: float = 0.5, sharpen_alpha: float = 0.0) -> np.ndarray | None:
+                gate_threshold: float = 0.5, sharpen_alpha: float = 0.0,
+                chunk_loudness: bool = False) -> np.ndarray | None:
         """Tổng hợp một đoạn: parse → model → vocoder; None nếu đoạn không có âm tiết.
 
         v2 (`v2_slot5`): **một** forward `model(features, speed=[speed])` — speed
@@ -198,6 +238,8 @@ class Synthesizer:
                 mel = outputs["mel"][0]
             from vifasttts.runtime.postprocess import sharpen_mel
 
+            if chunk_loudness:
+                mel = self._apply_chunk_loudness(mel)
             waveform = self.vocoder(sharpen_mel(mel, sharpen_alpha).unsqueeze(0))[0]
         return np.asarray(waveform.cpu().numpy(), dtype=np.float32)
 
@@ -211,6 +253,7 @@ class Synthesizer:
         sharpen_alpha: float = 0.0,
         overrides: dict[str, str] | None = None,
         max_chars: int = 400,
+        chunk_loudness: bool = False,
     ) -> Iterator[tuple[np.ndarray, int]]:
         """Yield (waveform, sample_rate) từng đoạn — gồm cả khoảng nghỉ giữa câu."""
         from vifasttts.frontend.normalizer import NormalizerOptions
@@ -222,7 +265,8 @@ class Synthesizer:
         rendered_any = False
         for index, chunk in enumerate(chunks):
             rendered = self._render(chunk, dialect, speed, options,
-                                    gate_threshold=gate_threshold, sharpen_alpha=sharpen_alpha)
+                                    gate_threshold=gate_threshold, sharpen_alpha=sharpen_alpha,
+                                    chunk_loudness=chunk_loudness)
             if rendered is None:
                 continue
             rendered_any = True
@@ -246,6 +290,8 @@ class Synthesizer:
         overrides: dict[str, str] | None = None,
         peak_normalize: bool = False,
         max_chars: int = 400,
+        target_lufs: float | None = None,
+        chunk_loudness: bool = False,
     ) -> tuple[int, int]:
         """Ghép các đoạn từ `iter_synthesize`, hậu xử lý và ghi WAV."""
         from vifasttts.runtime.postprocess import postprocess
@@ -253,9 +299,11 @@ class Synthesizer:
         pieces = [audio for audio, _ in self.iter_synthesize(
             text, dialect=dialect, speed=speed, gate_threshold=gate_threshold,
             sharpen_alpha=sharpen_alpha, overrides=overrides, max_chars=max_chars,
+            chunk_loudness=chunk_loudness,
         )]
         waveform = postprocess(np.concatenate(pieces), self.sample_rate,
                                target_db=-3.0 if peak_normalize else None)
+        waveform = _apply_target_lufs(waveform, self.sample_rate, target_lufs)
         write_wav(output, waveform, self.sample_rate)
         return int(waveform.size), self.sample_rate
 
@@ -272,6 +320,7 @@ class Synthesizer:
         pause_comma: float = STEADY_PAUSE_COMMA,
         pause_period: float = STEADY_PAUSE_PERIOD,
         pause_default: float = STEADY_PAUSE_DEFAULT,
+        chunk_loudness: bool = False,
     ) -> Iterator[tuple[np.ndarray, int]]:
         """Chế độ "đọc đều": nghỉ CỐ ĐỊNH theo dấu câu, chặn pause model học.
 
@@ -289,7 +338,8 @@ class Synthesizer:
         rendered_any = False
         for index, chunk in enumerate(chunks):
             rendered = self._render(chunk, dialect, speed, options,
-                                    gate_threshold=gate_threshold, sharpen_alpha=sharpen_alpha)
+                                    gate_threshold=gate_threshold, sharpen_alpha=sharpen_alpha,
+                                    chunk_loudness=chunk_loudness)
             if rendered is None:
                 continue
             rendered_any = True
@@ -319,6 +369,8 @@ class Synthesizer:
         pause_comma: float = STEADY_PAUSE_COMMA,
         pause_period: float = STEADY_PAUSE_PERIOD,
         pause_default: float = STEADY_PAUSE_DEFAULT,
+        target_lufs: float | None = None,
+        chunk_loudness: bool = False,
     ) -> tuple[int, int]:
         """Ghép các mảnh "đọc đều" (pause cố định theo dấu câu), ghi WAV."""
         from vifasttts.runtime.postprocess import postprocess
@@ -327,9 +379,11 @@ class Synthesizer:
             text, dialect=dialect, speed=speed, gate_threshold=gate_threshold,
             sharpen_alpha=sharpen_alpha, overrides=overrides, max_chars=max_chars,
             pause_comma=pause_comma, pause_period=pause_period, pause_default=pause_default,
+            chunk_loudness=chunk_loudness,
         )]
         waveform = postprocess(np.concatenate(pieces), self.sample_rate,
                                target_db=-3.0 if peak_normalize else None)
+        waveform = _apply_target_lufs(waveform, self.sample_rate, target_lufs)
         write_wav(output, waveform, self.sample_rate)
         return int(waveform.size), self.sample_rate
 
@@ -347,12 +401,13 @@ def synthesize(
     peak_normalize: bool = False,
     max_chars: int = 400,
     device: str | None = None,
+    target_lufs: float | None = None,
 ) -> tuple[int, int]:
     """text -> WAV (nạp model một lần). Trả về (số mẫu, sample_rate)."""
     engine = Synthesizer(config, checkpoint, vocoder_checkpoint, device=device)
     return engine.synthesize(
         text, output, dialect=dialect, speed=speed, overrides=overrides,
-        peak_normalize=peak_normalize, max_chars=max_chars,
+        peak_normalize=peak_normalize, max_chars=max_chars, target_lufs=target_lufs,
     )
 
 
@@ -388,6 +443,7 @@ def synthesize_batch(
     peak_normalize: bool = False,
     max_chars: int = 400,
     device: str | None = None,
+    target_lufs: float | None = None,
 ) -> list[Path]:
     """Tổng hợp danh sách (id, text) → `<output_dir>/<id>.wav` (nạp model một lần)."""
     engine = Synthesizer(config, checkpoint, vocoder_checkpoint, device=device)
@@ -398,7 +454,7 @@ def synthesize_batch(
         path = directory / f"{sample_id}.wav"
         engine.synthesize(
             text, path, dialect=dialect, speed=speed, overrides=overrides,
-            peak_normalize=peak_normalize, max_chars=max_chars,
+            peak_normalize=peak_normalize, max_chars=max_chars, target_lufs=target_lufs,
         )
         paths.append(path)
     return paths

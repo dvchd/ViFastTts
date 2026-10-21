@@ -42,12 +42,22 @@ def _import_ort():
 
 
 def _ort_session(path: str | Path, provider: str = "auto"):
-    """Mở InferenceSession với danh sách provider đã giải."""
+    """Mở InferenceSession với danh sách provider đã giải.
+
+    `VIFASTT_INTRA_THREADS` (tuỳ chọn) đặt số luồng intra-op — dùng để kiểm tất định
+    khi đổi 1/2/4 luồng và để chốt RTF trên máy đích.
+    """
+    import os
+
     ort = _import_ort()
+    options = ort.SessionOptions()
+    threads = os.environ.get("VIFASTT_INTRA_THREADS")
+    if threads:
+        options.intra_op_num_threads = int(threads)
     return ort.InferenceSession(
         str(path),
         providers=resolve_providers(provider),
-        sess_options=ort.SessionOptions(),
+        sess_options=options,
     )
 
 
@@ -218,13 +228,15 @@ def synthesize_onnx(
     pause_comma: float = STEADY_PAUSE_COMMA,
     pause_period: float = STEADY_PAUSE_PERIOD,
     pause_default: float = STEADY_PAUSE_DEFAULT,
+    target_lufs: float | None = None,
 ) -> tuple[int, int]:
     """text → WAV bằng ONNX Runtime + numpy (không cần PyTorch).
 
     `provider`: auto|cpu|cuda|coreml|tensorrt — xem `resolve_providers`.
     `steady`: chế độ "đọc đều" — nghỉ cố định theo dấu câu (`iter_synthesize_onnx`).
+    `target_lufs`: chuẩn hoá độ to cả file (None/0 = tắt), chặn true-peak −1 dBTP.
     """
-    from vifasttts.infer import write_wav
+    from vifasttts.infer import _apply_target_lufs, write_wav
 
     rate = sample_rate
     pieces: list[np.ndarray] = []
@@ -239,6 +251,7 @@ def synthesize_onnx(
         pieces.append(audio)
     waveform = postprocess(np.concatenate(pieces), int(rate or 24000),
                            target_db=-3.0 if peak_normalize else None)
+    waveform = _apply_target_lufs(waveform, int(rate or 24000), target_lufs)
     write_wav(output, waveform, int(rate or 24000))
     return int(waveform.size), int(rate or 24000)
 

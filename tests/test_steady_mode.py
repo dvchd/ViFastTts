@@ -14,7 +14,8 @@ class _Stub(Synthesizer):
     def __init__(self) -> None:
         self.sample_rate = 1000  # để đếm mẫu = đếm ms
 
-    def _render(self, text, dialect, speed, options, gate_threshold=0.5, sharpen_alpha=0.0):
+    def _render(self, text, dialect, speed, options, gate_threshold=0.5, sharpen_alpha=0.0,
+                chunk_loudness=False):
         return np.ones(10, dtype=np.float32)
 
 
@@ -35,7 +36,8 @@ def test_steady_custom_pauses_and_gate_passthrough():
     gates: list[float] = []
     original = engine._render
 
-    def spy(text, dialect, speed, options, gate_threshold=0.5, sharpen_alpha=0.0):
+    def spy(text, dialect, speed, options, gate_threshold=0.5, sharpen_alpha=0.0,
+            chunk_loudness=False):
         gates.append(gate_threshold)
         return original(text, dialect, speed, options, gate_threshold, sharpen_alpha)
 
