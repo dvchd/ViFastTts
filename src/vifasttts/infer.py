@@ -458,6 +458,7 @@ class Synthesizer:
         max_chars: int = 400,
         pause_comma: float = STEADY_PAUSE_COMMA,
         pause_period: float = STEADY_PAUSE_PERIOD,
+        fill_gap_silence: bool = True,
     ) -> Iterator[tuple[np.ndarray, int]]:
         """Đọc CẢ CÂU một lần, pause do runtime chèn qua `gaps` (v14).
 
@@ -495,7 +496,8 @@ class Synthesizer:
                                  gaps=torch.tensor(gaps, dtype=torch.long,
                                                    device=self.device).unsqueeze(0))
                 mel = out["mel"][0]
-                mel = self._fill_gap_silence(mel, out["slot_durations"][0])
+                if fill_gap_silence:
+                    mel = self._fill_gap_silence(mel, out["slot_durations"][0])
                 waveform = self.vocoder(sharpen_mel(mel, sharpen_alpha).unsqueeze(0))[0]
             audio = _trim_edge_silence(np.asarray(waveform.float().cpu().numpy(),
                                                   dtype=np.float32), self.sample_rate)
@@ -516,6 +518,7 @@ class Synthesizer:
         pause_comma: float = STEADY_PAUSE_COMMA,
         pause_period: float = STEADY_PAUSE_PERIOD,
         target_lufs: float | None = None,
+        fill_gap_silence: bool = True,
     ) -> tuple[int, int]:
         """Ghép các câu đã đọc trọn (pause chèn qua gaps), ghi WAV."""
         from vifasttts.runtime.postprocess import postprocess
@@ -524,6 +527,7 @@ class Synthesizer:
             text, dialect=dialect, speed=speed, gate_threshold=gate_threshold,
             sharpen_alpha=sharpen_alpha, overrides=overrides, max_chars=max_chars,
             pause_comma=pause_comma, pause_period=pause_period,
+            fill_gap_silence=fill_gap_silence,
         )]
         waveform = postprocess(np.concatenate(pieces), self.sample_rate,
                                target_db=-3.0 if peak_normalize else None)
