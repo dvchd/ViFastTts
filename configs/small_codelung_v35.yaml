@@ -35,7 +35,7 @@ mel:
   log_magnitude: true
   log_floor: 1e-7
   log_floor_mode: clamp
-  normalize_path: data/codelung/mel_stats.json
+  normalize_path: data/codelung/mel_stats_v35_speech.json
 
 # F0: pyworld harvest + stonemask (thay autocorrelation — tránh lỗi quãng tám), cần extra 'f0'.
 f0:
@@ -82,7 +82,7 @@ training:
   device: auto
   cache_features: false
   ema: 0.999              # v3.5: EMA toàn bộ train, lưu trong checkpoint
-  cache_dir: cache/codelung_v2   # cache v3 (phonation) — cùng thư mục, khoá theo config
+  cache_dir: cache/codelung_v35  # v35: stats frame tiếng ⇒ mel_hash mới ⇒ cache riêng
 
 f0_stats_path: data/codelung/f0_stats_v2.json  # ngoài block `f0` — tránh đổi khoá cache v3
 
