@@ -36,6 +36,19 @@ def voiced_rms_db(x: np.ndarray, sr: int) -> float:
     return float(10 * np.log10(np.mean(frames[keep] ** 2) + 1e-12))
 
 
+def within_chunk_spike(x: np.ndarray, sr: int) -> float:
+    """Chênh p95 − trung vị của RMS 10 ms trong chunk (dB) — 'một từ tự to' trong mệnh đề."""
+    hop = max(1, int(sr * 0.01))
+    n = max(1, len(x) // hop)
+    frames = np.array([np.sqrt(np.mean(x[i * hop:(i + 1) * hop] ** 2) + 1e-12) for i in range(n)])
+    db = 20 * np.log10(frames + 1e-12)
+    keep = db > db.max() - 30.0
+    if keep.sum() < 5:
+        return float("nan")
+    values = db[keep]
+    return float(np.percentile(values, 95) - np.median(values))
+
+
 def _ci(values: list[float], fn, n_boot: int = 1000, seed: int = 42) -> tuple[float, float]:
     rng = np.random.default_rng(seed)
     arr = np.asarray(values, dtype=np.float64)
@@ -63,6 +76,7 @@ def main() -> None:
     sr = engine.sample_rate
     rows = json.loads(Path(args.texts).read_text(encoding="utf-8"))
     drifts, norms, stds, counts, per_sentence = [], [], [], [], []
+    spikes_all: list[float] = []
     for row in rows:
         levels = []
         for audio, _pause in engine.iter_synthesize_steady(
@@ -74,6 +88,7 @@ def main() -> None:
             if level < -50.0:  # chunk lặng/nhiễu nền — bỏ
                 continue
             levels.append(level)
+            spikes_all.append(within_chunk_spike(audio, sr))
         if len(levels) < args.min_chunks:
             per_sentence.append({"id": row["id"], "chunks": len(levels), "skipped": True})
             continue
@@ -100,6 +115,8 @@ def main() -> None:
         "drift_p90": round(p90, 2),
         "drift_p90_ci90": [round(p90_ci[0], 2), round(p90_ci[1], 2)],
         "drift_norm_median": round(float(np.median(norms)), 2),
+        "spike_median": round(float(np.median([s for s in spikes_all if np.isfinite(s)])), 2)
+        if any(np.isfinite(spikes_all)) else None,
         "std_median": round(float(np.median(stds)), 2),
         "chunks_median": float(np.median(counts)),
         "chunks_mean": round(float(np.mean(counts)), 2),
@@ -111,7 +128,7 @@ def main() -> None:
     out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"{args.tag or 'ckpt':10s} median {result['drift_median']} {result['drift_median_ci90']} "
           f"· p90 {result['drift_p90']} {result['drift_p90_ci90']} · norm {result['drift_norm_median']} "
-          f"· chunk median {result['chunks_median']:.0f} · n={result['n']}")
+          f"· chunk median {result['chunks_median']:.0f} · spike {result['spike_median']} · n={result['n']}")
 
 
 if __name__ == "__main__":

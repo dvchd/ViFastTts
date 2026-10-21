@@ -34,7 +34,23 @@ Histogram chunk: 3→416 · 4→380 · 5→241 · 6→138 · 7→52 · 8→21 ·
 | P2 @4k | 3,83 [3,22–4,48] | **7,28** [5,86–8,23] | 1,91 |
 | P2 @6k | 4,68 [4,15–5,99] | **7,71** [6,92–9,46] | 2,53 |
 
-### 1.4 Cổng của A0 KHÔNG THỂ ĐẠT (cần A0 quyết)
+#### 1.4 Thước bổ sung: spike TRONG mệnh đề (p95 − trung vị RMS 10 ms của chunk)
+Đây mới là thứ tai người dùng nghe ("một từ tự to lên"), tách khỏi biến thiên giữa mệnh đề:
+
+| | spike median | spike p90 |
+|---|---|---|
+| **THẬT** | **6,83** | 9,33 |
+| v3.2 | 5,25 | — |
+| P1 @6k | 6,17 | — |
+| **P2 @2k** | **6,34** | — |
+| P2 @6k | 8,08 | — |
+
+⇒ **P2 @2k gần giọng thật nhất về spike trong mệnh đề** (6,34 vs 6,83); v3.2 **dưới** (5,25 — ít nhấn),
+P2 @6k **vượt** (8,08 — nhấn quá). Khớp với tai người dùng chọn P2 @2k. P1 @6k (6,17) không nổi bật
+trên thước này, nên "xoá to" mà người dùng nghe ở P1 4k/6k nhiều khả năng là **lệch mức giữa mệnh đề**
+(cột drift), không phải spike một từ.
+
+## 1.5 Cổng của A0 KHÔNG THỂ ĐẠT (cần A0 quyết)
 Cổng v10: p90 ∈ [thật−1,5; thật+1,5] = **[6,09; 9,09] VÀ ≤ v3.2+2 = 5,39**. Giao của hai điều kiện
 là **rỗng** vì giọng thật (7,59) **cao hơn** v3.2 (3,39) — trường hợp A0 chưa xét (A0 chỉ nêu
 "nếu thật thấp hơn v3.2"). Không checkpoint nào qua cả hai.
@@ -130,7 +146,26 @@ phải model tự làm to. Nguyên nhân: biên segment/align rơi vào khoảng
 
 ## 6. Việc 3 — kết quả E1–E3 (cập nhật)
 
-(xem bản cập nhật cuối file)
+Khởi tạo từ **P2 @2k EMA** (trọng số sống + EMA = EMA P2@2k), cấu hình P2 (adv 0,3 · fm 0 · hinge),
+mỗi nhánh 4k bước, `energy_weight 1,0` (E1/E2/E3), E2 thêm `lowband_weight 2,0`, E3 adv 0,2.
+`E0` = P2 @4k/@6k đã có (đo lại bằng thước 40 câu ở mục 1.3).
+
+| nhánh | step | **val EMA** | **GV EMA** | GV live | drift p90 | ghi chú |
+|---|---|---|---|---|---|---|
+| **E0** (P2 chạy tiếp) | 4k | 1,65 (P2 4k) | 0,66* | — | **7,28** | gần giọng thật nhất |
+| E0 | 6k | — | — | — | **7,71** | |
+| **E1** (energy) | 2k | 1,6436 | 0,6487 | 0,6835 | 3,94 | |
+| **E1** | 4k | **1,6505** | **0,6718** | 0,7253 | **3,76** | **trượt cổng GV ≥ 0,72** |
+| E2 (energy+lowband) | 2k | 1,6162 | 0,6680 | 0,6313 | — | đang chạy |
+| E3 (energy, adv 0,2) | — | — | — | — | — | chờ |
+
+\* GV của P2 4k lấy từ val_log của run P2 20k gốc (cùng cấu hình, EMA).
+
+**Kết luận bước đầu:** E1 **giảm drift p90** (4,95 → 3,76) tức làm giọng **đều hơn**, đi **xa** giọng
+thật (7,59), đồng thời **GV EMA rơi xuống 0,672 < 0,72** ⇒ theo điều kiện chọn của v10, E1 **không đạt**.
+Điều này khớp với nhận định ở mục 1.5: "sửa độ to" bằng energy loss đang tối ưu **sai hướng** so với
+thước drift mới (thước muốn nhiều biến thiên hơn, không phải ít hơn).
+
 
 ## 7. Cần A0 quyết
 1. **Cổng drift**: giao rỗng — chọn (a) chỉ "gần thật ±1,5 dB", (b) chỉ "≤ v3.2+2", hay (c) định

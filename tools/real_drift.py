@@ -39,8 +39,22 @@ def voiced_rms_db(x: np.ndarray, sr: int) -> float:
     return float(10 * np.log10(np.mean(frames[keep] ** 2) + 1e-12))
 
 
+def within_chunk_spike(x: np.ndarray, sr: int) -> float:
+    """Chênh p95 − trung vị của RMS 10 ms trong chunk (dB) — 'một từ tự to' trong mệnh đề."""
+    hop = max(1, int(sr * 0.01))
+    n = max(1, len(x) // hop)
+    frames = np.array([np.sqrt(np.mean(x[i * hop:(i + 1) * hop] ** 2) + 1e-12) for i in range(n)])
+    db = 20 * np.log10(frames + 1e-12)
+    keep = db > db.max() - 30.0
+    if keep.sum() < 5:
+        return float("nan")
+    values = db[keep]
+    return float(np.percentile(values, 95) - np.median(values))
+
+
 def split_chunks(x: np.ndarray, sr: int, *, gap_s: float = 0.64, thr_db: float = 35.0,
-                 min_chunk_s: float = 0.15, floor_db: float = -50.0) -> list[float]:
+                 min_chunk_s: float = 0.15, floor_db: float = -50.0,
+                 with_spike: bool = False) -> list[float] | tuple[list[float], list[float]]:
     """Cắt tại khoảng lặng > `gap_s`, trả mức RMS dB từng chunk (bỏ chunk lặng/quá ngắn)."""
     hop = max(1, int(sr * 0.01))
     n = len(x) // hop
@@ -63,6 +77,7 @@ def split_chunks(x: np.ndarray, sr: int, *, gap_s: float = 0.64, thr_db: float =
         cuts += [start, n]
     cuts.append(n)
     levels: list[float] = []
+    spikes: list[float] = []
     for j in range(0, len(cuts) - 1, 2):
         a, b = cuts[j], cuts[j + 1]
         if (b - a) * 0.01 < min_chunk_s:
@@ -71,7 +86,9 @@ def split_chunks(x: np.ndarray, sr: int, *, gap_s: float = 0.64, thr_db: float =
         if np.isnan(level) or level < floor_db:
             continue
         levels.append(level)
-    return levels
+        if with_spike:
+            spikes.append(within_chunk_spike(x[a * hop:b * hop], sr))
+    return (levels, spikes) if with_spike else levels
 
 
 def _ci(values: list[float], fn, n_boot: int = 1000, seed: int = 42) -> tuple[float, float]:
@@ -100,6 +117,7 @@ def main() -> None:
             sentences.setdefault(key, str(row["audio_path"]))
 
     drifts: list[float] = []
+    spikes_all: list[float] = []
     norms: list[float] = []
     counts: list[int] = []
     per_sentence = []
@@ -111,13 +129,14 @@ def main() -> None:
             continue
         if x.ndim > 1:
             x = x.mean(axis=1)
-        levels = split_chunks(x, sr, gap_s=args.gap)
+        levels, spikes = split_chunks(x, sr, gap_s=args.gap, with_spike=True)
         if len(levels) < args.min_chunks:
             continue
         if args.max_chunks and len(levels) > args.max_chunks:
             continue
         drift = max(levels) - min(levels)
         drifts.append(drift)
+        spikes_all.extend([s for s in spikes if np.isfinite(s)])
         norms.append(drift / float(np.sqrt(len(levels))))
         counts.append(len(levels))
         per_sentence.append({"id": key, "chunks": len(levels), "drift": round(drift, 2),
@@ -138,6 +157,8 @@ def main() -> None:
         "drift_p90": round(p90, 2),
         "drift_p90_ci90": [round(p90_ci[0], 2), round(p90_ci[1], 2)],
         "drift_norm_median": round(float(np.median(norms)), 2),
+        "spike_median": round(float(np.median(spikes_all)), 2) if spikes_all else None,
+        "spike_p90": round(float(np.percentile(spikes_all, 90)), 2) if spikes_all else None,
         "chunks_median": float(np.median(counts)),
         "chunks_mean": round(float(np.mean(counts)), 2),
         "chunks_hist": {str(k): int(counts.count(k)) for k in sorted(set(counts))},
@@ -149,7 +170,7 @@ def main() -> None:
     print(f"REAL n={result['n']} · drift median {result['drift_median']} "
           f"CI {result['drift_median_ci90']} · p90 {result['drift_p90']} CI {result['drift_p90_ci90']} "
           f"· norm {result['drift_norm_median']} · chunk median {result['chunks_median']} "
-          f"hist {result['chunks_hist']}")
+          f"· spike {result['spike_median']} (p90 {result['spike_p90']})")
 
 
 if __name__ == "__main__":
