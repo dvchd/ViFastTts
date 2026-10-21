@@ -230,6 +230,31 @@ class Synthesizer:
                 changed = True
         return (new_durations, new_seg) if changed else None
 
+    def _fill_gap_silence(self, mel, slot_durations):
+        """v15: frame thuộc gap = mel lặng chuẩn (trung vị lặng corpus), không dùng embedding học."""
+        import json
+
+        if getattr(self, "_silence_mel", None) is None:
+            path = Path(self.config.get("silence_mel_path",
+                                        "data/codelung/silence_mel_v2.json"))
+            if not path.exists():
+                self._silence_mel = False
+            else:
+                values = json.loads(path.read_text(encoding="utf-8"))["mel"]
+                import torch
+
+                self._silence_mel = torch.tensor(values, dtype=mel.dtype, device=mel.device)
+        if self._silence_mel is False:
+            return mel
+        slots = [int(v) for v in slot_durations.tolist()]
+        cursor = 0
+        for index, length in enumerate(slots):
+            if index >= 1 and (index - 1) % 5 == 4 and length > 0:  # slot gap
+                end = min(mel.size(0), cursor + length)
+                mel[cursor:end] = self._silence_mel
+            cursor += length
+        return mel
+
     def _apply_chunk_loudness(self, mel):
         """Dịch đều log-mel của chunk về mức hữu thanh mục tiêu (6d, ±4 dB)."""
         import json
@@ -420,6 +445,91 @@ class Synthesizer:
                     yield np.zeros(silence, dtype=np.float32), self.sample_rate
         if not rendered_any:
             raise ValueError("Không có âm tiết nào để tổng hợp")
+
+    def iter_synthesize_sentence(
+        self,
+        text: str,
+        *,
+        dialect: str = "north",
+        speed: float = 1.0,
+        gate_threshold: float = 1.01,
+        sharpen_alpha: float = 0.0,
+        overrides: dict[str, str] | None = None,
+        max_chars: int = 400,
+        pause_comma: float = STEADY_PAUSE_COMMA,
+        pause_period: float = STEADY_PAUSE_PERIOD,
+    ) -> Iterator[tuple[np.ndarray, int]]:
+        """Đọc CẢ CÂU một lần, pause do runtime chèn qua `gaps` (v14).
+
+        Vì sao: tách chunk tại dấu phẩy làm model mất ngữ cảnh — chữ đầu chunk bị kéo dài
+        ("rồi" 42 vs 32 frame) và chữ cuối chunk mất onset ("nhà" nghe thành "là").
+        Ở đây model thấy trọn câu; khoảng nghỉ đặt đúng sau âm tiết mang dấu câu.
+        """
+        import torch
+
+        from vifasttts.frontend.normalizer import NormalizerOptions
+        from vifasttts.runtime.postprocess import sharpen_mel
+
+        options = NormalizerOptions(dialect=dialect, exact_overrides=dict(overrides or {}))  # type: ignore[arg-type]
+        hop = 256
+        for chunk in chunk_text(text, max_chars=max_chars):
+            items = parse_text(chunk, dialect=dialect, options=options, resolve_oov=True)
+            if not items:
+                continue
+            features = torch.tensor([[self.vocabs.encode(item) for item in items]],
+                                    dtype=torch.long, device=self.device)
+            gaps = np.zeros(len(items), dtype=np.int64)
+            for index, item in enumerate(items):
+                mark = str(getattr(item, "punctuation", None) or "")
+                if index == len(items) - 1:
+                    continue
+                if mark == ",":
+                    gaps[index] = round(pause_comma * self.sample_rate / hop)
+                elif mark in (";", ":"):
+                    gaps[index] = round(0.35 * self.sample_rate / hop)
+                elif mark in (".", "?", "!"):
+                    gaps[index] = round(pause_period * self.sample_rate / hop)
+            with torch.no_grad():
+                speed_t = torch.tensor([float(speed)], dtype=torch.float32, device=self.device)
+                out = self.model(features, speed=speed_t, gate_threshold=gate_threshold,
+                                 gaps=torch.tensor(gaps, dtype=torch.long,
+                                                   device=self.device).unsqueeze(0))
+                mel = out["mel"][0]
+                mel = self._fill_gap_silence(mel, out["slot_durations"][0])
+                waveform = self.vocoder(sharpen_mel(mel, sharpen_alpha).unsqueeze(0))[0]
+            audio = _trim_edge_silence(np.asarray(waveform.float().cpu().numpy(),
+                                                  dtype=np.float32), self.sample_rate)
+            yield audio, self.sample_rate
+
+    def synthesize_sentence(
+        self,
+        text: str,
+        output: str | Path,
+        *,
+        dialect: str = "north",
+        speed: float = 1.0,
+        gate_threshold: float = 1.01,
+        sharpen_alpha: float = 0.0,
+        overrides: dict[str, str] | None = None,
+        peak_normalize: bool = False,
+        max_chars: int = 400,
+        pause_comma: float = STEADY_PAUSE_COMMA,
+        pause_period: float = STEADY_PAUSE_PERIOD,
+        target_lufs: float | None = None,
+    ) -> tuple[int, int]:
+        """Ghép các câu đã đọc trọn (pause chèn qua gaps), ghi WAV."""
+        from vifasttts.runtime.postprocess import postprocess
+
+        pieces = [audio for audio, _ in self.iter_synthesize_sentence(
+            text, dialect=dialect, speed=speed, gate_threshold=gate_threshold,
+            sharpen_alpha=sharpen_alpha, overrides=overrides, max_chars=max_chars,
+            pause_comma=pause_comma, pause_period=pause_period,
+        )]
+        waveform = postprocess(np.concatenate(pieces), self.sample_rate,
+                               target_db=-3.0 if peak_normalize else None)
+        waveform = _apply_target_lufs(waveform, self.sample_rate, target_lufs)
+        write_wav(output, waveform, self.sample_rate)
+        return int(waveform.size), self.sample_rate
 
     def synthesize_steady(
         self,

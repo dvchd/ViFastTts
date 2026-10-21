@@ -334,6 +334,10 @@ def synthesize_cmd(
                                           help="Ngưỡng gate pause (mặc định 0.5; khi --steady mặc định 1.01 = chặn tuyệt đối)"),
     steady: bool = typer.Option(False, "--steady",
                                 help="Chế độ đọc đều: cắt tại dấu câu + nghỉ CỐ ĐỊNH (không dùng pause model học)"),
+    sentence: bool = typer.Option(False, "--sentence",
+                                  help="v14: đọc CẢ CÂU một lần, pause chèn qua gaps (giữ ngữ cảnh, tránh kéo dài đầu chunk)"),
+    steady_mode: str = typer.Option("sentence", "--steady-mode",
+                                    help="v15: sentence (mặc định, đọc cả câu + pause qua gaps) | chunk (cũ)"),
     pause_comma: float = typer.Option(0.25, "--pause-comma", help="Nghỉ sau phẩy/chấm phẩy (giây, --steady)"),
     pause_period: float = typer.Option(0.55, "--pause-period", help="Nghỉ sau chấm/hỏi/than (giây, --steady)"),
     pause_default: float = typer.Option(0.08, "--pause-default",
@@ -365,7 +369,14 @@ def synthesize_cmd(
     gate = gate_threshold if gate_threshold is not None else (1.01 if steady else 0.5)
     engine = Synthesizer(load_config(config), checkpoint, vocoder_checkpoint, device=device)
     overrides_dict = load_overrides(overrides) if overrides else None
-    if steady:
+    if (steady and steady_mode == "sentence") or sentence:
+        samples, sample_rate = engine.synthesize_sentence(
+            text, output, dialect=dialect, speed=speed, gate_threshold=gate,
+            sharpen_alpha=sharpen_alpha, overrides=overrides_dict,
+            peak_normalize=peak_normalize, max_chars=max_chars,
+            pause_comma=pause_comma, pause_period=pause_period, target_lufs=target_lufs,
+        )
+    elif steady:
         samples, sample_rate = engine.synthesize_steady(
             text, output, dialect=dialect, speed=speed, gate_threshold=gate,
             sharpen_alpha=sharpen_alpha, overrides=overrides_dict,
