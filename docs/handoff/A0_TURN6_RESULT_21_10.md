@@ -59,3 +59,25 @@ không phải dịch chuyển năng lượng hệ thống.
 - Tiến trình P1: https://cio-rows-rocks-seq.trycloudflare.com/adv_progress/
 - Tiến trình P2: https://cio-rows-rocks-seq.trycloudflare.com/adv_progress_p2/
 - Top spike từng checkpoint: `/energy/v32_ref/`, `/energy/p1_2k/`, `/energy/p1_4k/`, `/energy/p1_6k/`, `/energy/p2_2k/`
+
+## 4. Bổ sung (người dùng nghe): "xoá" to dần ở P1 — P2 2k KHÔNG bị
+
+Đo trên chính câu `tech2` ("… Chúng ta sẽ xoá cái phần này đi …"), WAV chế độ đọc đều α=0 đã có,
+năng lượng **mệnh đề** chứa "xoá" so mệnh đề 1 (dB):
+
+| checkpoint | c1 | c2 (chứa "xoá") | **c2 − c1** | đỉnh c2 |
+|---|---|---|---|---|
+| v3.2 | −29,1 | −28,4 | **+0,7** | −21,8 |
+| P1 @2k | −28,2 | −26,9 | +1,2 | −20,6 |
+| P1 @4k | −28,8 | −24,5 | **+4,3** | −13,8 |
+| P1 @6k | −28,4 | −22,4 | **+6,0** | −12,4 |
+| P1 @8k | −29,0 | −24,8 | +4,2 | −18,1 |
+| **P2 @2k** | −25,4 | −25,6 | **−0,2** | −19,5 |
+
+⇒ "Từ to lên" là **thật và đo được**, tăng theo bước ở P1 (H2 — GAN kéo lệch năng lượng), và **P2 @2k
+không bị** (cân bằng như v3.2). Khớp đúng tai người dùng: P2 2k rõ hơn, ít rè hơn, ít to tiếng hơn.
+⇒ Ứng viên hiện tại: **P2 @2k** (chờ P2 4k/6k để xem có trôi không; nếu trôi → chọn checkpoint sớm).
+⇒ Việc 4b (energy envelope loss + low-band ×2) **có cơ sở** — ưu tiên khởi động từ P2 @2k.
+
+## 5. Bổ sung (người dùng nghe): P2 @2k là bản tốt nhất hiện tại
+Tai người dùng: **P2 2k rõ hơn P1, ít rè hơn, ít to tiếng hơn** — khớp bảng mục 4.
