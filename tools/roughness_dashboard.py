@@ -107,7 +107,7 @@ def main() -> None:
     parser.add_argument("--cache-dir", required=True)
     parser.add_argument("--clips", type=int, default=8)
     parser.add_argument("--device", default="mps")
-    parser.add_argument("--sharpen-alpha", type=float, default=1.5)
+    parser.add_argument("--sharpen-alpha", type=float, default=0.0)
     parser.add_argument("--filter-syllable", default=None,
                         help="Chỉ lấy segment chứa chuỗi này (vd 'mới')")
     parser.add_argument("--out", required=True)

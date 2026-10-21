@@ -48,6 +48,7 @@ def main() -> None:
     parser.add_argument("--out", required=True)
     parser.add_argument("--texts", default=str(_ROOT / "examples/steady_texts.json"))
     parser.add_argument("--clips", type=int, default=4)
+    parser.add_argument("--alphas", default="0", help="mỗi checkpoint sinh 1 cột cho mỗi α")
     parser.add_argument("--device", default="mps")
     args = parser.parse_args()
 
@@ -56,15 +57,19 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     texts = json.loads(Path(args.texts).read_text(encoding="utf-8"))[: args.clips]
 
+    alphas = [float(a) for a in args.alphas.split(",") if a.strip()]
+
     def ensure(name: str, checkpoint: Path) -> None:
-        """Sinh WAV cho một cột nếu chưa có."""
-        target = out / name
-        if (target / "steady").exists() and len(list((target / "steady").glob("*.wav"))) >= len(texts):
-            return
-        subprocess.run([sys.executable, str(_ROOT / "tools/steady_demo.py"),
-                        "--config", args.config, "--checkpoint", str(checkpoint),
-                        "--out", str(target), "--clips", str(args.clips), "--device", args.device],
-                       check=True, stdout=subprocess.DEVNULL)
+        """Sinh WAV cho một cột nếu chưa có (mỗi α một thư mục)."""
+        for alpha in alphas:
+            target = out / f"{name}_a{alpha:g}"
+            if (target / "steady").exists() and len(list((target / "steady").glob("*.wav"))) >= len(texts):
+                continue
+            subprocess.run([sys.executable, str(_ROOT / "tools/steady_demo.py"),
+                            "--config", args.config, "--checkpoint", str(checkpoint),
+                            "--out", str(target), "--clips", str(args.clips), "--device", args.device,
+                            "--sharpen-alpha", str(alpha)],
+                           check=True, stdout=subprocess.DEVNULL)
 
     ensure("v32", Path(args.base))
     columns: list[tuple[int, str]] = []
@@ -76,9 +81,10 @@ def main() -> None:
             _merge(Path(args.base), ckpt, merged_path)
         name = f"step_{step // 1000:02d}k"
         ensure(name, merged_path)
-        columns.append((step, name))
+        for alpha in alphas:
+            columns.append((step, f"{name}_a{alpha:g}"))
 
-    head = "".join(f"<th>step {step // 1000}k</th>" for step, _ in columns)
+    head = "".join(f"<th>step {step // 1000}k<br>α={name.rsplit('_a', 1)[-1]}</th>" for step, name in columns)
     rows = []
     for item in texts:
         cells = []
@@ -86,14 +92,15 @@ def main() -> None:
             src = f"{name}/steady/{item['id']}.wav"
             cells.append(f"<td><audio controls src='{src}'></audio></td>" if (out / src).exists() else "<td>—</td>")
         rows.append(f"<tr><td style='max-width:360px'>{html.escape(item['text'])}</td>"
-                    f"<td><audio controls src='v32/steady/{item['id']}.wav'></audio></td>" + "".join(cells) + "</tr>")
+                    f"<td><audio controls src='v32_a{alphas[0]:g}/steady/{item['id']}.wav'></audio></td>"
+                    + "".join(cells) + "</tr>")
     page = ("<!doctype html><meta charset='utf-8'><title>Tiến trình adversarial</title>"
             "<body style='font-family:sans-serif;max-width:1400px;margin:2em auto'>"
             f"<h1>Tiến trình fine-tune adversarial — {run_dir.name}</h1>"
             "<p>Chế độ đọc đều, α=1,5, trọng số <b>EMA</b>. Cùng câu, cùng vocoder. "
             "Cột trái nhất = v3.2 gốc. Nghe lần lượt từ trái sang phải để thấy 'rè' đổi thế nào.</p>"
             "<table border='1' cellpadding='6' style='border-collapse:collapse;font-size:13px'>"
-            f"<tr><th>câu</th><th>v3.2</th>{head}</tr>" + "".join(rows) + "</table></body>")
+            f"<tr><th>câu</th><th>v3.2 α={alphas[0]:g}</th>{head}</tr>" + "".join(rows) + "</table></body>")
     (out / "index.html").write_text(page, encoding="utf-8")
     print(f"→ {out / 'index.html'} · {len(columns)} checkpoint")
 

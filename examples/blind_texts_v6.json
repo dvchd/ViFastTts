@@ -1,0 +1,14 @@
+{
+  "new": [
+    {"id": "new1", "text": "Bầu trời hôm nay rất xanh, gió lạnh thổi qua con đường quanh co trước cửa nhà."},
+    {"id": "new2", "text": "Cái ách treo trên tường đã cũ, còn con ếch thì ngồi im bên bờ ao."},
+    {"id": "new3", "text": "Quanh khu vườn có mấy luống rau xanh mướt, buổi sáng trời lạnh nên mình tưới ít nước."},
+    {"id": "new4", "text": "Xanh, lạnh, quanh, ách, ếch — năm từ này mình muốn nghe rõ phụ âm cuối."},
+    {"id": "new5", "text": "Mùa đông ở đây lạnh lắm, cây cối vẫn xanh vì có người chăm quanh năm."},
+    {"id": "new6", "text": "Cái ách bằng gỗ nặng trịch, con ếch nhảy ra khỏi ao rồi biến mất sau bụi cỏ."}
+  ],
+  "long": [
+    {"id": "long1", "text": "Hôm nay mình sẽ đi qua toàn bộ quy trình làm việc của một dự án nhỏ, bắt đầu từ lúc nhận yêu cầu, sau đó là phân tích, thiết kế, rồi viết code, chạy thử và sửa lỗi. Mỗi bước đều có những cái bẫy riêng, và mình sẽ chỉ rõ những chỗ dễ sai nhất để các bạn tránh. Đầu tiên là phần yêu cầu, các bạn cần đọc thật kỹ, ghi lại những câu hỏi còn chưa rõ, rồi hỏi lại người đặt hàng trước khi bắt tay vào làm, vì sửa yêu cầu muộn sẽ tốn rất nhiều thời gian."},
+    {"id": "long2", "text": "Sau khi hoàn thành phần chạy thử, chúng ta sẽ quay lại kiểm tra từng chức năng một, ghi lại những chỗ còn chậm và những chỗ dễ gây nhầm lẫn cho người dùng. Những đoạn nào mà người dùng phải bấm nhiều lần, hoặc phải suy nghĩ lâu mới hiểu, thì nên được rút gọn lại. Cuối cùng là phần bàn giao, mình sẽ viết một tài liệu ngắn, có ảnh chụp màn hình, có các bước cài đặt rõ ràng, để người tiếp nhận có thể tự làm mà không cần hỏi lại mình quá nhiều."}
+  ]
+}

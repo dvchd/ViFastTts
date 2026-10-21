@@ -45,7 +45,7 @@ def main() -> None:
     parser.add_argument("--out", required=True)
     parser.add_argument("--clips", type=int, default=0, help="Giới hạn số câu (0 = tất cả)")
     parser.add_argument("--device", default="cpu", help="cpu (mặc định) | mps | cuda")
-    parser.add_argument("--sharpen-alpha", type=float, default=1.5,
+    parser.add_argument("--sharpen-alpha", type=float, default=0.0,
                         help="làm nét mel (production = 1,5 — sh25, §33)")
     parser.add_argument("--gate", type=float, default=0.5, help="Ngưỡng gate của bản normal")
     parser.add_argument("--steady-gate", type=float, default=0.999,

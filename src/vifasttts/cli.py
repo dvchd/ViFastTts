@@ -338,7 +338,7 @@ def synthesize_cmd(
     pause_period: float = typer.Option(0.55, "--pause-period", help="Nghỉ sau chấm/hỏi/than (giây, --steady)"),
     pause_default: float = typer.Option(0.08, "--pause-default",
                                         help="Nghỉ mặc định khi mảnh không có dấu câu (giây, --steady)"),
-    sharpen_alpha: float = typer.Option(1.5, "--sharpen-alpha",
+    sharpen_alpha: float = typer.Option(0.0, "--sharpen-alpha",
                                          help="Làm nét mel = sh25 (1.5 = mức người dùng chọn; 0 = tắt)"),
     vocoder_checkpoint: str | None = typer.Option(None, help="Checkpoint vocoder (tùy chọn)"),
     overrides: str | None = typer.Option(None, help="File JSON 'mặt chữ: cách đọc'"),

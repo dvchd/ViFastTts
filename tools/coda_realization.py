@@ -57,7 +57,7 @@ def main() -> None:
     parser.add_argument("--cache-dir", required=True)
     parser.add_argument("--clips", type=int, default=20)
     parser.add_argument("--device", default="mps")
-    parser.add_argument("--sharpen-alpha", type=float, default=1.5)
+    parser.add_argument("--sharpen-alpha", type=float, default=0.0)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 

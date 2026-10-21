@@ -82,7 +82,7 @@ def main() -> None:
     parser.add_argument("--n-per-group", type=int, default=12)
     parser.add_argument("--rare-max", type=int, default=5)
     parser.add_argument("--common-min", type=int, default=150)
-    parser.add_argument("--sharpen-alpha", type=float, default=1.5)
+    parser.add_argument("--sharpen-alpha", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
