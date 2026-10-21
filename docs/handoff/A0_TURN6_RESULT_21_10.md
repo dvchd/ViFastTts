@@ -108,3 +108,34 @@ lặng ⇒ drift 88 dB) — đã sửa: bỏ chunk < 0,15 s hoặc < −50 dBFS.
 
 **Quyết định tạm thời**: ứng viên production = **P2 @2k EMA** (qua cổng drift, GV EMA 0,724, val EMA
 +4,1 %, tai người dùng chọn). P1 giữ 2/4/6/8k làm đối chứng; P2 giữ 2/4/6k.
+
+## 7. Nhận lệnh A0 lượt 8 — trạng thái bàn giao (phiên sắp hết ngữ cảnh)
+
+Đồng ý toàn bộ §0–§6 của v8. Trạng thái thực tế:
+
+- **Đã có**: P2 @2k EMA (`runs/adv_p2_20k/ckpt_2000.pt`, bản gộp dùng được:
+  `artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt`), P1 2/4/6/8k, P2 2/4/6k;
+  thước `tools/premise_drift.py` + 20 câu `examples/drift_texts.json`; số drift mục 6.
+- **Chưa làm**: 6a (ONNX + md5 + RTF), 6b (mốc giọng thật + 40 câu + CI), 6c (E0–E3),
+  6d (chuẩn hoá runtime), 6e (top spike).
+
+### Việc kế tiếp, theo đúng thứ tự (để phiên sau chạy ngay)
+
+1. **6b trước 6a** (rẻ, quyết định cổng): chọn câu thật ≥3 mệnh đề từ val/holdout (ghép segment
+   liên tiếp cùng `parent`), đo `drift` bằng **cùng công thức** (`_voiced_rms_db` chunk + max−min),
+   báo median/p90 + CI 90 % bootstrap 1.000 lần; mở rộng bộ câu mới lên 40 (giữ 20 cũ + 20 mới).
+   Cổng mới: p90 model ∈ [thật−1,5; thật+1,5] dB **và** ≤ v3.2+2 dB (nếu thật < v3.2 chỉ dùng điều kiện 1).
+2. **6a**: `vifasttts export` từ P2 @2k EMA → ONNX opset 18, `dynamo=False`; md5 ×3 cùng input;
+   md5 khi đổi intra-op threads 1/2/4; RTF CPU 2 luồng (acoustic/vocoder riêng). Tên `v32_adv_p2_2k`,
+   giữ v3.2 làm phương án lùi.
+3. **6c**: E0–E3 từ P2 @2k (cả trọng số sống + EMA khởi tạo bằng EMA P2@2k), 4k bước/nhánh,
+   đo ở 2k/4k: drift (thước 6b), GV EMA, val EMA, flux biên, smooth. Chọn theo §3.
+4. **6d**: chuẩn hoá log-mel theo chunk về trung vị RMS hữu thanh của giọng thật, giới hạn ±4 dB,
+   mặc định TẮT; đo drift có/không cho v3.2, P2@2k, P2@6k; trang nghe 6 câu A/B.
+5. **6e**: 10 top spike (qua, Ở, ét, ai…) — mel thật + TextGrid quanh âm tiết, xác định frame thật
+   có lặng/biên lệch; chỉ báo cáo.
+
+### Cảnh báo đã ghi nhận từ A0 (đừng quên khi đọc số cũ)
+- P2 @2k qua cổng một phần nhờ EMA còn ~18 % trọng số v3.2 ⇒ **không có dư địa train thêm GAN**
+  nếu không sửa độ to (6c).
+- Mẫu 20 câu ⇒ p90 ≈ câu tệ thứ hai; phải lên ≥40 câu + CI trước khi dùng làm cổng chính.
