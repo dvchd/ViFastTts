@@ -60,6 +60,7 @@ def main() -> None:
         files = files[:args.limit]
     tally: dict[str, Counter] = defaultdict(Counter)
     by_rime: dict[str, Counter] = defaultdict(Counter)
+    by_nucleus: dict[str, dict[str, Counter]] = defaultdict(lambda: defaultdict(Counter))
     examples: dict[str, list[str]] = defaultdict(list)
     words_total = phones_unmatched = 0
     for index, path in enumerate(files, start=1):
@@ -86,6 +87,7 @@ def main() -> None:
             tally[coda][verdict] += 1
             rime = _strip_tone(word.strip())
             by_rime[rime][verdict] += 1
+            by_nucleus[coda][abstract.nucleus][verdict] += 1
             if verdict != "ok" and len(examples[f"{coda}:{verdict}"]) < 8:
                 examples[f"{coda}:{verdict}"].append(f"{word}({rime})→{last_phone}")
         if index % 2000 == 0:
@@ -99,6 +101,8 @@ def main() -> None:
     result = {"files": len(files), "words": words_total, "phones_unmatched": phones_unmatched,
               "summary": summary,
               "by_rime": {rime: dict(counter) for rime, counter in sorted(by_rime.items())},
+              "by_nucleus": {coda: {nuc: dict(counter) for nuc, counter in sorted(nucs.items())}
+                             for coda, nucs in sorted(by_nucleus.items())},
               "examples": dict(examples)}
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
