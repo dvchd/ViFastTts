@@ -297,3 +297,65 @@ Theo v11 §3, gộp một lần; các mục cần code mới được đánh d�
 
 Thứ tự train đề xuất: L1 tới hội tụ (60k) → GAN riêng (adv 0,3 · fm 0 · hinge · warmup 300 ·
 EMA 0,999) → chọn checkpoint sớm (~2k) theo cổng drift ≤ v3.2+2 (đọc **cận trên CI**) + tai.
+
+## 11. Việc 8a — tách nguồn lỗi prosody (sửa luôn lỗi semis = 0,00)
+
+**Lỗi đo cũ (A0 nghi đúng):** ở chế độ model mình truyền **cả chunk** vào `_stats`, nên "semis" luôn
+= 0 và creak/contour là của cả chunk, không phải token "rồi". Đã sửa: cắt đúng token theo
+`durations` + `pause_gap` (mục 8.2 ở trên là số CŨ, không dùng).
+
+Đo lại 12 segment có "rồi" ở đầu, tham chiếu f0 trung vị THẬT của segment, f0 đo trên AUDIO:
+
+| model | chế độ | semis | contour | creak | **slope** | corr |
+|---|---|---|---|---|---|---|
+| **P2 @2k** | tf_dur | −1,85 | −1,87 | 0,02 | **0,79** | 0,75 |
+| **P2 @2k** | **tf_full** | −1,09 | −0,87 | 0,03 | **1,02** | 0,80 |
+| **P2 @2k** | free | −2,22 | −3,06 | 0,057 | 0,81 | 0,73 |
+| v3.2 | tf_dur | −1,85 | −1,52 | 0,025 | 0,81 | 0,76 |
+| v3.2 | **tf_full** | −0,99 | −0,39 | 0,045 | **0,59** | 0,66 |
+| v3.2 | free | −1,83 | −2,32 | 0,077 | 0,81 | 0,77 |
+
+Giọng thật (đầu mệnh đề): semis **−1,34**, contour **−2,50**, creak **0 %**.
+Phonation dự đoán (hnr, glot, jitter) `[-1,47, 0,03, 0,11]` vs thật `[-1,45, 0,14, 0,14]` ⇒ đầu
+phonation gần đúng (glottalization hơi thấp).
+
+**Đọc:** với P2 @2k, tf_full đưa slope về **1,02** ⇒ **decoder không lỗi**, lỗi ở đầu dự đoán f0.
+Nhưng với v3.2, tf_full lại **0,59** ⇒ đường f0 → mel **không ổn định giữa các checkpoint** (xem 8b).
+
+## 12. Việc 8b — giãn f0 ở runtime: **KẾT QUẢ ÂM** (quan trọng)
+
+Thêm `--f0-scale` (mặc định 1,0): `f0_new = mean_câu + k·(f0 − mean_câu)` trong log-F0, chỉ frame
+hữu thanh, trước `variance_proj`. Đo TF-dur trên 40 segment val (P2 @2k):
+
+| k | slope | corr | model p10–p90 |
+|---|---|---|---|
+| 1,00 | 0,785 | 0,633 | −4,4…+2,1 |
+| 1,25 | 0,780 | 0,650 | −4,4…+2,2 |
+| 1,45 | 0,783 | 0,634 | −4,4…+2,1 |
+
+**Nguyên nhân:** đầu f0 CÓ đổi (p10/p90 99/126 → 93/133 Hz) nhưng **cao độ audio gần như không đổi**
+(84/98/115 → 84/98/114 Hz). Kiểm chứng bằng cách đặt **cột f0 = 0** trong `variance_override`:
+audio chỉ giảm 5–9 % (110,9→104,4 · 138,7→129,4 · 135,5→121,2 Hz), **vẫn còn cao độ**.
+⇒ Cao độ đầu ra chủ yếu do **hidden state của decoder** quyết định; **kênh f0 chỉ ảnh hưởng ~10 %**.
+Vì vậy **không thể sửa prosody bằng scaling ở runtime** — phải sửa kiến trúc (xem mục 13).
+
+## 13. v3.5 — bổ sung do 8a/8b
+
+Thêm vào danh sách v11/v12:
+- **Nối f0 vào decoder bằng FiLM/pitch-embedding** (không chỉ concat qua `variance_proj`), và
+  **f0 dropout/perturbation ±2 semitone khi train** để decoder buộc phải dùng tín hiệu f0.
+  Cổng: slope ≥ 0,75 **ở cả TF-dur và free-run**, không chỉ TF-full.
+- Giữ `--f0-scale` trong code nhưng **mặc định 1,0** (đã chứng minh vô tác dụng).
+- f0_delta: giá trị **6,4 là z-unit** (L1 trên delta hệ số DCT của log-F0 **đã z-score** theo
+  `f0_stats`, chia cho `len(DELTA_POSITIONS)`), **không phải Hz/semitone**. Quy đổi thô: lệch contour
+  ~1 semitone ⇒ ~0,5–1,0 đơn vị semitone. Vì vậy hạ 0,5→0,2 là hợp lý; muốn so trực tiếp bằng
+  semitone thì phải đổi loss sang thang semitone (chưa làm).
+
+## 14. Việc 8c — kịch bản thu bổ sung v1
+
+`tools/build_recording_script.py` → **`docs/recording_script_v1.md`**:
+- **800 câu** + **56 câu cặp tối thiểu**, **9.234 âm tiết** ≈ **34 phút** đọc (2 lần ≈ 68 phút).
+- Phủ **600/600** âm tiết hiếm (< 10 lần) đạt ≥ 3 lần.
+- Kèm hướng dẫn thu (cùng micro, TẮT RNNoise, WAV 48 kHz 24-bit, đọc đều, 2 lần/câu).
+- Hạn chế: câu sinh theo **khuôn** (carrier) để phủ âm tiết, không phải văn xuôi tự nhiên; nếu cần
+  tự nhiên hơn thì cần một corpus văn bản để chọn câu (chưa có trong repo).

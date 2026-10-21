@@ -181,6 +181,8 @@ class ViFastTtsModelV2(nn.Module):
         speed: torch.Tensor | None = None,
         input_lengths: torch.Tensor | None = None,
         gate_threshold: float | torch.Tensor = 0.5,
+        variance_override: torch.Tensor | None = None,
+        f0_scale: float = 1.0,
     ) -> dict[str, torch.Tensor]:
         """features [B,N,7] → dict đầu ra (docstring module: quy ước tham số + output)."""
         batch, syllables = features.shape[0], features.shape[1]
@@ -266,6 +268,15 @@ class ViFastTtsModelV2(nn.Module):
         # `f0_log_mean + f0_log_std ×` để về log-F0 tự nhiên (§6); thiếu bước này f0 ra ~1,0 log.
         contour_shape = build_f0_contour(shape_slots, slot_durations, positions)
         f0_frames = (self.f0_log_mean + self.f0_log_std * contour_shape) * (1.0 - gap_expanded.squeeze(-1))
+        if f0_scale != 1.0:
+            # A0 v12 §2 (8b): giãn biên độ f0 quanh trung bình câu, trong log (≈ semitone),
+            # chỉ trên frame hữu thanh. `f0_scale` > 1 bù lại việc model nén biên độ.
+            voiced_mask = ((f0_frames > 0) & (gap_expanded.squeeze(-1) < 0.5)).to(f0_frames.dtype)
+            log_f0 = torch.log(f0_frames.clamp_min(1e-6))
+            denom = voiced_mask.sum(dim=-1, keepdim=True).clamp_min(1.0)
+            mean_log = (log_f0 * voiced_mask).sum(dim=-1, keepdim=True) / denom
+            scaled = torch.exp(mean_log + float(f0_scale) * (log_f0 - mean_log))
+            f0_frames = torch.where(voiced_mask > 0.5, scaled, f0_frames)
 
         variance_parts = [f0_frames.unsqueeze(-1)]
         for values in (segment_out[..., 4], segment_out[..., 5]):
@@ -276,7 +287,8 @@ class ViFastTtsModelV2(nn.Module):
             phonation_slots = segment_to_slot(segment_out[..., 6:9])
             expanded_phonation, _, _ = self.length_regulator(phonation_slots, slot_durations)
             variance_parts.append(expanded_phonation * (1.0 - gap_expanded))
-        variance = torch.cat(variance_parts, dim=-1)
+        variance = (variance_override if variance_override is not None
+                    else torch.cat(variance_parts, dim=-1))
 
         decoded = self.decoder(
             expanded + self.variance_proj(variance) + self.position_proj(positions.unsqueeze(-1)),

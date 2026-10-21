@@ -349,6 +349,8 @@ def synthesize_cmd(
                                       help="Chuẩn hoá độ to cả file về LUFS này (0 = tắt)"),
     chunk_loudness: bool = typer.Option(False, "--chunk-loudness",
                                         help="6d: chuẩn hoá độ to TỪNG chunk trên log-mel (mặc định tắt)"),
+    f0_scale: float = typer.Option(1.0, "--f0-scale",
+                                   help="8b: giãn biên độ f0 quanh trung bình câu (1.0 = tắt; thử 1,25 / 1,45)"),
 ) -> None:
     """Tổng hợp WAV bằng PyTorch (chunk câu dài, override, chuẩn hoá đỉnh tuỳ chọn).
 
@@ -367,14 +369,14 @@ def synthesize_cmd(
             sharpen_alpha=sharpen_alpha, overrides=overrides_dict,
             peak_normalize=peak_normalize, max_chars=max_chars,
             pause_comma=pause_comma, pause_period=pause_period, pause_default=pause_default,
-            target_lufs=target_lufs, chunk_loudness=chunk_loudness,
+            target_lufs=target_lufs, chunk_loudness=chunk_loudness, f0_scale=f0_scale,
         )
     else:
         samples, sample_rate = engine.synthesize(
             text, output, dialect=dialect, speed=speed, gate_threshold=gate,
             sharpen_alpha=sharpen_alpha, overrides=overrides_dict,
             peak_normalize=peak_normalize, max_chars=max_chars, target_lufs=target_lufs,
-            chunk_loudness=chunk_loudness,
+            chunk_loudness=chunk_loudness, f0_scale=f0_scale,
         )
     typer.echo(f"Đã ghi {output} ({samples} mẫu @ {sample_rate} Hz)")
 

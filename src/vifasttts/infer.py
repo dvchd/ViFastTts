@@ -209,7 +209,7 @@ class Synthesizer:
 
     def _render(self, text: str, dialect: str, speed: float, options,
                 gate_threshold: float = 0.5, sharpen_alpha: float = 0.0,
-                chunk_loudness: bool = False) -> np.ndarray | None:
+                chunk_loudness: bool = False, f0_scale: float = 1.0) -> np.ndarray | None:
         """Tổng hợp một đoạn: parse → model → vocoder; None nếu đoạn không có âm tiết.
 
         v2 (`v2_slot5`): **một** forward `model(features, speed=[speed])` — speed
@@ -229,7 +229,7 @@ class Synthesizer:
             if self.arch == ARCH_V2:
                 speed_t = torch.tensor([float(speed)], dtype=torch.float32, device=self.device)
                 mel = self.model(features, speed=speed_t,
-                                 gate_threshold=gate_threshold)["mel"][0]
+                                 gate_threshold=gate_threshold, f0_scale=f0_scale)["mel"][0]
             else:
                 outputs = self.model(features)
                 if speed != 1.0:
@@ -254,6 +254,7 @@ class Synthesizer:
         overrides: dict[str, str] | None = None,
         max_chars: int = 400,
         chunk_loudness: bool = False,
+        f0_scale: float = 1.0,
     ) -> Iterator[tuple[np.ndarray, int]]:
         """Yield (waveform, sample_rate) từng đoạn — gồm cả khoảng nghỉ giữa câu."""
         from vifasttts.frontend.normalizer import NormalizerOptions
@@ -266,7 +267,7 @@ class Synthesizer:
         for index, chunk in enumerate(chunks):
             rendered = self._render(chunk, dialect, speed, options,
                                     gate_threshold=gate_threshold, sharpen_alpha=sharpen_alpha,
-                                    chunk_loudness=chunk_loudness)
+                                    chunk_loudness=chunk_loudness, f0_scale=f0_scale)
             if rendered is None:
                 continue
             rendered_any = True
@@ -292,6 +293,7 @@ class Synthesizer:
         max_chars: int = 400,
         target_lufs: float | None = None,
         chunk_loudness: bool = False,
+        f0_scale: float = 1.0,
     ) -> tuple[int, int]:
         """Ghép các đoạn từ `iter_synthesize`, hậu xử lý và ghi WAV."""
         from vifasttts.runtime.postprocess import postprocess
@@ -299,7 +301,7 @@ class Synthesizer:
         pieces = [audio for audio, _ in self.iter_synthesize(
             text, dialect=dialect, speed=speed, gate_threshold=gate_threshold,
             sharpen_alpha=sharpen_alpha, overrides=overrides, max_chars=max_chars,
-            chunk_loudness=chunk_loudness,
+            chunk_loudness=chunk_loudness, f0_scale=f0_scale,
         )]
         waveform = postprocess(np.concatenate(pieces), self.sample_rate,
                                target_db=-3.0 if peak_normalize else None)
@@ -321,6 +323,7 @@ class Synthesizer:
         pause_period: float = STEADY_PAUSE_PERIOD,
         pause_default: float = STEADY_PAUSE_DEFAULT,
         chunk_loudness: bool = False,
+        f0_scale: float = 1.0,
     ) -> Iterator[tuple[np.ndarray, int]]:
         """Chế độ "đọc đều": nghỉ CỐ ĐỊNH theo dấu câu, chặn pause model học.
 
@@ -339,7 +342,7 @@ class Synthesizer:
         for index, chunk in enumerate(chunks):
             rendered = self._render(chunk, dialect, speed, options,
                                     gate_threshold=gate_threshold, sharpen_alpha=sharpen_alpha,
-                                    chunk_loudness=chunk_loudness)
+                                    chunk_loudness=chunk_loudness, f0_scale=f0_scale)
             if rendered is None:
                 continue
             rendered_any = True
@@ -371,6 +374,7 @@ class Synthesizer:
         pause_default: float = STEADY_PAUSE_DEFAULT,
         target_lufs: float | None = None,
         chunk_loudness: bool = False,
+        f0_scale: float = 1.0,
     ) -> tuple[int, int]:
         """Ghép các mảnh "đọc đều" (pause cố định theo dấu câu), ghi WAV."""
         from vifasttts.runtime.postprocess import postprocess
@@ -379,7 +383,7 @@ class Synthesizer:
             text, dialect=dialect, speed=speed, gate_threshold=gate_threshold,
             sharpen_alpha=sharpen_alpha, overrides=overrides, max_chars=max_chars,
             pause_comma=pause_comma, pause_period=pause_period, pause_default=pause_default,
-            chunk_loudness=chunk_loudness,
+            chunk_loudness=chunk_loudness, f0_scale=f0_scale,
         )]
         waveform = postprocess(np.concatenate(pieces), self.sample_rate,
                                target_db=-3.0 if peak_normalize else None)
