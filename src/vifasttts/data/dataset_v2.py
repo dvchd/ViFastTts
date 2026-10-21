@@ -7,6 +7,7 @@ mọi target cấp segment qua `data/v2_targets.segment_targets`. Không fallbac
 
 from __future__ import annotations
 
+import random
 from pathlib import Path
 from typing import Any
 
@@ -56,10 +57,75 @@ class SlotDataset(Dataset):
         self.f0_stats = f0_stats
         self.vocabs = ComponentVocabs.default()
         self.cache = FeatureCache(cache_dir, config) if cache_dir is not None else None
+        # v3.5 (A0 v17 A3): cắt ngẫu nhiên 1–5 âm tiết đầu/cuối, độc lập p=0,3 mỗi phía.
+        # Mục đích: model không học vẹt "âm đầu câu/âm cuối câu" của nhãn segment.
+        training = config.get("training", {}) if isinstance(config, dict) else {}
+        self.augment_edges = bool(training.get("augment_edges", False))
+        self.augment_prob = float(training.get("augment_edge_prob", 0.3))
+        self.augment_seed = int(training.get("augment_seed", 0))
+        self.min_keep = int(training.get("augment_min_syllables", 4))
+        # Kế hoạch cắt TÍNH TRƯỚC theo index (tất định) — sampler cần biết N sau cắt để gộp batch.
+        self._plans: dict[int, tuple[int, int]] = {}
+        if self.augment_edges:
+            for index, row in enumerate(self.rows):
+                self._plans[index] = self._sample_plan(row, index)
 
     def __len__(self) -> int:
         """Số row trong manifest."""
         return len(self.rows)
+
+    def _sample_plan(self, row: dict[str, Any], index: int) -> tuple[int, int]:
+        """Chọn `(prefix, suffix)` cắt biên — tất định theo index, tính TRƯỚC khi lấy mẫu."""
+        count = len(row.get("durations") or [])
+        if "frame_range" not in row or count < self.min_keep + 2:
+            return 0, 0
+        rng = random.Random(self.augment_seed * 1_000_003 + index)
+        budget = count - self.min_keep
+        prefix = rng.randint(1, min(5, budget)) if rng.random() < self.augment_prob else 0
+        budget -= prefix
+        suffix = (rng.randint(1, min(5, budget))
+                  if budget > 0 and rng.random() < self.augment_prob else 0)
+        return prefix, suffix
+
+    def effective_lengths(self) -> list[int]:
+        """N thật sau augmentation của từng row — dùng cho `SameNBatchSampler`."""
+        return [len(row.get("durations") or []) - sum(self._plans.get(index, (0, 0)))
+                for index, row in enumerate(self.rows)]
+
+    def _augment_edges(self, row: dict[str, Any], start: int, frames: int | None,
+                       index: int) -> tuple[dict[str, Any], int, int | None]:
+        """Cắt 1–5 âm tiết đầu/cuối (xác suất riêng mỗi phía) — giữ feature biên GỐC.
+
+        Chỉ áp dụng cho row segment (`frame_range`, toạ độ tương đối gốc 0); trả row mới +
+        `(start, frames)` mới. Kế hoạch đã tính sẵn trong `self._plans`.
+        """
+        if frames is None or "frame_range" not in row:
+            return row, start, frames
+        count = len(row["durations"])
+        prefix, suffix = self._plans.get(index, (0, 0))
+        if prefix == 0 and suffix == 0:
+            return row, start, frames
+        durations = [int(v) for v in row["durations"]]
+        gaps = [int(v) for v in (row.get("gaps") or [])]
+        if len(gaps) == count - 1:
+            gaps = gaps + [0]
+        lead = int(row.get("lead_frames") or 0)
+        offsets, cursor = [], lead
+        for position in range(count):
+            offsets.append(cursor)
+            cursor += durations[position] + gaps[position]
+        first, last = prefix, count - 1 - suffix
+        new_start = offsets[first]
+        new_end = offsets[last] + durations[last] + gaps[last]
+        new_row = dict(row)
+        new_row["durations"] = durations[first:last + 1]
+        new_row["gaps"] = gaps[first:last + 1]
+        new_row["seg_durations"] = [list(v) for v in row["seg_durations"][first:last + 1]]
+        new_row["syllables"] = list(row["syllables"])[first:last + 1]
+        new_row["lead_frames"] = 0
+        origin = int(row["frame_range"][0])
+        new_row["frame_range"] = [origin + new_start, origin + new_end]
+        return new_row, start + new_start, new_end - new_start
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         """Mẫu thứ index: feature cấp âm tiết + frame đã cắt + target cấp segment.
@@ -80,6 +146,8 @@ class SlotDataset(Dataset):
         frame_range = row.get("frame_range")
         start = int(frame_range[0]) if frame_range else 0
         frames = (int(frame_range[1]) - start) if frame_range else None
+        if self.augment_edges:
+            row, start, frames = self._augment_edges(row, start, frames, index)
 
         def _cut(name: str) -> torch.Tensor:
             values = extracted[name]
@@ -200,7 +268,8 @@ class SameNBatchSampler:
 
     def __init__(self, rows: list[dict[str, Any]], batch_size: int, *,
                  shuffle: bool = True, seed: int = 42, drop_last: bool = False,
-                 weights: list[float] | None = None) -> None:
+                 weights: list[float] | None = None,
+                 lengths: list[int] | None = None) -> None:
         """`rows`: manifest rows (cần `durations` để biết N).
 
         `weights` (V11S3): trọng số lấy mẫu theo ROW — nhóm hiếm (NGÃ/NẶNG + coda tắc)
@@ -216,10 +285,13 @@ class SameNBatchSampler:
         self.weights = list(weights) if weights is not None else None
         if self.weights is not None and len(self.weights) != len(rows):
             raise ValueError(f"weights dài {len(self.weights)} ≠ số row {len(rows)}")
+        if lengths is not None and len(lengths) != len(rows):
+            raise ValueError(f"lengths dài {len(lengths)} ≠ số row {len(rows)}")
         self.epoch = 0
         self._groups: dict[int, list[int]] = {}
         for index, row in enumerate(rows):
-            self._groups.setdefault(len(row.get("durations") or []), []).append(index)
+            count = int(lengths[index]) if lengths is not None else len(row.get("durations") or [])
+            self._groups.setdefault(count, []).append(index)
         self._count = sum(
             (len(group) // self.batch_size if self.drop_last
              else math.ceil(len(group) / self.batch_size))

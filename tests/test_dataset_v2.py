@@ -246,3 +246,47 @@ def test_rare_group_weights_va_sampler_co_trong_so():
         for batch in boosted:
             counts[batch[0]] += 1
     assert counts[1] > counts[0] and counts[2] > counts[0], counts
+
+
+def _long_row() -> dict:
+    """8 âm tiết — đủ để cắt biên (min_keep = 4)."""
+    durations = [5, 4, 6, 5, 4, 5, 6, 4]
+    gaps = [2, 0, 3, 0, 2, 0, 3, 0]
+    seg = [[2, 0, 2, 1], [1, 0, 2, 1], [2, 0, 2, 2], [1, 0, 2, 2],
+           [2, 0, 2, 1], [1, 0, 2, 1], [2, 0, 2, 2], [1, 0, 2, 2]]
+    row = _row("clip__long", 5, durations, gaps, seg)
+    row["syllables"] = [_syllable("ma", {"onset": "M", "medial": "NONE", "nucleus": "A",
+                                         "coda": "N", "tone": "NGANG"}) for _ in range(8)]
+    return row
+
+
+def test_augment_edges_cat_bien_giu_bat_bien(tmp_path):
+    row = _long_row()
+    manifest = tmp_path / "long.jsonl"
+    manifest.write_text(json.dumps(row, ensure_ascii=False), encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    _write_cache(cache_dir, row)
+    config = {**CONFIG, "training": {"augment_edges": True, "augment_edge_prob": 1.0,
+                                     "augment_seed": 7}}
+    dataset = SlotDataset(manifest, config, F0_STATS, cache_dir=cache_dir)
+    item = dataset[0]
+    count = int(item["durations"].shape[0])
+    assert 4 <= count < 8
+    assert item["features"].shape[0] == count == item["seg_durations"].shape[0]
+    assert int(item["lead"]) == 0
+    # bất biến A2: T == Σdur + Σgap
+    assert item["mel"].shape[0] == int(item["durations"].sum() + item["gaps"].sum())
+
+
+def test_augment_edges_tat_thi_giu_nguyen(tmp_path):
+    row = _long_row()
+    manifest = tmp_path / "long.jsonl"
+    manifest.write_text(json.dumps(row, ensure_ascii=False), encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    _write_cache(cache_dir, row)
+    dataset = SlotDataset(manifest, CONFIG, F0_STATS, cache_dir=cache_dir)
+    item = dataset[0]
+    assert int(item["durations"].shape[0]) == 8
+    assert item["mel"].shape[0] == sum(row["durations"]) + sum(row["gaps"])

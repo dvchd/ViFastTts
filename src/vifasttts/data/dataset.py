@@ -166,9 +166,11 @@ class TtsDataset(Dataset):
         energy = torch.zeros(syllable_count)
         frame_phonation = None
         if "hnr" in extracted:
-            frame_phonation = torch.stack(
-                [_frames("hnr"), _frames("tilt"), _frames("glottalization")], dim=-1
-            )
+            # R6 thay `tilt` bằng `jitter` trong cache v3 — chọn theo kênh CÓ trong cache.
+            channels = [name for name in ("hnr", "tilt", "glottalization") if name in extracted]
+            if "tilt" not in extracted and "jitter" in extracted:
+                channels = ["hnr", "jitter", "glottalization"]
+            frame_phonation = torch.stack([_frames(name) for name in channels], dim=-1)
         phonation = torch.zeros(syllable_count, 3)
         start = 0
         frame_f0 = _frames("f0")

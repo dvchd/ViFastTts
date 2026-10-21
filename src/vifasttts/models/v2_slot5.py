@@ -92,6 +92,12 @@ class ViFastTtsModelV2(nn.Module):
         # ── module mới của v2 ───────────────────────────────────────────────────
         component_dim = int(m["component_dim"])
         self.role_emb = nn.Embedding(5, self.role_dim)  # O, M, N, C, G
+        # v3.5 item 7 (§v17 A3): slot N thấy embedding coda, slot C thấy embedding nucleus
+        # của CÙNG âm tiết — coda quyết định độ dài nucleus (chặn hơi) nên cần ngữ cảnh chéo.
+        self.cross_slot_context = bool(m.get("cross_slot_context", False))
+        if self.cross_slot_context:
+            self.coda_to_nucleus = nn.Linear(component_dim, component_dim, bias=False)
+            self.nucleus_to_coda = nn.Linear(component_dim, component_dim, bias=False)
         segment_in = h + self.role_dim + component_dim
         self.slot_expander = SegmentMLP(segment_in, h, h, self.mlp_layers, m["dropout"])
         self.ratio_mlp = SegmentMLP(segment_in, h, 1, self.mlp_layers, m["dropout"])
@@ -152,6 +158,12 @@ class ViFastTtsModelV2(nn.Module):
                                   tables[2](features[..., 2]), tables[3](features[..., 3])], dim=2)
         role = self.role_emb.weight[:4].view(1, 1, 4, self.role_dim).expand(batch, syllables, -1, -1)
         hidden = x.unsqueeze(2).expand(-1, -1, 4, -1)
+        if self.cross_slot_context:
+            coda_ctx = self.coda_to_nucleus(components[:, :, 3, :])
+            nucleus_ctx = self.nucleus_to_coda(components[:, :, 2, :])
+            components = components.clone()
+            components[:, :, 2, :] = components[:, :, 2, :] + coda_ctx
+            components[:, :, 3, :] = components[:, :, 3, :] + nucleus_ctx
         return torch.cat([hidden, components, role], dim=-1)
 
     def _gap_vectors(self, features: torch.Tensor) -> torch.Tensor:

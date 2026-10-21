@@ -256,3 +256,29 @@ def test_load_model_state_tha_buffer_moi_nhung_van_chat():
         raise AssertionError("phải raise khi thiếu weight thật")
     except ValueError as error:
         assert "embedding.proj.weight" in str(error)
+
+
+def test_cross_slot_context_item7():
+    """Item 7 (v3.5): slot N thấy embedding coda, slot C thấy embedding nucleus."""
+    config = {**TINY, "model": {**TINY["model"], "cross_slot_context": True}}
+    torch.manual_seed(0)
+    model = ViFastTtsModelV2(config, VOCAB).eval()
+    assert hasattr(model, "coda_to_nucleus") and hasattr(model, "nucleus_to_coda")
+    segments = model._segment_features(FEATURES, torch.randn(1, 4, 16))
+    assert segments.shape == (1, 4, 4, 16 + 8 + 4)
+    out = model(FEATURES, speed=torch.tensor([1.0]), durations=D_SYL, gaps=GAPS, lead=LEAD)
+    assert torch.isfinite(out["mel"]).all() and out["mel"].shape[0] == 1
+    # tắt cờ thì model cũ vẫn dựng được (tương thích checkpoint/ONNX cũ)
+    plain = ViFastTtsModelV2(TINY, VOCAB).eval()
+    assert not plain.cross_slot_context
+
+
+def test_cross_slot_context_grad_chay_ve_embedding():
+    """Hai projection phải NHẬN gradient (không phải tham số chết)."""
+    config = {**TINY, "model": {**TINY["model"], "cross_slot_context": True}}
+    torch.manual_seed(0)
+    model = ViFastTtsModelV2(config, VOCAB).train()
+    segments = model._segment_features(FEATURES, torch.randn(1, 4, 16))
+    segments.sum().backward()
+    assert model.coda_to_nucleus.weight.grad is not None
+    assert model.coda_to_nucleus.weight.grad.abs().sum() > 0

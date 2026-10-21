@@ -270,7 +270,8 @@ def train_slot_v2(
         train_loader = DataLoader(train_data,
                                   batch_sampler=SameNBatchSampler(train_data.rows, batch_size,
                                                                   shuffle=True, seed=int(config.get("seed", 42)),
-                                                                  weights=sample_weights),
+                                                                  weights=sample_weights,
+                                                                  lengths=train_data.effective_lengths()),
                                   num_workers=int(training.get("num_workers", 0)),
                                   collate_fn=collate_slot_batch)
         print(f"[v2] batch_size={batch_size} (gộp cùng N; val giữ batch 1 cho metric ổn định)")

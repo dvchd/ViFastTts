@@ -57,6 +57,7 @@ model:
   variance_layers: 3
   use_phonation: false  # v3.5: BỎ phonation conditioning (không giúp tai + chiếm gradient)
   pause_detach_encoder: true  # v3.5: hai đầu pause nhận encoder_out.detach() — pause vẫn học
+  cross_slot_context: true    # item 7: slot N thấy coda, slot C thấy nucleus (cùng âm tiết)
   use_postnet: true   # F2: 5 lớp conv residual làm nét mel (+1,24M tham số); loss dùng cả mel trước
 
 training:
@@ -83,6 +84,10 @@ training:
   cache_features: false
   ema: 0.999              # v3.5: EMA toàn bộ train, lưu trong checkpoint
   cache_dir: cache/codelung_v35  # v35: stats frame tiếng ⇒ mel_hash mới ⇒ cache riêng
+  augment_edges: true       # A3: cắt 1–5 âm tiết đầu/cuối (p 0,3 mỗi phía)
+  augment_edge_prob: 0.3
+  augment_min_syllables: 4  # không cắt nếu còn < 4 âm tiết
+  augment_seed: 42
 
 f0_stats_path: data/codelung/f0_stats_v2.json  # ngoài block `f0` — tránh đổi khoá cache v3
 
