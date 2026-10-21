@@ -248,3 +248,27 @@ def test_tail_cap_chi_ap_doan_cuoi_clip(tmp_path):
         else:
             assert a["gaps"] == b["gaps"] and a["frame_range"] == b["frame_range"]
         assert b["frame_range"][1] - b["frame_range"][0] == sum(b["durations"]) + sum(b["gaps"])
+
+
+def test_slot_frame_weights_onset_coda():
+    """v3.4: trọng số mel tăng ở frame onset (đầu) và coda (cuối) mỗi âm tiết."""
+    import torch
+
+    from vifasttts.models.v2_losses import slot_frame_weights
+
+    batch = {
+        "durations": torch.tensor([[4, 3]]),
+        "gaps": torch.tensor([[2, 0]]),
+        "lead": torch.tensor([1]),
+        "seg_durations": torch.tensor([[[1, 1, 1, 1], [1, 1, 1, 1]]]),
+    }
+    weight = slot_frame_weights(batch, 10, onset_boost=2.0, coda_boost=3.0)
+    assert weight.shape == (1, 10)
+    assert weight[0, 1].item() == 3.0   # onset âm tiết 0 (lead=1)
+    assert weight[0, 4].item() == 4.0   # coda âm tiết 0
+    assert weight[0, 7].item() == 3.0   # onset âm tiết 1 (4 + gap 2)
+    assert weight[0, 9].item() == 4.0   # coda âm tiết 1
+    assert weight[0, 0].item() == 1.0 and weight[0, 2].item() == 1.0
+    # tắt boost → toàn 1
+    flat = slot_frame_weights(batch, 10, onset_boost=0.0, coda_boost=0.0)
+    assert torch.allclose(flat, torch.ones(1, 10))

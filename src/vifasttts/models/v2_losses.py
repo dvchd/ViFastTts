@@ -64,6 +64,41 @@ def structural_active(features: torch.Tensor) -> torch.Tensor:
     return torch.stack([onset, medial, torch.ones_like(onset), coda], dim=-1)
 
 
+def slot_frame_weights(batch: dict[str, torch.Tensor], frames: int, *, onset_boost: float,
+                       coda_boost: float) -> torch.Tensor:
+    """[B,T] trọng số cho mel loss: 1 + boost ở frame **onset** (đầu) và **coda** (cuối) mỗi âm tiết.
+
+    Vì sao (v3.4): coda chỉ 3–6 frame/row nên L1 gần như bỏ qua ⇒ model đọc NH thành N
+    ("xanh"→"xan", đo §53). Tăng trọng số đúng các frame đó buộc model học formant chuyển tiếp.
+    Layout khớp `v2_targets`: lead + (syllable: O/M/N/C) + gap, lặp theo âm tiết.
+    """
+    device = batch["durations"].device
+    weight = torch.ones(batch["durations"].size(0), frames, device=device, dtype=torch.float32)
+    if onset_boost <= 0 and coda_boost <= 0:
+        return weight
+    seg4 = batch.get("seg_durations")
+    if seg4 is None:
+        return weight
+    durations = batch["durations"].long()
+    gaps = batch.get("gaps")
+    lead = batch.get("lead")
+    for b in range(durations.size(0)):
+        cursor = int(lead[b]) if lead is not None else 0
+        for i in range(durations.size(1)):
+            dur = int(durations[b, i])
+            gap = int(gaps[b, i]) if gaps is not None else 0
+            if dur <= 0:
+                continue
+            o, _m, _n, c = (int(v) for v in seg4[b, i])
+            start, end = cursor, cursor + dur
+            if onset_boost > 0 and o > 0:
+                weight[b, start:min(start + o, frames)] += onset_boost
+            if coda_boost > 0 and c > 0:
+                weight[b, max(end - c, start):min(end, frames)] += coda_boost
+            cursor = end + gap
+    return weight
+
+
 def slot_losses(
     outputs: dict[str, torch.Tensor],
     batch: dict[str, torch.Tensor],
@@ -83,8 +118,20 @@ def slot_losses(
     losses: dict[str, torch.Tensor] = {}
     active = structural_active(batch["features"])
 
-    losses["mel"] = masked_l1(outputs["mel"], batch["mel"], batch.get("frame_lengths"),
-                              mean_over_bins=True)
+    coda_boost = float(merged.get("mel_coda_boost", 0.0))
+    onset_boost = float(merged.get("mel_onset_boost", 0.0))
+    if coda_boost > 0 or onset_boost > 0:
+        # v3.4: mel L1 có trọng số theo frame onset/coda (mặc định 0 = hành vi cũ y nguyên).
+        mel_error = (outputs["mel"] - batch["mel"]).abs().mean(dim=-1)
+        frame_w = slot_frame_weights(batch, mel_error.size(1), onset_boost=onset_boost,
+                                     coda_boost=coda_boost)
+        if batch.get("frame_lengths") is not None:
+            steps = torch.arange(mel_error.size(1), device=mel_error.device).view(1, -1)
+            frame_w = frame_w * (steps < batch["frame_lengths"].unsqueeze(1)).to(torch.float32)
+        losses["mel"] = (mel_error * frame_w).sum() / frame_w.sum().clamp_min(1e-6)
+    else:
+        losses["mel"] = masked_l1(outputs["mel"], batch["mel"], batch.get("frame_lengths"),
+                                  mean_over_bins=True)
     if "mel_pre" in outputs:
         losses["mel_pre"] = masked_l1(outputs["mel_pre"], batch["mel"], batch.get("frame_lengths"),
                                       mean_over_bins=True)
