@@ -184,34 +184,51 @@ class Synthesizer:
         self.vocoder.to(self.device)
         self.vocoder.eval()
 
-    def _clamp_durations(self, items, durations, speed: float = 1.0):
-        """Kẹp duration dự đoán vào [p10, p90] corpus của chính âm tiết; None nếu không đổi."""
+    def _clamp_durations(self, items, durations, seg_durations, speed: float = 1.0):
+        """v14: chỉ kẹp 1–2 âm tiết ĐẦU chunk, chỉ co slot N/C (giữ O), sàn 3 frame.
+
+        Lý do: đầu duration phóng đại chữ đầu chuỗi ngắn (thì 34 vs 11 frame, và 46 vs 18);
+        kẹp cả câu làm hỏng âm tiết cuối (d03 "nhà" nghe thành "là"). Trả (durations, seg)
+        hoặc None nếu không đổi.
+        """
         import json
+
+        import torch
 
         if self._duration_prior is None:
             path = Path(self.config.get("duration_prior_path",
                                         "data/codelung/duration_prior_v2.json"))
             self._duration_prior = (json.loads(path.read_text(encoding="utf-8"))
                                     if path.exists() else {})
-        clamped = durations.clone()
+        if seg_durations is None:
+            return None
+        new_durations = durations.clone()
+        new_seg = seg_durations.clone()
         changed = False
-        for index, item in enumerate(items):
-            if index >= clamped.numel():
-                break
-            key = str(getattr(item, "normalized", None) or getattr(item, "raw", "")).lower()
+        limit = min(2, len(items) - 1)  # 1–2 âm tiết đầu, KHÔNG bao giờ là âm tiết cuối
+        for index in range(limit):
+            key = str(getattr(items[index], "normalized", None) or getattr(items[index], "raw", "")).lower()
             prior = self._duration_prior.get(key)
             if not prior:
                 continue
-            low = max(1, round(float(prior["p10"]) / max(speed, 1e-3)))
-            high = max(low, round(float(prior["p90"]) / max(speed, 1e-3)))
-            value = int(clamped[index])
-            if value > high:
-                clamped[index] = high
+            high = max(1, round(float(prior["p90"]) / max(speed, 1e-3)))
+            current = int(new_durations[index])
+            if current <= high:
+                continue
+            excess = current - high
+            slots = [int(v) for v in new_seg[index].tolist()]  # O, M, N, C
+            for slot in (2, 3):  # N rồi C; giữ O (0) và M (1)
+                room = max(0, slots[slot] - 3)
+                take = min(room, excess)
+                slots[slot] -= take
+                excess -= take
+                if excess <= 0:
+                    break
+            if excess <= 0:
+                new_seg[index] = torch.tensor(slots, dtype=new_seg.dtype, device=new_seg.device)
+                new_durations[index] = sum(slots)
                 changed = True
-            elif value < low:
-                clamped[index] = low
-                changed = True
-        return clamped if changed else None
+        return (new_durations, new_seg) if changed else None
 
     def _apply_chunk_loudness(self, mel):
         """Dịch đều log-mel của chunk về mức hữu thanh mục tiêu (6d, ±4 dB)."""
@@ -263,9 +280,12 @@ class Synthesizer:
                 outputs = self.model(features, speed=speed_t,
                                      gate_threshold=gate_threshold, f0_scale=f0_scale)
                 if duration_clamp:
-                    clamped = self._clamp_durations(items, outputs["durations"][0], float(speed))
+                    slots = outputs["slot_durations"][0]
+                    seg = slots[1:].reshape(-1, 5)[:, :4]  # bỏ lead, mỗi âm tiết O/M/N/C
+                    clamped = self._clamp_durations(items, outputs["durations"][0], seg, float(speed))
                     if clamped is not None:
-                        outputs = self.model(features, durations=clamped.unsqueeze(0),
+                        outputs = self.model(features, durations=clamped[0].unsqueeze(0),
+                                             seg_durations=clamped[1].unsqueeze(0),
                                              speed=speed_t, gate_threshold=gate_threshold,
                                              f0_scale=f0_scale)
                 mel = outputs["mel"][0]
