@@ -324,6 +324,10 @@ def train_slot_v2(
 
     optimizer = AdamW(model.parameters(), lr=phase_a_lr,
                       weight_decay=float(training.get("weight_decay", 1e-4)))
+    # A0 v13 (v3.5): EMA toàn bộ train, lưu trong checkpoint để chọn theo EMA.
+    ema_decay = float(training.get("ema", 0.0))
+    ema_state = ({k: v.detach().clone() for k, v in model.state_dict().items() if torch.is_tensor(v)}
+                 if ema_decay > 0 else {})
     start_step = 0
     best_val = float("inf")
     no_improve = 0
@@ -478,6 +482,11 @@ def train_slot_v2(
                 if grad_clip:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
                 optimizer.step()
+                if ema_state:
+                    with torch.no_grad():
+                        for key, value in model.state_dict().items():
+                            if torch.is_tensor(value) and key in ema_state:
+                                ema_state[key].mul_(ema_decay).add_(value.detach(), alpha=1 - ema_decay)
                 # V10.A8: trung bình thành phần loss theo cửa sổ log_every (để ghi history + in log).
                 for key, value in parts.items():
                     window[key] = window.get(key, 0.0) + float(value.detach())
@@ -538,6 +547,7 @@ def train_slot_v2(
                         "no_improve": no_improve, "mel_hash": _mel_hash(config), "arch": ARCH_V2,
                         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
                         "warm_start_from": warm_hash, **seg_meta, **val_meta,
+                        **({"ema": ema_state, "ema_decay": ema_decay} if ema_state else {}),
                     }
                     _save_atomic(out / "last.pt", state)
                     if save_every and step % save_every == 0:  # V11S2.A6: giữ mốc riêng
@@ -602,6 +612,7 @@ def train_slot_v2(
         "mel_hash": _mel_hash(config), "arch": ARCH_V2,
         "f0_stats": f0_stats, "f0_stats_hash": _f0_stats_hash(f0_stats),
         "warm_start_from": warm_hash, "no_improve": no_improve, **seg_meta, **val_meta,
+        **({"ema": ema_state, "ema_decay": ema_decay} if ema_state else {}),
     })
     if discriminator is not None:
         _save_atomic(out / "d_last.pt", {"discriminator": discriminator.state_dict(),

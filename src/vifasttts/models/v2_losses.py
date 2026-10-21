@@ -99,6 +99,20 @@ def slot_frame_weights(batch: dict[str, torch.Tensor], frames: int, *, onset_boo
     return weight
 
 
+def _speech_frame_weight(batch: dict, frames: int, margin: int = 4) -> torch.Tensor:
+    """Trọng số frame: 1 ở vùng tiếng nói (±`margin` frame), 0 ở lặng (A0 v13, v3.5)."""
+    vuv = batch["vuv"][:, :frames]
+    speech = (vuv >= 0.5).to(torch.float32)
+    if speech.size(1) > 0:
+        padded = F.pad(speech.unsqueeze(1), (margin, margin), value=0.0)
+        speech = F.max_pool1d(padded, kernel_size=2 * margin + 1, stride=1).squeeze(1)
+    weight = speech[:, :frames]
+    if batch.get("frame_lengths") is not None:
+        steps = torch.arange(weight.size(1), device=weight.device).view(1, -1)
+        weight = weight * (steps < batch["frame_lengths"].unsqueeze(1)).to(weight.dtype)
+    return weight
+
+
 def slot_losses(
     outputs: dict[str, torch.Tensor],
     batch: dict[str, torch.Tensor],
@@ -118,6 +132,9 @@ def slot_losses(
     losses: dict[str, torch.Tensor] = {}
     active = structural_active(batch["features"])
 
+    # v3.5: mask frame lặng khỏi mel L1 (giữ ±4 frame quanh biên tiếng nói) — bật bằng
+    # `loss_weights.mel_silence_mask: 1.0`; mặc định 0 = hành vi cũ y nguyên.
+    silence_mask = float(merged.get("mel_silence_mask", 0.0)) > 0
     coda_boost = float(merged.get("mel_coda_boost", 0.0))
     onset_boost = float(merged.get("mel_onset_boost", 0.0))
     if coda_boost > 0 or onset_boost > 0:
@@ -135,6 +152,13 @@ def slot_losses(
     if "mel_pre" in outputs:
         losses["mel_pre"] = masked_l1(outputs["mel_pre"], batch["mel"], batch.get("frame_lengths"),
                                       mean_over_bins=True)
+    if silence_mask and batch.get("vuv") is not None:
+        weight = _speech_frame_weight(batch, outputs["mel"].size(1))
+        for key, tensor in (("mel", outputs["mel"]), ("mel_pre", outputs.get("mel_pre"))):
+            if tensor is None or key not in losses:
+                continue
+            error = (tensor - batch["mel"]).abs().mean(dim=-1)[:, : weight.size(1)]
+            losses[key] = (error * weight).sum() / weight.sum().clamp_min(1e-6)
     # T4.1 (biến thể ổn định): khớp độ **gồ ghề** của mel (chênh lệch liền kề thời gian + tần số).
     # Đo thật: mel model mượt hơn mel thật 62% (thời gian) / 69% (tần số) — đây là "mờ" cần sửa;
     # GAN (adv) ở batch 1 phân kỳ (xem §28) nên chọn loss tất định này làm đòn chính.

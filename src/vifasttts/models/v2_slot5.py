@@ -66,6 +66,8 @@ class ViFastTtsModelV2(nn.Module):
         self.role_dim = int(m.get("role_dim", ROLE_DIM))
         self.mlp_layers = int(m.get("segment_mlp_layers", 2))
         self.use_phonation = bool(m.get("use_phonation", False))
+        # v3.5: hai đầu pause nhận encoder_out.detach() — pause vẫn học nhưng không kéo encoder.
+        self.pause_detach_encoder = bool(m.get("pause_detach_encoder", False))
 
         # ── tái dùng kết cấu v1 để warm-start 1-1 (§11) ─────────────────────────
         self.embedding = ComponentEmbedding(vocab_sizes, m["component_dim"], h)
@@ -220,7 +222,7 @@ class ViFastTtsModelV2(nn.Module):
             d_seg = distribute_slots(d_syl, ratio, active)
 
         # ── pause (gate quyết định ở speed gốc — §5) ───────────────────────────
-        pause_heads = self.pause(x)
+        pause_heads = self.pause(x.detach() if self.pause_detach_encoder else x)
         gate_prob = torch.sigmoid(pause_heads[..., 0])
         log_gap = pause_heads[..., 1]
         if gaps is None:

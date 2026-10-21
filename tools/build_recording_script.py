@@ -1,20 +1,24 @@
-"""tools/build_recording_script.py — sinh kịch bản thu bổ sung cho âm tiết hiếm (A0 v12, Việc 8c).
+"""tools/build_recording_script.py — kịch bản thu bổ sung v2 (A0 v13, Việc 9c).
 
-Vì sao: 62 âm tiết trong 40 câu test có < 10 lần trong train; "ách"/"treo" chỉ 1 lần ⇒ lỗi nghe
-không sửa được bằng loss. Tool sinh kịch bản đọc phủ các âm tiết hiếm (mỗi âm tiết ≥ 3 lần),
-kèm 50 câu cặp tối thiểu, ước lượng thời lượng (4,5 âm tiết/giây) và bảng phủ trước/sau.
+Thay đổi so với v1:
+  - Bỏ "đọc 2 lần/câu" (đọc 1 lần, dùng thời gian cho câu mới).
+  - 16 khuôn câu ⇒ mỗi khuôn ≤ 20 % số câu.
+  - 600 âm tiết hiếm × 2 câu (khuôn khác nhau) + 50 câu cầu nối lấy từ transcript corpus
+    + 56 câu cặp tối thiểu ⇒ mục tiêu 60–90 phút.
+  - Xuất `docs/rare_syllables_v1.txt`: âm tiết · số lần · 1–2 từ ghép thông dụng chứa nó (nếu có).
 
 Chạy:
   .venv/bin/python tools/build_recording_script.py \
       --manifest data/codelung/v32/train_clean_v2_dur_seg_slot4.jsonl \
-      --texts examples/drift_texts.json --max-types 300 --out docs/recording_script_v1.md
+      --max-types 600 --out docs/recording_script_v1.md \
+      --syllables-out docs/rare_syllables_v1.txt
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 
 CARRIERS = [
@@ -26,6 +30,14 @@ CARRIERS = [
     "Nếu đọc sai từ {w} thì đọc lại từ đầu.",
     "Chúng ta gặp từ {w} trong bài đọc hôm qua.",
     "Từ {w} nghe hơi lạ, nhưng rất dễ đọc.",
+    "Mọi người cùng nhìn vào từ {w} trên màn hình.",
+    "Tôi sẽ đọc từ {w} ba lần cho bạn nghe.",
+    "Cái từ {w} này xuất hiện khá ít trong sách.",
+    "Khi gặp từ {w}, bạn đừng ngắt giữa chừng.",
+    "Bài học hôm nay có từ {w} ở ngay đầu câu.",
+    "Tôi đánh dấu từ {w} bằng bút đỏ.",
+    "Bạn có thể đọc từ {w} to hơn một chút.",
+    "Cuối buổi, tôi sẽ kiểm tra lại từ {w}.",
 ]
 MULTI = "Ba từ cần đọc chậm trong câu này là {a}, {b} và {c}."
 PAIRS = [
@@ -39,41 +51,76 @@ GUIDE = """## Cách thu
 - **TẮT RNNoise / noise suppression / echo cancellation** trong phần mềm thu.
 - Ghi **WAV gốc 48 kHz, 24-bit** (không qua Zoom/Meet/điện thoại).
 - Đọc kiểu **đọc đều** (không diễn cảm), nghỉ ngắn giữa các từ hiếm.
-- Mỗi câu đọc **2 lần**; nếu vấp thì đọc lại cả câu, đừng cắt giữa câu.
+- **Mỗi câu đọc 1 lần**; nếu vấp thì đọc lại cả câu, đừng cắt giữa câu.
 - Giữ im lặng 0,5 s ở đầu/cuối mỗi file; đặt tên `v1_0001.wav` … theo đúng số câu.
+
+## Xử lý sau khi thu
+
+- Giữ **WAV gốc**, đưa vào pipeline `audio_v2` với cùng bước chuẩn hoá (loudness, high-pass, gate).
+- 50 câu cầu nối dùng để đo chênh kênh thu (micro/phòng/mức to) giữa corpus cũ và bản mới.
+- **RNNoise**: chưa chốt — sau khi có câu cầu nối, so phổ bản thô vs bản qua RNNoise offline
+  với corpus cũ, chọn bản khớp hơn.
 """
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True)
-    parser.add_argument("--texts", default="examples/drift_texts.json")
-    parser.add_argument("--max-types", type=int, default=300)
+    parser.add_argument("--max-types", type=int, default=600)
+    parser.add_argument("--bridge", type=int, default=50)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--syllables-out", default="docs/rare_syllables_v1.txt")
     args = parser.parse_args()
 
     counts: Counter[str] = Counter()
+    words_in_corpus: Counter[str] = Counter()
+    bridge: list[str] = []
     for line in Path(args.manifest).read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
-        for syllable in json.loads(line).get("syllables", []):
+        row = json.loads(line)
+        syllables = row.get("syllables", [])
+        for syllable in syllables:
             counts[str(syllable.get("normalized") or syllable.get("raw") or "").lower()] += 1
+        current: list[str] = []
+        for syllable in syllables:
+            current.append(str(syllable.get("normalized") or syllable.get("raw") or "").lower())
+            if syllable.get("boundaries", {}).get("word_end"):
+                word = " ".join(current)
+                if word:
+                    words_in_corpus[word] += 1
+                current = []
+        text = str(row.get("text") or "").strip()
+        if 6 <= len(text.split()) <= 30:
+            bridge.append(text)
 
     rare = [w for w, c in counts.most_common() if w.isalpha() and c < 10]
     rare.sort(key=lambda w: counts[w])
     rare = rare[: args.max_types]
 
+    words_by_syllable: dict[str, list[str]] = defaultdict(list)
+    for word, freq in words_in_corpus.most_common():
+        parts = word.split()
+        if len(parts) < 2:
+            continue
+        for part in set(parts):
+            if len(words_by_syllable[part]) < 2:
+                words_by_syllable[part].append(word)
+
+    # 2 câu/khuôn khác nhau cho mỗi âm tiết hiếm
     sentences: list[str] = []
-    index = 0
-    while index < len(rare):
-        chunk = rare[index:index + 3]
-        index += 3
-        if len(chunk) == 3:
-            sentences.append(MULTI.format(a=chunk[0], b=chunk[1], c=chunk[2]))
-        else:
-            sentences.append(CARRIERS[len(sentences) % len(CARRIERS)].format(w=chunk[0]))
-    for word in rare:
-        sentences.append(CARRIERS[len(sentences) % len(CARRIERS)].format(w=word))
+    for index, word in enumerate(rare):
+        first = CARRIERS[(2 * index) % len(CARRIERS)].format(w=word)
+        second = CARRIERS[(2 * index + 7) % len(CARRIERS)].format(w=word)
+        sentences.extend([first, second])
+    for index in range(0, len(rare), 3):
+        triple = rare[index:index + 3]
+        if len(triple) == 3:
+            sentences.append(MULTI.format(a=triple[0], b=triple[1], c=triple[2]))
+
+    # 50 câu cầu nối: lấy rải đều trong corpus
+    stride = max(1, len(bridge) // max(1, args.bridge))
+    bridges = bridge[::stride][: args.bridge]
 
     pair_sentences = [f"Tôi đọc cặp từ này: {a}, rồi {b}. Nghe lại lần nữa: {a}, {b}."
                       for a, b in PAIRS * 4]
@@ -84,31 +131,47 @@ def main() -> None:
             if word in counts:
                 after[word] += 1
 
-    syllables = [len(s.split()) for s in sentences + pair_sentences]
-    seconds = sum(syllables) / 4.5
+    syllables_count = [len(s.split()) for s in sentences + bridges + pair_sentences]
+    seconds = sum(syllables_count) / 4.5
     covered = [w for w in rare if after[w] >= 3]
     still = [w for w in rare if after[w] < 3]
 
     lines = ["# Kịch bản thu bổ sung v1 (phủ âm tiết hiếm)", "",
-             (f"- Sinh từ `{args.manifest}`: **{len(counts)} type**, "
-              f"**{len(rare)} âm tiết hiếm** (< 10 lần) được chọn."),
-             f"- **{len(sentences)} câu** + **{len(pair_sentences)} câu cặp tối thiểu**.",
-             (f"- Ước lượng: **{sum(syllables)} âm tiết** ≈ **{seconds/60:.0f} phút** đọc "
-              f"(4,5 âm tiết/giây; đọc 2 lần ⇒ ~{2*seconds/60:.0f} phút)."),
+             (f"- Sinh từ `{args.manifest}`: **{len(counts)} type**, **{len(rare)} âm tiết hiếm** "
+              f"(< 10 lần) được chọn."),
+             (f"- **{len(sentences)} câu phủ** (2 câu/âm tiết, khuôn khác nhau) + "
+              f"**{len(bridges)} câu cầu nối** + **{len(pair_sentences)} câu cặp tối thiểu**."),
+             (f"- Ước lượng: **{sum(syllables_count)} âm tiết** ≈ **{seconds/60:.0f} phút** đọc "
+              f"(4,5 âm tiết/giây), đọc **1 lần**."),
              f"- Sau kịch bản: **{len(covered)}/{len(rare)}** âm tiết hiếm đạt ≥ 3 lần"
              + (f"; còn **{len(still)}** chưa đạt: {', '.join(still[:20])}." if still else "."),
-             "", GUIDE, "## Câu đọc", ""]
-    for i, sentence in enumerate(sentences, 1):
-        lines.append(f"{i:04d}. {sentence}")
+             "", GUIDE, "## Câu phủ âm tiết hiếm", ""]
+    idx = 0
+    for sentence in sentences:
+        idx += 1
+        lines.append(f"{idx:04d}. {sentence}")
+    lines += ["", "## Câu cầu nối (đo chênh kênh thu — đọc tự nhiên như bình thường)", ""]
+    for sentence in bridges:
+        idx += 1
+        lines.append(f"{idx:04d}. {sentence}")
     lines += ["", "## Cặp tối thiểu (phân biệt phụ âm cuối / vần)", ""]
-    for i, sentence in enumerate(pair_sentences, 1):
-        lines.append(f"{i:04d}. {sentence}")
+    for sentence in pair_sentences:
+        idx += 1
+        lines.append(f"{idx:04d}. {sentence}")
+
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"{len(sentences)} câu + {len(pair_sentences)} cặp · {sum(syllables)} âm tiết · "
-          f"~{seconds/60:.0f} phút (2 lần: {2*seconds/60:.0f} phút) · "
-          f"phủ {len(covered)}/{len(rare)} · ghi {out}")
+
+    syllable_lines = ["# âm tiết\tsố lần trong train\ttừ ghép thông dụng (nếu có)"]
+    for word in rare:
+        compounds = ", ".join(words_by_syllable.get(word, [])) or "(không có)"
+        syllable_lines.append(f"{word}\t{counts[word]}\t{compounds}")
+    Path(args.syllables_out).write_text("\n".join(syllable_lines) + "\n", encoding="utf-8")
+
+    print(f"{len(sentences)} câu phủ + {len(bridges)} cầu nối + {len(pair_sentences)} cặp · "
+          f"{sum(syllables_count)} âm tiết · ~{seconds/60:.0f} phút · phủ {len(covered)}/{len(rare)} · "
+          f"{out} · {args.syllables_out}")
 
 
 if __name__ == "__main__":
