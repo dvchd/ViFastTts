@@ -56,3 +56,15 @@ def test_steady_empty_text_raises():
         pass
     else:  # pragma: no cover
         raise AssertionError("Phải raise ValueError cho văn bản rỗng")
+
+
+def test_steady_trims_model_edge_silence():
+    """Chunk có lặng thừa hai đầu (model đệm pause) bị cắt sát tiếng trước khi ghép."""
+    engine = _Stub()
+    padded = np.concatenate([np.zeros(200, dtype=np.float32), np.ones(100, dtype=np.float32),
+                             np.zeros(150, dtype=np.float32)])
+    engine._render = lambda *a, **k: padded  # type: ignore[method-assign]
+    pieces = [audio for audio, _ in engine.iter_synthesize_steady("Một. Hai")]
+    # 2 chunk + 1 pause; mỗi chunk còn ~100 mẫu tiếng + margin 2×10 ms = 120 mẫu
+    assert pieces[0].size <= 140 and pieces[0].size >= 100
+    assert pieces[1].size == int(1000 * 0.55)

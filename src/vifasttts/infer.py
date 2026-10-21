@@ -56,6 +56,27 @@ def _v2_f0_stats_fallback(config: dict) -> dict | None:
     return None
 
 
+def _trim_edge_silence(waveform, sample_rate: int, *, threshold_db: float = -45.0,
+                       margin_frames: int = 2) -> np.ndarray:
+    """Cắt lặng thừa ở hai đầu chunk (chế độ đọc đều).
+
+    Model v2 học cả gap đuôi (≤0,64 s) nên thường đệm thêm lặng cuối mỗi mệnh đề; nếu cộng
+    pause chính sách sẽ thành 0,9–1,3 s (đo trên bản random: 1,22 s). Cắt sát tiếng (giữ
+    `margin_frames` × 10 ms) để pause do runtime quyết định đúng 0,25/0,55 s.
+    """
+    frame = max(1, int(sample_rate * 0.01))
+    count = int(waveform.size // frame)
+    if count == 0:
+        return waveform
+    rms = np.sqrt(np.mean(np.asarray(waveform[: count * frame]).reshape(count, frame) ** 2, axis=1) + 1e-12)
+    loud = np.flatnonzero(20.0 * np.log10(rms) > threshold_db)
+    if loud.size == 0:
+        return waveform
+    start = max(0, (int(loud[0]) - margin_frames) * frame)
+    end = min(int(waveform.size), (int(loud[-1]) + 1 + margin_frames) * frame)
+    return waveform[start:end]
+
+
 class Synthesizer:
     """Giữ model + vocoder đã nạp để tổng hợp nhiều câu (batch/server/streaming).
 
@@ -272,6 +293,7 @@ class Synthesizer:
             if rendered is None:
                 continue
             rendered_any = True
+            rendered = _trim_edge_silence(rendered, self.sample_rate)
             yield rendered, self.sample_rate
             if index < len(chunks) - 1:
                 seconds = steady_pause_seconds(chunk, comma=pause_comma,
