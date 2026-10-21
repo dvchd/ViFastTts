@@ -51,9 +51,9 @@ def _ort_session(path: str | Path, provider: str = "auto"):
 
     ort = _import_ort()
     options = ort.SessionOptions()
-    threads = os.environ.get("VIFASTT_INTRA_THREADS")
-    if threads:
-        options.intra_op_num_threads = int(threads)
+    # A0 v11 §0.3: ghim 2 luồng làm mặc định production để md5 ổn định tuyệt đối
+    # (đổi số luồng làm lệch ≤ 1 LSB ở 0,5 % mẫu; xem báo cáo Việc 2.2).
+    options.intra_op_num_threads = int(os.environ.get("VIFASTT_INTRA_THREADS", "2"))
     return ort.InferenceSession(
         str(path),
         providers=resolve_providers(provider),
