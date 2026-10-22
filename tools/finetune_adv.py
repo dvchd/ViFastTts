@@ -194,8 +194,10 @@ def main() -> None:
 
     train_data = SlotDataset(args.train_manifest, config, f0_stats, cache_dir=args.cache_dir, min_syllables=2)
     val_data = SlotDataset(args.val_manifest, config, f0_stats, cache_dir=args.cache_dir, min_syllables=2)
+    # augmentation đổi N sau __getitem__ ⇒ sampler phải gộp theo N SAU cắt (v3.5)
     loader = DataLoader(train_data, batch_sampler=SameNBatchSampler(train_data.rows, args.batch_size,
-                                                                    shuffle=True, seed=args.seed),
+                                                                    shuffle=True, seed=args.seed,
+                                                                    lengths=train_data.effective_lengths()),
                         collate_fn=collate_slot_batch, num_workers=0)
     val_batches = [collate_slot_batch([val_data[i]]) for i in range(min(args.val_batches, len(val_data)))]
     val_batches = [{k: (v.to(device) if torch.is_tensor(v) else v) for k, v in b.items()} for b in val_batches]
