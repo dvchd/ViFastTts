@@ -25,6 +25,8 @@ CANDS = [
     ("gan1k", "runs/adv_v35/eval_1000_ema.pt", CFG35),
     ("gan2k", "runs/adv_v35/eval_2k_ema.pt", CFG35),
     ("gan3k", "runs/adv_v35/eval_3000_ema.pt", CFG35),
+    ("p2_4k", "runs/adv_p2_20k/eval_4000.pt", CFG32),
+    ("p2_6k", "runs/adv_p2_20k/eval_6000.pt", CFG32),
 ]
 SR = 24000
 HOP = 256

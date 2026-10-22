@@ -165,3 +165,45 @@ Cần tool chuyển đổi tương đương bản `_ckpt/step_02000.pt` trước
 
 **Hạn chế đã phát hiện:** `flat_UV` của copy-synth = 1,0 do segment GT đã cắt sát, không còn frame lặng
 "thật" ⇒ ràng buộc "vô thanh ≥ GT − 15 %" **chưa đo được đúng** trong run này; cần định nghĩa lặng tuyệt đối.
+
+## 8. v18.4 — S1 (sai số độ to) + B1 (buzz) + P1 (P2 4k/6k)
+
+### S1 — TF, 40 segment, bootstrap 1.000, lệch so copy-synth
+
+| | spike_err 3 dB | CI95 | spike_err 4 dB | RMS MAE | Δcopy | CI95 MAE |
+|---|---|---|---|---|---|---|
+| copy-synth | 0,000 | [0;0] | 0,000 | 0,30 dB | — | [0,27;0,32] |
+| v3.2 | 0,469 | [0,414;0,500] | 0,329 | 4,13 | +3,83 | [3,35;4,66] |
+| **P2 @2k** | **0,377** | [0,333;0,444] | **0,271** | **3,56** | **+3,26** | [3,27;4,15] |
+| v3.5 | 0,500 | [0,387;0,541] | 0,326 | 4,10 | +3,80 | [3,48;4,81] |
+| GAN 1k | 0,385 | [0,333;0,460] | 0,260 | 3,87 | +3,57 | [3,40;4,69] |
+| GAN 2k | 0,394 | [0,333;0,444] | 0,274 | 3,87 | +3,57 | [3,52;4,28] |
+| P2 4k | 0,421 | [0,351;0,460] | 0,333 | 3,74 | +3,45 | [3,44;4,23] |
+| P2 6k | 0,462 | [0,425;0,500] | 0,328 | 4,02 | +3,72 | [3,60;4,37] |
+
+⇒ **Copy-synth sai số độ to = 0,00** (MAE 0,30 dB) ⇒ thước S1 hợp lệ để xếp hạng.
+**P2 @2k tốt nhất** về độ to; GAN2k kém hơn (0,394/3,87); v3.5 tệ nhất (0,500/4,10); P2 4k/6k **kém dần** ⇒ GAN fine-tune quá 2k làm hỏng động lực độ to.
+
+### B1 — buzz: nguyên nhân ở CODE (xác nhận)
+
+`models/v2_slot5.py:295–308`: decoder nhận **f0_frames + energy + (phonation)**, KHÔNG có kênh vuv.
+`vuv_logits`/`seg_vuv_logits` chỉ là **đầu ra dự đoán**, không quay lại làm điều kiện.
+⇒ **B1.3 bất khả thi như đặc tả**: không có đường nào "ép vuv = 0" ở runtime vì decoder không nhận vuv.
+Đo B1.2 cũng **thoái hoá**: vuv GT theo **âm tiết** (không phải frame) và gần như luôn ≈ 1 (phụ âm nằm
+trong âm tiết) ⇒ tỉ lệ "vuv dự đoán sai" = NaN/không đo được ở cấp âm tiết.
+**Hệ quả (suy đoán có cơ sở):** buzz ở phụ âm là **cấu trúc** — model chỉ biết "âm tiết hữu thanh",
+không có tín hiệu frame-level để tắt tuần hoàn trong phụ âm.
+
+### P1 — chuyển checkpoint P2 4k/6k (KHÔNG train thêm)
+
+Nguyên nhân không nạp được: `ckpt_4000/6000` **thiếu metadata `arch`** ⇒ factory đoán `v1_syl`.
+Đã bọc lại metadata từ `step_02000.pt` → `runs/adv_p2_20k/eval_{4000,6000}.pt`.
+Đo được (mục S1 + bảng dưới) — **không cần train lại**.
+
+| | flat_V | Δcopy | HNR | Δcopy | spike_err 3 dB | MAE |
+|---|---|---|---|---|---|---|
+| P2 2k | **0,1668** | **+24,8 %** | −3,74 | −1,82 | **0,377** | **3,56** |
+| P2 4k | 0,2119 | +58,5 % | −3,69 | −1,77 | 0,421 | 3,74 |
+| P2 6k | 0,1899 | +42,0 % | −3,72 | −1,80 | 0,462 | 4,02 |
+
+⇒ **P2 @2k vẫn tốt nhất trên cả 3 thước** (flat hữu thanh, HNR, sai số độ to). Drift p90 của 4k/6k: chưa đo.
