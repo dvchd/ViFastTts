@@ -509,3 +509,29 @@ JSON: `artifacts/bench/g0.json` (300 segment, TF).
 
 **Ghi chú:** ngưỡng năng lượng của mel z-space không tương ứng trực tiếp dBFS của waveform (q5 = −70 dB
 trong khi waveform chỉ xuống −80), nên cần hiệu chỉnh ngưỡng theo phân bố RMS thật trước khi thử lại.
+
+## 19. C) mel_silence_mask — đọc code + G0 v2 (expander) (JSON: artifacts/bench/g0v2.json)
+
+### C — code
+`models/v2_losses.py:136-152`: khi `loss_weights.mel_silence_mask > 0` và batch có `vuv`,
+mel L1 được nhân trọng số `_speech_frame_weight(...)` ⇒ **frame lặng gần như KHÔNG bị phạt**.
+⇒ Xác nhận: model **không bị phạt khi phát tiếng ở chỗ phải im**.
+
+**Sửa lại thông tin trong v18.17:** cấu hình **v3.5 BẬT** mask (`mel_silence_mask: 1.0`),
+còn **P2/v3.2 KHÔNG có khoá này** (mặc định 0) ⇒ **mask không thể là nguyên nhân nền +12,6 dB của P2**;
+phải kiểm chéo Δ RMS bin < −50 của v3.5 (chưa đo).
+
+### G0 v2 — downward expander trên waveform (TF, 300 segment)
+Ngưỡng −45 dB (1:2) và −40 dB (1:3), attack 2 ms, release 30 ms, max −12 dB, tất định.
+
+| | flat_V hữu thanh | N1 < −50: frame | N1 flat |
+|---|---|---|---|
+| copy-synth | 0,1569 | 21.493 | **0,4296** |
+| P2 gốc | 0,2437 | 26.798 | 0,4698 |
+| P2 + exp −45/1:2 | 0,2441 | 28.444 | 0,4621 |
+| P2 + exp −40/1:3 | 0,2448 | 30.365 | 0,4542 |
+
+⇒ Expander **gần như không đổi flat_V** (đúng: flatness bất biến theo mức), chỉ kéo N1 flat về phía copy
+một chút. **Chưa đo Δ RMS từng bin** (thiếu) ⇒ chưa kết luận được mức nền đã về 0 dB chưa.
+
+9 WAV mẫu (−23 LUFS) đã ghi vào `artifacts/listen_small_filt/v1817_floor/`.
