@@ -243,3 +243,30 @@ Chưa chạy: `faster-whisper 1.2.1` **đã cài**, nhưng **chưa có model Whi
 **Đề xuất**: chạy large-v3 trên **mẫu phân tầng 200–300 row (~30–45 phút audio)** trước, đo tốc độ
 thực tế rồi mới quyết định chạy toàn bộ; đồng thời lọc sẵn các row có token viết tắt/tiếng Anh để
 D1.4 chỉ cần ASR đúng tập đó.
+
+## 10. D1.4 — chấm CTC cách đọc chữ cái (v18.7)
+
+Model trong cache chỉ có `facebook/wav2vec2-base` (**không phải tiếng Việt**) ⇒ đã tải
+`nguyenvulebinh/wav2vec2-base-vietnamese-250h` (400 MB, transformers, device=mps).
+
+Cách đo: mỗi lần xuất hiện chữ cái trong train (syllable = tên chữ cái sau chuẩn hoá), cắt audio theo
+căn MFA ±0,3 s, tính **CTC loss** cho 2 cách đọc (tên Việt vs kiểu Anh-Việt). Loss thấp hơn = người đọc
+gần cách đó. Tối đa 40 lần/chữ.
+
+| chữ | n | tên VI thắng | median Δ(lossVI − lossEN) | đọc khớp hơn |
+|---|---|---|---|---|
+| b | 40 | 0 % | +0,514 | **"bi"** |
+| c | 40 | 0 % | +0,546 | **"xi"** |
+| p | 40 | 0 % | +0,626 | **"pi"** |
+| t | 40 | 0 % | +0,581 | **"ti"** |
+| v | 40 | 0 % | +0,570 | **"vi"** |
+| đ | 40 | 0 % | +0,481 | **"đi"** |
+| r | 40 | 0 % | +1,591 | **"a"** |
+| d | 40 | 75 % | −0,203 | "dê" (giữ) |
+| k | 40 | 100 % | −1,538 | "ca" (giữ) |
+| l | 40 | 90 % | −0,826 | "lờ" / "eo" (gần nhau) |
+| h, m, n, s, x | 40 | 0 % | 0,000 | **không kết luận** (hai chuỗi ứng viên trùng nhau) |
+
+**Xác nhận:** với B, C, P, T, V, Đ, R người đọc theo **kiểu Anh-Việt**, không phải tên chữ cái Việt
+⇒ normalizer sai **hệ thống** ở đúng các chữ này.
+**Suy đoán:** h/m/n/s/x cần ứng viên khác (vd "h" → "ây-ch", "x" → "ex", "s" → "ét" vs "es") mới phân biệt được.
