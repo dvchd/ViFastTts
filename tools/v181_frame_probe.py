@@ -128,6 +128,19 @@ def main() -> None:
         mel = np.asarray(feats["mel"][start:end], dtype=np.float64) * std + mean
         results["real"].append(frame_metrics(wav, mel.mean(axis=1) * DB))
 
+    # K1: copy-synthesis — mel THẬT (chuẩn hoá) → Vocos, đo "trần vocoder"
+    engine_voc = Synthesizer(cfg35, "runs/acoustic_v35/best_ema.pt", device=args.device)
+    results["copy"] = []
+    for row in rows:
+        start, end = row["frame_range"]
+        feats = cache.get(row)
+        mel_norm = feats["mel"][start:end].to(engine_voc.device)
+        with torch.no_grad():
+            audio = engine_voc.vocoder(sharpen_mel(mel_norm, 0.0).unsqueeze(0))[0]
+        wav = np.asarray(audio.float().cpu()).reshape(-1)
+        mel_np = np.asarray(mel_norm.float().cpu(), dtype=np.float64) * std + mean
+        results["copy"].append(frame_metrics(wav, mel_np.mean(axis=1) * DB))
+
     for tag, ckpt, cfg_path in CANDS:
         cfg = yaml.safe_load(Path(cfg_path).read_text(encoding="utf-8"))
         engine = Synthesizer(cfg, ckpt, device=args.device)
@@ -148,19 +161,36 @@ def main() -> None:
     def med(tag: str, key: str) -> float:
         return float(np.nanmedian([r[key] for r in results[tag]]))
 
-    table = {}
-    for tag in ["real", *[c[0] for c in CANDS]]:
-        table[tag] = {k: round(med(tag, k), 4) for k in
-                      ("flat_voiced", "flat_unvoiced", "hnr_voiced", "silence_rms")}
-    print(f"{'':8s} {'flat_voiced':>12s} {'Δ%':>7s} {'flat_unv':>9s} {'Δ%':>7s} "
-          f"{'HNR dB':>8s} {'Δ':>6s} {'sil RMS':>8s} {'Δ':>6s}")
-    for tag, row in table.items():
+    def boot_ci(values: list[float], n: int = 1000, seed: int = 0) -> tuple[float, float]:
+        vals = np.asarray([v for v in values if np.isfinite(v)], dtype=np.float64)
+        rng = np.random.default_rng(seed)
+        meds = [float(np.median(rng.choice(vals, vals.size, replace=True))) for _ in range(n)]
+        return float(np.percentile(meds, 2.5)), float(np.percentile(meds, 97.5))
+
+    tags = ["real", "copy", *[c[0] for c in CANDS]]
+    table = {tag: {k: round(med(tag, k), 4) for k in
+                   ("flat_voiced", "flat_unvoiced", "hnr_voiced", "silence_rms")}
+             for tag in tags}
+    for tag in tags:
+        table[tag]["frac_voiced"] = round(float(np.nanmedian(
+            [r["frac_voiced"] for r in results[tag]])), 4)
+        table[tag]["flat_voiced_ci"] = [round(v, 4) for v in boot_ci(
+            [r["flat_voiced"] for r in results[tag]])]
+        table[tag]["hnr_ci"] = [round(v, 3) for v in boot_ci(
+            [r["hnr_voiced"] for r in results[tag]])]
+    head = (f"{'':8s} {'flat_V':>7s} {'Δreal':>7s} {'Δcopy':>7s} {'CI95 flat_V':>15s} "
+            f"{'flat_UV':>8s} {'Δreal':>7s} {'HNR':>7s} {'Δreal':>6s} {'CI95 HNR':>13s} {'%V':>6s}")
+    print(head)
+    for tag in tags:
+        row = table[tag]
         dv = 100 * (row["flat_voiced"] / table["real"]["flat_voiced"] - 1)
+        dc = 100 * (row["flat_voiced"] / table["copy"]["flat_voiced"] - 1)
         du = 100 * (row["flat_unvoiced"] / table["real"]["flat_unvoiced"] - 1)
         dh = row["hnr_voiced"] - table["real"]["hnr_voiced"]
-        ds = row["silence_rms"] - table["real"]["silence_rms"]
-        print(f"{tag:8s} {row['flat_voiced']:12.4f} {dv:6.1f}% {row['flat_unvoiced']:9.4f} {du:6.1f}% "
-              f"{row['hnr_voiced']:8.2f} {dh:6.2f} {row['silence_rms']:8.2f} {ds:6.2f}")
+        print(f"{tag:8s} {row['flat_voiced']:7.4f} {dv:6.1f}% {dc:6.1f}% "
+              f"{row['flat_voiced_ci']!s:>15s} {row['flat_unvoiced']:8.4f} {du:6.1f}% "
+              f"{row['hnr_voiced']:7.2f} {dh:6.2f} {row['hnr_ci']!s:>13s} "
+              f"{100*row['frac_voiced']:5.1f}%")
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(table, ensure_ascii=False, indent=2), encoding="utf-8")
 

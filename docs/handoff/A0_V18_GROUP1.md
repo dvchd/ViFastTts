@@ -79,3 +79,45 @@ còn audio tổng hợp **không có frame nào** dưới (trung vị − 30 dB)
 
 **Ràng buộc v18.1 (flat vô thanh không thấp hơn GT quá 15 %):** P2 −5,3 % ✓ · GAN2k −5,9 % ✓ ·
 GAN3k −10,4 % ✓ · GAN1k +12,7 % (cao hơn GT, không vi phạm).
+
+## 6. K1–K4 (v18.2) — TRƯỚC E1/E2
+
+### K1. Trần Vocos (copy-synthesis: mel thật → Vocos), 40 segment
+
+| | flat hữu thanh | Δ so WAV thật | CI 95 % | flat vô thanh | Δ so thật | HNR | CI 95 % |
+|---|---|---|---|---|---|---|---|
+| WAV thật | 0,1224 | — | [0,1153; 0,1296] | 0,2688 | — | −1,93 | [−2,245; −1,515] |
+| **copy-synth** | **0,1337** | **+9,2 %** | [0,1265; 0,1427] | 0,2759 | +2,6 % | −2,51 | [−2,683; −2,189] |
+
+⇒ **Trần Vocos chỉ +9,2 %** ở hữu thanh (< ngưỡng dừng 20 %) ⇒ **KHÔNG dừng**, tiếp tục E1/E2.
+Vocoder chỉ đóng góp −0,58 dB HNR; phần lớn khoảng cách còn lại là **model acoustic**.
+
+### K2. P2 @2k là gì (đọc `runs/adv_p2_20k/run.json` + config)
+
+- Khởi tạo: `runs/acoustic_v32/best.pt` (live weights) · config `configs/small_codelung_v32.yaml`.
+- Train: adversarial **fixed** `adv_weight 0,3`, `fm 0`, `d_warmup 300`, G lr 2e-5, D lr 1e-4, EMA 0,999;
+  **chỉ decoder + mel + postnet**; dùng **checkpoint bước 2.000** (trong tổng 20.000).
+- Loss khi fine-tune: `mel 1,0 + mel_pre 0,2 + mel_sharp 1,0 + 0,3·adv` (theo `tools/finetune_adv.py`).
+- **Mel stats P2 = `data/codelung/mel_stats.json` (mọi frame)**, v3.5 = `mel_stats_v35_speech.json`
+  (chỉ frame hữu thanh) ⇒ **KHÁC chuẩn hoá** (mean|.| 1,51 vs 1,76). Hệ quả: so mel z trực tiếp giữa
+  P2 và v3.5 là **không hợp lệ**; E1 khớp năng lượng theo frame vẫn hợp lệ vì so trong cùng hệ.
+- Loss khác: v3.5 `f0_delta 0,2` (P2 0,5), `phonation 0` (P2 0,5), `mel_silence_mask 1,0` (P2 không có).
+
+### K3. Bootstrap 1.000 lần theo câu — CI 95 % (đã ở bảng K1 + cột CI95 mục 5)
+
+### K4. Tỉ lệ frame được xếp "hữu thanh" (autocorr ≥ 0,45)
+
+| | %V | Δ so GT |
+|---|---|---|
+| WAV thật | 61,7 % | — |
+| copy-synth | 61,2 % | −0,5 điểm |
+| v3.2 | 70,5 % | +8,8 |
+| P2 | 68,3 % | +6,6 |
+| v3.5 | 71,0 % | +9,3 |
+| GAN 1k | 70,7 % | +9,0 |
+| GAN 2k | 70,9 % | +9,2 |
+| GAN 3k | 72,1 % | +10,4 |
+
+⇒ Phân loại **không lệch giữa các model** (68–72 %, chênh ≤ 4 điểm) nên so sánh chéo hợp lệ;
+nhưng model bị xếp hữu thanh nhiều hơn GT ~7–10 điểm ⇒ một phần "vô thanh" của model bị tính vào
+hữu thanh. Ghi nhận là hạn chế của thước, không phải lỗi so sánh.
