@@ -42,8 +42,12 @@ VARIANTS = {
     "p2_exp45": {"ckpt": P2, "cfg": CFG32, "exp": (-45.0, 2.0)},
     "p2_exp40": {"ckpt": P2, "cfg": CFG32, "exp": (-40.0, 3.0)},
     "v35": {"ckpt": V35, "cfg": CFG35},
-    **{f"gta{k}": {"ckpt": P2, "cfg": CFG32, "voc": f"{GTA_DIR}/gta_{k}k.pt"} for k in (1, 2, 3, 5)},
+    **{f"gta{k}": {"ckpt": P2, "cfg": CFG32, "voc": f"{GTA_DIR}/gta_{k}k.pt"} for k in (1, 2, 3, 4, 5)},
 }
+#: biến thể GTA + expander (dựng sau dict để không lặp)
+for _k in (1, 2, 3, 4, 5):
+    VARIANTS[f"gta{_k}_exp45"] = {"ckpt": P2, "cfg": CFG32, "voc": f"{GTA_DIR}/gta_{_k}k.pt", "exp": (-45.0, 2.0)}
+    VARIANTS[f"gta{_k}_exp40"] = {"ckpt": P2, "cfg": CFG32, "voc": f"{GTA_DIR}/gta_{_k}k.pt", "exp": (-40.0, 3.0)}
 
 
 def frame_analysis(wave: np.ndarray) -> dict:

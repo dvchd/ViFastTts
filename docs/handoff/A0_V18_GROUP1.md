@@ -535,3 +535,59 @@ Ngưỡng −45 dB (1:2) và −40 dB (1:3), attack 2 ms, release 30 ms, max −
 một chút. **Chưa đo Δ RMS từng bin** (thiếu) ⇒ chưa kết luận được mức nền đã về 0 dB chưa.
 
 9 WAV mẫu (−23 LUFS) đã ghi vào `artifacts/listen_small_filt/v1817_floor/`.
+
+## 20. W1 (gate) + V1/V3 (miền mel) + G1 GTA 5k + eval (v18.27–v18.28)
+
+JSON: `artifacts/bench/v1827_domain.json` · `w1_gate.json` · `v1828_base_tf.json` · `v1828_gta_tf.json` · `v1828_gta_copy.json` · `v1828_free.json`.
+Công cụ: `tools/v1827_domain_probe.py` · `tools/w1_gate_probe.py` · `tools/v1828_gta_eval.py` · `tools/v1828_listen_page.py`.
+
+### V1 — miền mel (đính chính v18.25)
+- Production truyền `sharpen_mel(mel, 0)` = **chính tensor model** (`infer.py:327`); α=0 ⇒ `max|diff| = 0`.
+- `VocosGenerator` nhận **z** (`models/vocos.py:197` → `denormalize` `:160`), dựng với `stats_path` (`istftnet.py:228`).
+- L1(model mel, mel thật z) = **0,992** vs với log thô **2,355** ⇒ model mel là z ✓.
+- **Mốc copy-synth đúng miền loss = 0,133** (median/row 0,129) — số 0,709 trước đó sai (miền z + đầu vào là mel P2).
+
+### V3 — sàn trong cùng miền acoustic z (300 val, 90.466 frame)
+- p1 model **−4,68** vs thật **−11,29**; p5 **−3,39** vs **−4,23**; min −16,23 vs −15,58.
+- L1: toàn bộ 0,992 · có tiếng 0,704 · **lặng 1,790** (26,6 % frame lặng); dịch k: đáy **k=0** (0,7302), đối xứng ✓.
+- ⇒ Model **không kẹt sàn**, nhưng **không tạo được nhóm nhỏ frame cực im** của giọng thật (đúng đính chính v18.28).
+
+### W1 — noise gate (2.300 row: 2.000 train + 300 val; 666.291 frame)
+- **3,64 % frame im kỹ thuật số** (RMS < −90 dBFS); 22,6 % nền nhiễu (−90…−50).
+- Tập trung theo video: `5KnS0TGxWLg` **13,2 %**, `YFfCmXJk` **10,2 %**, `fx303iiDb7M` 1,04 % — 17/20 prefix ~0 %.
+- Khoảng lặng im kỹ thuật số: trước −33…−38 dBFS → 4–5 frame xuống dần → **−240 dB (0 tuyệt đối)**; nền nhiễu: phẳng −55…−60 dBFS. Có **461** gap digital / **2.175** gap nền.
+- Mel trung bình mỗi frame: **thật** digital **−7,85** · nền −2,42 · hữu thanh +0,03; **model** digital **−4,64** · nền −2,42 · hữu thanh −0,02.
+  ⇒ Model **lấy trung gian** giữa im kỹ thuật số và nền nhiễu (đúng giả thuyết W1.4).
+
+### G1 GTA — 5.000 bước, batch 8, d-warmup 500 (`runs/g1_gta5.log`, 3.251 s)
+- Mel loss: 1,14 (600) → 0,80 (1.100) → 0,66–0,77 (3.000–5.000); **sàn copy 0,133**.
+- `mps` 2,4 G → 3,4 G từ bước 1.000 (sau backward của G) rồi **phẳng tới 5.000**; `empty_cache` mỗi 200 row đã xử lý OOM.
+- Một cú nhảy loss ở bước 2.400 (mel 2,55) rồi hồi ngay (1,19 → 0,74).
+
+**TF 300 segment (98.138 frame), bin < −50 = 25.398 frame:**
+| bản | flat_V | HNR | S1 median | bin4 Δ RMS (median / mean / energy) | flat bin4 |
+|---|---|---|---|---|---|
+| copy-synth | 0,1317 | −2,54 | — | — | — |
+| P2 | **0,1884** | **−4,05** | **3,80** | **12,4 / 16,9 / 17,5** | **0,4391** |
+| GTA 1k | 0,2189 | −4,51 | 3,82 | 15,7 / 20,3 / 19,1 | 0,468 |
+| GTA 2k | 0,2306 | −4,65 | 3,92 | 14,7 / 19,2 / 18,5 | 0,5535 |
+| GTA 3k | 0,2143 | −4,59 | 3,82 | 13,8 / 17,9 / 18,0 | 0,5526 |
+| GTA 4k | 0,1883 | −4,36 | 3,80 | 14,0 / 18,7 / 17,7 | 0,5419 |
+| GTA 5k | 0,1966 | −4,38 | 3,77 | 14,5 / 19,4 / 17,6 | 0,5475 |
+
+**Copy-check (100 segment, mel thật → vocoder → L1 với mel thật, log thô):** Vocos gốc **0,133**; GTA 1k **0,529** · 2k 0,383 · 3k **0,341** · 4k 0,375 · 5k 0,369 ⇒ **GTA quên mel thật 2,6–4×**.
+
+**Free-run 40 câu (production):**
+| bản | flat_V | HNR | % frame < −50 | mean dB |
+|---|---|---|---|---|
+| WAV thật | 0,1187 | −1,67 | — | — |
+| P2 | 0,1615 | −3,68 | 2,11 | −30,22 |
+| P2+exp −45 | 0,1607 | −3,67 | 4,58 | −31,05 |
+| GTA 4k | 0,1706 | −3,98 | 1,92 | −29,78 |
+| GTA 4k+exp | 0,1697 | −3,96 | 4,88 | −30,62 |
+
+⇒ **Cổng GTA: TRƯỢT** (không bản nào hơn P2 ở flat_V/HNR/N1; copy-check xấu 2,6–4×). Nguyên nhân khả dĩ: mel P2 đã mất chi tiết, vocoder không thể khôi phục — GTA chỉ thêm nhiễu phẳng.
+
+**Expander (P2, 300 TF):** Δ RMS bin < −50 giảm mạnh theo **median** (12,4 → 3,2 / 1,1 dB) nhưng **energy** chỉ 17,5 → 15,5 / 13,5 vì trần −12 dB; **S1 xấu đi** (3,80 → 4,34 / 4,99 dB). Flatness không đổi (0,439) — đúng bản chất gain.
+
+**Trang nghe mù:** https://cio-rows-rocks-seq.trycloudflare.com/v1828_gate/ (9 câu × 5 bản: copy/P2/P2+exp/GTA4k/GTA4k+exp, −23 LUFS, nhãn xáo, đáp án `artifacts/listen_small_filt/v1828_gate/key.json`).
