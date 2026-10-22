@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from vifasttts.frontend.custom_reading import apply_custom_reading
 from vifasttts.frontend.dialect import Dialect
 from vifasttts.frontend.normalizer import NormalizerOptions, normalize_text
 from vifasttts.frontend.syllable import safe_parse_syllable
@@ -45,6 +46,9 @@ def parse_text(
 ) -> list[ParsedSyllable]:
     """Parse text into structured syllables.
 
+    Cách đọc riêng (`data/codelung/custom_reading.json`) được áp TRƯỚC chuẩn hoá; không có tệp
+    thì hành vi y như cũ.
+
     Normalizer xử lý cách đọc theo vùng miền trước, sau đó mới token hoá và parse.
     Dấu câu đứng trước gắn vào âm tiết kế tiếp, dấu câu đứng sau gắn vào âm tiết
     trước đó kèm ranh giới phrase/câu. Token lạ trở thành FALLBACK_REQUIRED thay
@@ -55,7 +59,7 @@ def parse_text(
     """
     from vifasttts.frontend.oov import resolve_oov_token
 
-    normalized = normalize_text(text, dialect, options=options)
+    normalized = normalize_text(apply_custom_reading(text), dialect, options=options)
     output: list[ParsedSyllable] = []
     pending_punctuation = ""
     for token in _TOKEN_RE.findall(normalized):
