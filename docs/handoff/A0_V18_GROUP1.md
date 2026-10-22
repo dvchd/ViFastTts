@@ -446,3 +446,43 @@ Phổ ở bin <−50: model **thấp hơn copy mọi dải** (−0,4…−5,9 dB
 **nhiễu phẳng ở mức thấp**, đúng hướng giả thuyết "rè nền", nhưng **không phải model to hơn**.
 ***Kết luận N1: xác nhận một phần*** — model rè hơn ở cả bin to và bin nhỏ; ở bin nhỏ model *nhỏ hơn*
 copy nhưng phổ phẳng hơn (nhiễu chiếm tỉ lệ cao hơn).
+
+## 16. Q1/Q2 sửa lỗi đo (300 segment, TF, JSON: artifacts/bench/q12_n1_buzz.json)
+
+### Q1 — công thức RMS và bin
+- Công thức: `20*log10(sqrt(mean(x^2)))` trên **waveform**, full-scale = 1.0 ⇒ đúng dBFS.
+- **Lỗi thật:** điều kiện bin viết `lo < rms <= hi` với dải sắp xếp giảm dần ⇒ mọi frame −20…−50 rơi
+  vào nhánh mặc định `b=4`. Nay sửa: `b = 0 if rms>-20 else 1 if rms>-30 else 2 if rms>-40 else 3 if rms>-50 else 4`.
+- Histogram 2 dB và bảng N1 đầy đủ đã ghi JSON (phần in bị cắt).
+
+### N1 sau khi sửa (đọc được bin < −50 dBFS)
+| model | frame | flat_V | Δ RMS so copy |
+|---|---|---|---|
+| P2 | 25.398 | **0,4391** | **+12,6 dB** |
+
+⇒ **Đảo kết luận trước:** ở frame rất nhỏ, model **to hơn copy 12,6 dB** và **phẳng hơn nhiều** (0,44 so
+copy ~0,15–0,2) ⇒ **nền model đúng là nhiễu phẳng** (giả thuyết "rè nền" ĐƯỢC XÁC NHẬN).
+
+### Q2 — buzz, định nghĩa thống nhất (acoustic, từ WAV thật)
+GT vô thanh = frame có **autocorr của WAV THẬT < 0,45**; buzz = frame đó mà model có autocorr ≥ 0,45.
+Copy-synth theo định nghĩa này = **0,0 %** (đúng, vì dùng chính WAV thật làm chuẩn).
+
+| | C bán NA | C mũi | C tắc | N mở | N bán NA | N mũi | N tắc |
+|---|---|---|---|---|---|---|---|
+| P2 | 45,5 % | **67,7 %** | 41,6 % | 45,2 % | 43,9 % | 37,5 % | 49,1 % |
+| GAN | 46,7 % | **72,7 %** | 44,3 % | 49,5 % | 42,7 % | 34,8 % | 52,1 % |
+
+⇒ Sửa lại so với D3: **buzz nặng nhất ở C MŨI (68–73 %)**, không phải C tắc. Số cũ (28–32 %) sai vì
+định nghĩa "GT vô thanh" theo vuv âm tiết, không phải theo WAV thật.
+
+## 17. G1 — thiết kế GTA fine-tune Vocos (CHƯA train)
+- **Dữ liệu:** mel P2@2k chế độ TF (duration MFA) cho **toàn bộ 18.226 row train**, ghép audio thật cùng row;
+  **300 segment val giữ riêng** (không đưa vào train).
+- **Căn frame–audio:** mel TF có `T` frame ứng với `(T-1)*256 + 1024` mẫu; phải kiểm từng row khớp trước khi ghép
+  (lệch ⇒ bỏ row đó, ghi số bỏ).
+- **Khởi tạo:** Vocos hiện tại; **giữ nguyên loss gốc** (mel + multi-res STFT + GAN của vocoder), lr thấp.
+- **Đánh giá:** đúng bảng D3/coda (flat_V, HNR theo slot so copy-synth) + S1 + drift.
+- **Dung lượng:** 15,8 triệu frame × 100 bin × 2 byte (fp16) ≈ **3,2 GB** (+ audio gốc đã có).
+- **Thời gian:** 0,653 s/bước (b8·crop64·D ch16 đã đo) ⇒ 5k bước ≈ **55 phút**, 10k ≈ **1,8 giờ** trên Mac mini.
+- **Rủi ro:** chỉ hợp với P2 (mel z-space của v3.2); đổi acoustic model ⇒ **phải GTA lại**; nếu Vocos quen
+  với nhiễu của P2, nó có thể **học luôn rè** thay vì khử ⇒ phải so với copy-synth chứ không chỉ nghe.
