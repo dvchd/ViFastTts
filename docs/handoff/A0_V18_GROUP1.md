@@ -270,3 +270,33 @@ gần cách đó. Tối đa 40 lần/chữ.
 **Xác nhận:** với B, C, P, T, V, Đ, R người đọc theo **kiểu Anh-Việt**, không phải tên chữ cái Việt
 ⇒ normalizer sai **hệ thống** ở đúng các chữ này.
 **Suy đoán:** h/m/n/s/x cần ứng viên khác (vd "h" → "ây-ch", "x" → "ex", "s" → "ét" vs "es") mới phân biệt được.
+
+## 11. D1.4b — cụm + đối chứng thước: **THƯỚC KHÔNG DÙNG ĐƯỢC** (dừng theo quy tắc)
+
+Đối chứng trên từ đã biết chắc (`bê, bi, vê, vi, ti, tê, pê, pi, xê, xi`, 15 lần mỗi từ):
+
+| từ | n | thắng đúng |
+|---|---|---|
+| bê | 15 | 0 |
+| bi | 15 | 2 |
+| vê | 15 | 0 |
+| vi | 15 | 3 |
+| ti | 15 | 1 |
+| tê | 15 | 0 |
+| pê | 15 | 0 |
+| pi | 15 | 1 |
+| xê | 15 | 0 |
+| xi | 15 | 1 |
+
+**ĐỘ CHÍNH XÁC 5,3 % (8/150)** ⇒ theo quy tắc v18.8 ("< 90 % ⇒ thước không dùng được") **DỪNG D1.4b**.
+
+**Xác nhận:** CTC-loss trên đoạn cắt theo MFA **không phân biệt được** các cách đọc gần nhau (bê/bi, vê/vi).
+**Suy đoán nguyên nhân (chưa kiểm):**
+1. **Thiên vị độ dài chuỗi** — CTC loss giảm theo độ dài target; chưa chuẩn hoá theo số token.
+2. Tokenizer của model Việt là mức **từ**, nên "bê" vs "bi" chỉ khác 1 token, chênh loss rất nhỏ so với nhiễu.
+3. Cửa sổ cắt theo MFA của cụm đã chuẩn hoá có thể lệch so với âm thực tế (nhất là cụm 3–4 chữ).
+
+**Bảng cụm (30 cụm) chỉ để tham khảo, KHÔNG dùng để chốt:** dù vậy xu hướng vẫn nghiêng kiểu Anh-Việt
+("ve pe", "xi es", "es lờ", "đi en es", "ve be"…) — trùng hướng với D1.4 nhưng **chưa đủ tin cậy**.
+
+Lưu: `artifacts/bench/d14b_clusters.json` (local).
