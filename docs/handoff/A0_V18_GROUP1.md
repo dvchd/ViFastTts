@@ -399,3 +399,50 @@ copy −38,7 · **P2 −41,0 · GAN −41,0** ⇒ model **khép chặt hơn** co
 xu hướng này ~2×. Buzz ở C mũi rất thấp (0,2–1,1 %) ⇒ nhóm mũi **không phải buzz**, mà là **nhòe hài âm**.
 
 **Chưa có:** bảng nhóm × slot đầy đủ (frame/buzz), bảng khống chế thanh.
+
+## 15. D3 đầy đủ + N1 (300 segment, TF, JSON: artifacts/bench/d314_d3_n1.json)
+
+### Nhóm × slot (số frame, flat_V, Δ copy)
+| slot | nhóm | frame | copy | P2 | Δ | GAN | Δ |
+|---|---|---|---|---|---|---|---|
+| N | mở | 13.092 | 0,1452 | 0,2111 | +45 % | 0,2075 | +43 % |
+| N | bán NA | 10.277 | 0,1455 | 0,1995 | +37 % | 0,2120 | +46 % |
+| N | mũi | 7.285 | 0,1029 | 0,1653 | +61 % | 0,1497 | +45 % |
+| N | tắc | 3.185 | 0,1463 | 0,2415 | +65 % | 0,2239 | +53 % |
+| C | bán NA | 4.453 | 0,1465 | 0,2225 | +52 % | 0,2076 | +42 % |
+| C | mũi | 4.634 | 0,0932 | 0,1726 | +85 % | 0,1460 | +57 % |
+| C | tắc | 1.434 | 0,2003 | 0,3388 | +69 % | 0,3364 | +68 % |
+
+Buzz (% frame GT-vô thanh bị xếp hữu thanh): N mở copy 28,0 → P2 **41,3** → GAN **44,0**;
+C tắc copy 32,4 → P2 **64,7** → GAN **70,6** ⇒ model buzz **~2× copy**, nặng nhất ở C tắc.
+
+### Coda riêng slot C (frame, copy → P2 → GAN)
+| coda | frame | copy | P2 | Δ | GAN | Δ |
+|---|---|---|---|---|---|---|
+| ch | 143 ⚠️ | 0,2659 | 0,3571 | +34 % | 0,3715 | +40 % |
+| t | 716 | 0,1881 | 0,3470 | **+84 %** | 0,3430 | +82 % |
+| p | 219 | 0,2152 | 0,3226 | +50 % | 0,3402 | +58 % |
+| c | 322 | 0,1925 | 0,2926 | +52 % | 0,2889 | +50 % |
+| nh | 1.099 | 0,1472 | 0,2533 | +72 % | 0,1917 | +30 % |
+| n | 1.866 | 0,0854 | 0,1543 | +81 % | 0,1247 | +46 % |
+| ng | 1.096 | 0,0721 | 0,1378 | +91 % | 0,1557 | **+116 %** |
+| m | 499 | 0,0972 | 0,1237 | +27 % | 0,1191 | +23 % |
+| i | 1.967 | 0,1322 | 0,2073 | +57 % | 0,1864 | +41 % |
+| o | 443 | 0,2017 | 0,3560 | +77 % | 0,3087 | +53 % |
+| u | 554 | 0,1713 | 0,2852 | +67 % | 0,2501 | +46 % |
+| y | 1.381 | 0,1456 | 0,2141 | +47 % | 0,1966 | +35 % |
+
+⇒ Có cột copy mới thấy: **-T rè thật (+84 %)**, không phải "tắc vốn phẳng". Chỉ -CH dưới ngưỡng frame.
+
+### N1 — nền theo mức to (chia bin theo RMS của COPY-SYNTH)
+| bin | frame | copy fl26 | P2 fl26 | GAN fl26 | Δ RMS P2/GAN |
+|---|---|---|---|---|---|
+| >−20 dBFS | 95.886 | 0,1870 | 0,2703 (+44 %) | 0,2617 (+40 %) | 0,0 / +0,1 |
+| <−50 dBFS | 2.252 | 0,1473 | 0,2284 (+55 %) | 0,2249 (+53 %) | **−5,9 / −6,7** |
+
+**Các bin −20…−50 KHÔNG có frame nào** (giọng thật chuyển rất nhanh từ to sang im) ⇒ không kiểm được
+vùng chuyển tiếp; đây là hạn chế của thước, không phải model.
+Phổ ở bin <−50: model **thấp hơn copy mọi dải** (−0,4…−5,9 dB) nhưng **phẳng hơn** ⇒ nền model là
+**nhiễu phẳng ở mức thấp**, đúng hướng giả thuyết "rè nền", nhưng **không phải model to hơn**.
+***Kết luận N1: xác nhận một phần*** — model rè hơn ở cả bin to và bin nhỏ; ở bin nhỏ model *nhỏ hơn*
+copy nhưng phổ phẳng hơn (nhiễu chiếm tỉ lệ cao hơn).
