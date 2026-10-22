@@ -121,3 +121,47 @@ Vocoder chỉ đóng góp −0,58 dB HNR; phần lớn khoảng cách còn lại
 ⇒ Phân loại **không lệch giữa các model** (68–72 %, chênh ≤ 4 điểm) nên so sánh chéo hợp lệ;
 nhưng model bị xếp hữu thanh nhiều hơn GT ~7–10 điểm ⇒ một phần "vô thanh" của model bị tính vào
 hữu thanh. Ghi nhận là hạn chế của thước, không phải lỗi so sánh.
+
+## 7. T1/T2 + E1/E2 (v18.3) — TF, nhãn GT áp chung, 40 segment, 1.000 bootstrap
+
+Công cụ `tools/v183_fuse_probe.py` · JSON `artifacts/bench/v183_fuse.json`.
+TF: ép `durations`/`gaps` từ nhãn MFA ⇒ mọi model cùng số frame, phân loại frame bằng **vuv + năng lượng của GT**.
+Mốc xếp hạng = **copy-synth** (TF): flat_V 0,1562 · HNR −3,20.
+
+| biến thể | flat_V | Δcopy | CI95 flat_V | HNR | Δcopy | spike | MAE | buzz |
+|---|---|---|---|---|---|---|---|---|
+| copy-synth | 0,1562 | — | [0,147;0,164] | −3,20 | — | 0,200* | 0,30 | 0,022 |
+| v3.2 | 0,2662 | +70,4 % | [0,247;0,282] | −4,41 | −1,22 | 0,172 | 4,32 | 0,230 |
+| **P2 @2k** | 0,2263 | +44,8 % | [0,216;0,246] | −4,05 | −0,85 | 0,182 | 3,75 | 0,267 |
+| v3.5 | 0,2648 | +69,5 % | [0,250;0,278] | −4,49 | −1,29 | 0,124 | 4,27 | 0,250 |
+| GAN2k | 0,2191 | +40,2 % | [0,210;0,235] | −4,09 | −0,89 | 0,185 | 4,06 | 0,268 |
+| GAN3k | 0,2089 | +33,7 % | [0,190;0,219] | −4,14 | −0,95 | 0,158 | 3,91 | 0,246 |
+| GAN2k + E1 | 0,2268 | +45,1 % | [0,211;0,240] | −4,12 | −0,92 | **0,140** | 3,91 | 0,266 |
+| GAN2k + E2 1,5k | 0,2284 | +46,2 % | [0,214;0,238] | −4,35 | −1,16 | **0,115** | 3,98 | 0,311 |
+| GAN2k + E2 2,5k | 0,2493 | +59,6 % | [0,241;0,263] | −4,42 | −1,22 | **0,111** | 4,08 | 0,309 |
+| **GAN2k + E1+E2 1,5k** | **0,2287** | **+46,4 %** | [0,214;0,239] | −4,33 | −1,14 | **0,111** | 4,06 | 0,263 |
+| GAN2k + E1+E2 2,5k | 0,2536 | +62,3 % | [0,244;0,265] | −4,49 | −1,30 | 0,113 | 4,07 | 0,250 |
+| GAN3k + E1 | 0,2108 | +34,9 % | [0,200;0,220] | −4,15 | −0,95 | 0,145 | 3,88 | 0,270 |
+| GAN3k + E1+E2 1,5k | 0,2116 | +35,4 % | [0,202;0,223] | −4,36 | −1,17 | 0,113 | 4,11 | 0,254 |
+| GAN3k + E1+E2 2,5k | 0,2314 | +48,1 % | [0,226;0,244] | −4,43 | −1,23 | 0,113 | 4,12 | 0,254 |
+
+\* spike của copy-synth 0,200 là **bất thường** (copy-synth lệch thật chỉ 0,30 dB MAE) ⇒ thước spike
+trong tool này **quá nhạy**; dùng để SO SÁNH giữa các biến thể, không dùng trị tuyệt đối.
+
+**Xác nhận:**
+1. **E1 một mình KHÔNG đạt mục tiêu**: GAN2k 0,185→0,140; GAN3k 0,158→0,145 — đều > 0,1254.
+2. E1 gần như **không đổi flatness** (0,2191→0,2268) — đúng lý thuyết (cộng hằng số mỗi frame).
+3. **E2 mới đạt spike ≤ 0,1254** nhưng kéo flatness lên (lấy dải thấp từ v3.5 vốn rè hơn) ⇒ **đánh đổi**.
+4. **T2 (buzz):** trên frame GT vô thanh, tỉ lệ frame bị xếp hữu thanh: copy-synth 0,022 · v3.2 0,230 ·
+   v3.5 0,250 · P2 0,267 · GAN2k 0,268 · E2 0,311 ⇒ **model "buzz" gấp ~10 lần thật**, và E2 làm TỆ hơn.
+5. **Drift:** GAN1k 4,19 ✓ · GAN2k 5,23 ✓ · **GAN3k 7,34 ✗** (vượt 5,45) ⇒ loại GAN3k theo ràng buộc.
+
+**Chưa đạt:** chưa có biến thể nào vừa ≤ 0,1254 spike vừa giữ flatness gần GAN gốc:
+GAN2k+E1+E2 1,5k = +46,4 % (so copy) > GAN2k gốc +40,2 %, và buzz tăng.
+
+**P1 (nhánh P2):** `runs/adv_p2_20k` có `ckpt_4000.pt`, `ckpt_6000.pt` nhưng **định dạng v1**
+(có head energy/f0/vuv) — nạp vào `v2_slot5` báo thiếu/thừa khoá ⇒ **chưa đo được**, **không train thêm**.
+Cần tool chuyển đổi tương đương bản `_ckpt/step_02000.pt` trước khi đo.
+
+**Hạn chế đã phát hiện:** `flat_UV` của copy-synth = 1,0 do segment GT đã cắt sát, không còn frame lặng
+"thật" ⇒ ràng buộc "vô thanh ≥ GT − 15 %" **chưa đo được đúng** trong run này; cần định nghĩa lặng tuyệt đối.
