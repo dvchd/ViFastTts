@@ -357,3 +357,45 @@ Số âm tiết: mở 239 · bán NA 209 · mũi 139 · tắc 97. **-CH chỉ 7,
   (lượt này hết ngân sách); -CH chỉ 7 âm tiết nên dù làm cũng phải ghi "không đủ tin cậy".
 - Buzz đang tính trung bình theo từng âm tiết rồi lấy trung vị ⇒ giá trị thô (0 / 0,5 / 1,0);
   cần đổi sang gộp theo FRAME trước khi kết luận.
+
+## 14. D3 mở rộng (300 segment, TF) — kết quả có được
+
+**Lỗi công cụ:** bảng chính (nhóm × slot, số frame/buzz) đã tính nhưng **không lưu JSON** và bị cắt khi in
+⇒ phải chạy lại; các phần dưới đây là số **đã đọc được**.
+
+**Dòng coda riêng (slot C), flat_V, kèm SỐ FRAME:**
+
+| coda | frame | P2 | GAN2k |
+|---|---|---|---|
+| **-CH** | **143** | **0,3571** | **0,3715** |
+| -T | 716 | 0,3470 | 0,3430 |
+| -P | 219 | 0,3226 | 0,3402 |
+| -C | 322 | 0,2926 | 0,3087* |
+| -NH | 1.099 | 0,2533 | 0,1917 |
+| -N | 1.866 | 0,1543 | 0,1247 |
+| -NG | 1.096 | 0,1378 | 0,1557 |
+| -M | 499 | 0,1237 | 0,1191 |
+| (bán NA) -i | 1.967 | 0,2073 | 0,1864 |
+| (bán NA) -o | 443 | 0,3560 | 0,3087 |
+| (bán NA) -u | 554 | 0,2852 | 0,2501 |
+| (bán NA) -y | 1.381 | 0,2141 | 0,1966 |
+
+⇒ **-CH và -T là rè nhất**, nhưng **-CH chỉ 143 frame ⇒ dưới ngưỡng 200, KHÔNG đủ tin cậy**;
+-T (716 frame) đủ tin cậy và cũng rất rè → nhóm **tắc nói chung** hỏng, không riêng -CH.
+
+**Kiểm "model có khép không" (slot C tắc, RMS dB/frame):**
+copy −38,7 · **P2 −41,0 · GAN −41,0** ⇒ model **khép chặt hơn** copy 2,3 dB.
+**Xác nhận: giả thuyết "không khép" SAI.** Buzz ở C tắc không do thiếu khép.
+
+**Slot C mũi theo khoảng cách tới biên N|C:**
+| dist | copy | P2 | GAN |
+|---|---|---|---|
+| 1 | 0,0779 | 0,1480 | 0,1145 |
+| 2 | 0,0873 | 0,1674 | 0,1322 |
+| 3 | 0,0952 | 0,1752 | 0,1536 |
+| ≥4 | 0,1132 | 0,1917 | 0,1693 |
+
+⇒ rè **tăng dần theo độ xa biên** ở cả copy-synth lẫn model (không phải hiệu ứng mép): model khuếch đại
+xu hướng này ~2×. Buzz ở C mũi rất thấp (0,2–1,1 %) ⇒ nhóm mũi **không phải buzz**, mà là **nhòe hài âm**.
+
+**Chưa có:** bảng nhóm × slot đầy đủ (frame/buzz), bảng khống chế thanh.
