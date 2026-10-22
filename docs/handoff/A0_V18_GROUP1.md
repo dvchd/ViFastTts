@@ -315,3 +315,45 @@ Lưu: `artifacts/bench/d14b_clusters.json` (local).
 - 10 row: audio 56,2 s · xử lý 21,7 s ⇒ **RTF 2,59×** (audio/giây xử lý).
 - Ước: **51 h audio ≈ 19,7 giờ** (không chạy toàn bộ); mẫu D1.2 (250 row ≈ 23 phút audio) ≈ **9–10 phút**.
 - Ví dụ lệch sớm: GT "ai phôn mười hai pờ rồ đi" vs ASR "iphone mười hai pro đi" ⇒ đúng loại lỗi transcript/normalizer cần tìm.
+
+## 13. D3 — rè theo nhóm âm cuối (TF, 40 segment, P2@2k + GAN2k, mốc copy-synth)
+
+Nguồn coda: **lấy từ CHỮ VIẾT của âm tiết** (không dùng `abstract.coda` vì đã kiểm: giá trị coda
+trong manifest là chuỗi chữ nhưng gộp `ch`/`nh` vào `c`/`n` không đủ tin — xem bảng phân bố:
+n 57 · o 19 · c 31 · ng 32 · (rỗng) 239 · y 56 · i 119 · nh 38 · m 12 · **ch 7** · t 50 · u 15 · p 9).
+
+Nhóm: mở (rỗng) · bán nguyên âm (i/y/o/u) · mũi (m/n/ng/nh) · tắc (c/ch/t/p).
+Số âm tiết: mở 239 · bán NA 209 · mũi 139 · tắc 97. **-CH chỉ 7, -P 9, -M 12 ⇒ không đủ tin cậy.**
+
+| model | slot | nhóm | n | flat_V | so copy | HNR |
+|---|---|---|---|---|---|---|
+| copy | N | mở | 239 | 0,1259 | — | −2,49 |
+| copy | N | bán NA | 209 | 0,1425 | — | −1,62 |
+| copy | N | mũi | 139 | 0,1157 | — | −2,57 |
+| copy | N | tắc | 97 | 0,1529 | — | −2,70 |
+| P2 | N | mở | 239 | 0,1908 | **+51,5 %** | −3,93 |
+| P2 | N | bán NA | 209 | 0,1917 | +34,5 % | −3,40 |
+| P2 | N | mũi | 139 | 0,1786 | +54,4 % | −3,84 |
+| P2 | N | tắc | 97 | 0,2156 | +41,0 % | −4,44 |
+| GAN2k | N | mở | 239 | 0,1920 | +52,5 % | −3,70 |
+| GAN2k | N | bán NA | 209 | 0,2002 | +40,5 % | −3,29 |
+| GAN2k | N | mũi | 139 | 0,1499 | +29,6 % | −4,36 |
+| GAN2k | N | tắc | 97 | 0,2152 | +40,7 % | −4,28 |
+| copy | C | bán NA | 177 | 0,1350 | — | −3,89 |
+| copy | C | mũi | 136 | 0,0968 | — | −4,14 |
+| copy | C | tắc | 96 | 0,1640 | — | −4,01 |
+| P2 | C | bán NA | 177 | 0,1867 | +38,3 % | −4,42 |
+| P2 | C | mũi | 136 | 0,1823 | +88,3 % | −4,82 |
+| **P2** | **C** | **tắc** | 96 | **0,3209** | **+95,7 %** | −4,85 |
+| GAN2k | C | bán NA | 177 | 0,1702 | +26,1 % | −4,53 |
+| GAN2k | C | mũi | 136 | 0,1603 | +65,6 % | −4,72 |
+| **GAN2k** | **C** | **tắc** | 96 | **0,3031** | **+84,8 %** | −4,66 |
+
+**Xác nhận:** rè nặng nhất ở **slot C của nhóm TẮC** (P2 +95,7 %, GAN +84,8 % so copy) và **slot C mũi**
+(P2 +88,3 %). Đây là chỗ "ách/ếch" nghe rè — khớp với tai người dùng.
+
+**Hạn chế (ghi rõ):**
+- Bảng **khống chế thanh** (chỉ SẮC/NẶNG) và các dòng riêng **-CH, -C, -T, -P, -NH, -NG** **CHƯA làm**
+  (lượt này hết ngân sách); -CH chỉ 7 âm tiết nên dù làm cũng phải ghi "không đủ tin cậy".
+- Buzz đang tính trung bình theo từng âm tiết rồi lấy trung vị ⇒ giá trị thô (0 / 0,5 / 1,0);
+  cần đổi sang gộp theo FRAME trước khi kết luận.
