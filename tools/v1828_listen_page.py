@@ -40,6 +40,10 @@ def main() -> None:
     parser.add_argument("--rows", type=int, default=9)
     parser.add_argument("--min-syllables", type=int, default=9)
     parser.add_argument("--gta", default=None, help="checkpoint Vocos GTA tốt nhất (vocoder-only)")
+    parser.add_argument("--fc", default=None, help="checkpoint nhánh Fc (cờ gate) — suy luận gate=1")
+    parser.add_argument("--fd", default=None, help="checkpoint nhánh Fd (đích gate đồng nhất)")
+    parser.add_argument("--gate-map", default="artifacts/bench/v1829_gate_map.json")
+    parser.add_argument("--min-nogate", type=int, default=3, help="số câu tối thiểu từ video KHÔNG gate")
     parser.add_argument("--with-exp", action="store_true", help="thêm bản GTA + expander −45/1:2")
     parser.add_argument("--out", default="artifacts/listen_small_filt/v1828_gate")
     parser.add_argument("--target-lufs", type=float, default=-23.0)
@@ -52,15 +56,36 @@ def main() -> None:
     from vifasttts.runtime.postprocess import sharpen_mel
 
     rows = [json.loads(x) for x in Path(args.val).read_text(encoding="utf-8").splitlines() if x.strip()]
-    picked = []
-    seen = set()
-    for row in rows:
-        if row.get("parent") in seen or len(row["syllables"]) < args.min_syllables:
+    gate_map = {}
+    if Path(args.gate_map).exists():
+        gate_map = json.loads(Path(args.gate_map).read_text(encoding="utf-8")).get("gate", {})
+    candidates = [row for row in rows if len(row["syllables"]) >= args.min_syllables]
+    seen: set = set()
+    picked: list[dict] = []
+    # v18.29: xen kẽ video gate / không gate để trang nghe có đủ câu KHÔNG gate
+    by_group: dict[int, list[dict]] = {0: [], 1: []}
+    for row in candidates:
+        if row.get("parent") in seen:
+            continue
+        seen.add(row.get("parent"))
+        prefix = str(row["id"]).split("_")[0]
+        by_group[int(gate_map.get(prefix, 0))].append(row)
+    cursors = {0: 0, 1: 0}
+    # xen kẽ gate/không gate (ưu tiên nhóm còn nhiều) để trang có đủ cả hai
+    while len(picked) < args.rows and any(cursors[k] < len(by_group[k]) for k in by_group):
+        for want in (0, 1):
+            if len(picked) >= args.rows:
+                break
+            if cursors[want] < len(by_group[want]):
+                picked.append(by_group[want][cursors[want]])
+                cursors[want] += 1
+    for row in candidates:
+        if len(picked) >= args.rows:
+            break
+        if row.get("parent") in seen:
             continue
         seen.add(row.get("parent"))
         picked.append(row)
-        if len(picked) >= args.rows:
-            break
     if len(picked) < args.rows:
         picked = rows[: args.rows]
 
@@ -70,6 +95,15 @@ def main() -> None:
     copy_engine = Synthesizer(cfg35, V35, device=args.device)
     p2_engine = Synthesizer(cfg32, P2, device=args.device)
     gta_engine = Synthesizer(cfg32, P2, vocoder_checkpoint=args.gta, device=args.device) if args.gta else None
+    fc_engine = None
+    if args.fc:
+        from functools import partial
+
+        fc_cfg = yaml.safe_load(Path("configs/small_codelung_v32_gate.yaml").read_text(encoding="utf-8"))
+        fc_engine = Synthesizer(fc_cfg, args.fc, device=args.device)
+        # suy luận Fc: gate = 1 (A0 v18.29) — bơm qua partial để không đổi API production
+        fc_engine.model.forward = partial(fc_engine.model.forward, gate=torch.tensor([1], dtype=torch.long))
+    fd_engine = Synthesizer(cfg32, args.fd, device=args.device) if args.fd else None
 
     out = Path(args.out)
     if out.exists():
@@ -93,14 +127,15 @@ def main() -> None:
         pieces = [audio for audio, _ in engine.iter_synthesize_sentence(text)]
         return np.concatenate(pieces) if pieces else np.zeros(1, dtype=np.float32)
 
-    def expander(x: np.ndarray, threshold_db: float = -45.0, ratio: float = 2.0) -> np.ndarray:
+    def expander(x: np.ndarray, threshold_db: float = -40.0, ratio: float = 3.0,
+                 max_db: float = 18.0) -> np.ndarray:
         block = 64
         n = len(x) // block
         if n == 0:
             return x
         rms = np.sqrt(np.mean(x[: n * block].reshape(n, block) ** 2, axis=1) + 1e-12)
         level = 20 * np.log10(rms + 1e-12)
-        atten = np.where(level < threshold_db, np.minimum((threshold_db - level) * (ratio - 1.0), 12.0), 0.0)
+        atten = np.where(level < threshold_db, np.minimum((threshold_db - level) * (ratio - 1.0), max_db), 0.0)
         a_att = float(np.exp(-block / (24000 * 0.002)))
         a_rel = float(np.exp(-block / (24000 * 0.030)))
         gain = np.empty(n)
@@ -119,13 +154,17 @@ def main() -> None:
         variants = {
             "copy": render_copy(row),
             "p2": render_free(p2_engine, row),
-            "p2_exp45": expander(render_free(p2_engine, row)),
+            "p2_exp": expander(render_free(p2_engine, row)),
         }
         if gta_engine is not None:
             gta_audio = render_free(gta_engine, row)
             variants["gta"] = gta_audio
             if args.with_exp:
                 variants["gta_exp45"] = expander(gta_audio)
+        if fc_engine is not None:
+            variants["fc"] = render_free(fc_engine, row)
+        if fd_engine is not None:
+            variants["fd"] = render_free(fd_engine, row)
         names = list(variants)
         rng.shuffle(names)
         entries = []

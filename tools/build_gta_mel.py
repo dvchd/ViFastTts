@@ -147,6 +147,8 @@ def main() -> None:
             done += 1
         elapsed = time.perf_counter() - started
         if done % 200 < args.batch or done == len(rows):
+            if str(device).startswith("mps"):
+                torch.mps.empty_cache()  # M3: graph cache MPS phình theo shape T khác nhau
             print(f"  {done}/{len(rows)} row · {total_frames} frame · {elapsed:.1f}s "
                   f"({elapsed / max(1, done) * 1000:.0f} ms/row)", flush=True)
 

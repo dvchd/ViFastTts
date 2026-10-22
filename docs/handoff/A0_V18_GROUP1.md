@@ -591,3 +591,48 @@ Công cụ: `tools/v1827_domain_probe.py` · `tools/w1_gate_probe.py` · `tools/
 **Expander (P2, 300 TF):** Δ RMS bin < −50 giảm mạnh theo **median** (12,4 → 3,2 / 1,1 dB) nhưng **energy** chỉ 17,5 → 15,5 / 13,5 vì trần −12 dB; **S1 xấu đi** (3,80 → 4,34 / 4,99 dB). Flatness không đổi (0,439) — đúng bản chất gain.
 
 **Trang nghe mù:** https://cio-rows-rocks-seq.trycloudflare.com/v1828_gate/ (9 câu × 5 bản: copy/P2/P2+exp/GTA4k/GTA4k+exp, −23 LUFS, nhãn xáo, đáp án `artifacts/listen_small_filt/v1828_gate/key.json`).
+
+## 21. v18.29 — giải mã trang nghe, L2/L3, ba nhánh fine-tune (F0/Fc/Fd)
+
+JSON: `v1828_l1_scores.json` · `v1829_l2_strat.json` · `v1829_l2_l3.json` · `v1829_l4_tf.json` · `v1829_l4_free.json` · `v1829_gate_map.json` · `v1829_fd_targets*.json`.
+
+### L1 — điểm người dùng (1 = không lỗi … 5 = nặng), 9 câu
+| bản | rè TB | hụt hơi TB | lạc TB | số câu rè = 1 |
+|---|---|---|---|---|
+| copy-synth | **1,00** | **1,00** | **1,00** | 9/9 |
+| P2 | 2,89 | 1,00 | 2,33 | 2/9 |
+| P2 + exp −45 | 3,00 | 1,00 | 1,89 | 2/9 |
+| GTA 4k | 4,56 | 1,00 | 1,33 | 0/9 |
+| GTA 4k + exp | 4,56 | 1,00 | 1,33 | 0/9 |
+- `hut = 1` **45/45 ô** ⇒ expander không gây hụt hơi theo tai.
+- ⚠️ **Cả 9 câu đều thuộc video `2b65WyiFC9k`** (trang chọn nhầm 1 video) — video này **CÓ gate** (11,5 % frame digital ở các row val; train rows của nó 0 %). v18.28 ghi "không gate" là **sai** (đo trên train rows).
+- s07 (4 bản `lac=3`): transcript có từ lạ `in xờ pếch`, `đê mô` ⇒ lỗi nội dung do OOV, không phải do nhánh.
+
+### L2 — N1 tách nhóm video (300 row **stratified** 12 prefix, 88.998 frame)
+- 9/12 prefix có gate; **bin < −50 chỉ tồn tại ở video có gate** (`n1_nogate` = 0 frame) ⇒ thước N1 là phép đo **chỉ trên video gate**.
+- P2: bin4 gate `d_med 14,4 dB` / `energy 17,3 dB` · flat 0,4425. Toàn bộ (gộp): 5,07 / 16,91.
+- Free-run 40 câu: WAV thật `<−50` = **29,0 %**, mean **−45,6 dB**; P2 = 2,33 %, −30,5 dB.
+
+### L3 — trần expander (P2, −40 dB, 1:3), 300 row head
+| trần | bin4 d_med | d_energy | S1 median |
+|---|---|---|---|
+| −12 dB | 1,11 | 13,47 | 4,99 |
+| −18 dB | −3,86 | 12,79 | 5,67 |
+| −24 dB | −8,83 | 12,49 | 6,24 |
+⇒ Hạ trần chỉ kéo **median** xuống (thậm chí âm = nhỏ hơn copy), **energy gần như không đổi** (17,5 → 12,5) và **S1 xấu dần**.
+
+### L4 — ba nhánh (2k bước, từ P2@2k, chỉ decoder+mel+postnet, KHÔNG GAN)
+| nhánh | flat_V | HNR | S1 median | bin4 gate d_med / energy |
+|---|---|---|---|---|
+| P2 (mốc) | **0,1878** | **−4,06** | **3,706** | **14,4 / 17,3** |
+| F0 (đối chứng) | 0,2190 | −4,51 | 4,009 | 15,5 / 16,0 |
+| Fc gate=1 | 0,2195 | −4,50 | 4,038 | 15,2 / 16,1 |
+| Fc gate=0 | 0,2200 | −4,50 | 3,998 | 15,6 / 16,0 |
+| Fd (đích gate đồng nhất) | 0,2258 | −4,63 | **10,597** | **−15,4 / 13,3** |
+- **F0 đã tệ hơn P2** (flat +17 %, HNR −0,45, S1 +8 %) ⇒ fine-tune 2k **không GAN** tự nó làm hỏng các thước này; mọi nhánh phải so với **F0**, không phải P2.
+- Fc ≈ F0 (chênh ≤0,4 dB ở bin4 khi gate 1 vs 0) ⇒ **cờ gate 1 bit chưa có tác dụng**.
+- Fd: đổi **54,5 % frame** (17.786 row), kéo nền xuống **thấp hơn copy** (d_med −15,4 dB) nhưng **S1 10,6 dB** ⇒ gate cả tiếng nhỏ ⇒ hụt hơi nặng.
+- **Cổng "flat_V và S1 không tệ hơn P2 quá 5 %": CẢ 3 NHÁNH TRƯỢT** (F0 +16,6 %/+8,2 % · Fc +16,9 %/+9,0 % · Fd +20,2 %/+186 %).
+- Free-run: P2 flat 0,1719 / HNR −3,89 · Fc 0,2045 / −4,36 · Fd 0,2052 / −4,48.
+
+**Trang nghe:** https://cio-rows-rocks-seq.trycloudflare.com/v1829_floor/ — 9 câu (5 không gate + 4 gate) × 5 bản (copy · P2 · P2+exp −40/1:3 trần 18 · Fc gate=1 · Fd), −23 LUFS, nhãn xáo, xuất JSON. Đáp án: `artifacts/listen_small_filt/v1829_floor/key.json`.

@@ -192,6 +192,7 @@ class SlotDataset(Dataset):
             "f0": f0,
             "vuv": vuv,
             "seg_durations": seg_durations,
+            **({"gate": torch.tensor(int(row["gate"]), dtype=torch.long)} if "gate" in row else {}),
             **targets,
         }
 
@@ -220,6 +221,8 @@ def collate_slot_batch(items: list[dict[str, Any]]) -> dict[str, Any]:
     frame_keys = ["mel", "f0", "vuv", "energy"]
     if all("mel_creak_c" in item for item in items):  # E4c: [T] theo frame (dataset mới)
         frame_keys.append("mel_creak_c")
+    if all("gate" in item for item in items):
+        output["gate"] = torch.stack([item["gate"] for item in items])
     for key in frame_keys:
         first = items[0][key]
         padded = torch.zeros((batch, frame_max, *first.shape[1:]), dtype=first.dtype)

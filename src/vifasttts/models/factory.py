@@ -38,7 +38,7 @@ def build_model(config: dict, vocab_sizes: list[int], arch: str | None = None) -
 
 
 #: Buffer mới thêm sau này được phép thiếu khi nạp checkpoint cũ (đều suy ra từ `f0_stats`).
-OPTIONAL_STATE_KEYS = frozenset({"tone_prior_z"})
+OPTIONAL_STATE_KEYS = frozenset({"tone_prior_z", "gate_bias.weight"})  # gate_bias: khởi tạo 0 (v18.29 Fc)
 
 
 def load_model_state(model: nn.Module, state: dict) -> None:

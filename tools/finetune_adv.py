@@ -45,7 +45,7 @@ from vifasttts.models.discriminators import (
 from vifasttts.models.factory import arch_of_checkpoint, build_model, load_model_state
 from vifasttts.models.v2_losses import DEFAULT_WEIGHTS, slot_losses
 
-TRAIN_PREFIXES = ("decoder.", "mel.", "postnet.")
+TRAIN_PREFIXES = ("decoder.", "mel.", "postnet.", "gate_bias.")
 
 
 def gap_mask(slot_durations: torch.Tensor) -> torch.Tensor:
@@ -114,7 +114,8 @@ def evaluate(model, batches, band_2_6k) -> dict:
     den_v = np.zeros(100)
     for batch in batches:
         out = model(batch["features"], durations=batch["durations"],
-                    seg_durations=batch["seg_durations"], gaps=batch["gaps"], lead=batch["lead"])
+                    seg_durations=batch["seg_durations"], gaps=batch["gaps"], lead=batch["lead"],
+                    gate=batch.get("gate"))
         pred, real = out["mel"], batch["mel"]
         frames = min(pred.size(1), real.size(1))
         pred, real = pred[:, :frames], real[:, :frames]
@@ -273,7 +274,7 @@ def main() -> None:
             step += 1
             moved = {k: (v.to(device) if torch.is_tensor(v) else v) for k, v in batch.items()}
             outputs = model(moved["features"], durations=moved["durations"], seg_durations=moved["seg_durations"],
-                            gaps=moved["gaps"], lead=moved["lead"])
+                            gaps=moved["gaps"], lead=moved["lead"], gate=moved.get("gate"))
             rec, parts = slot_losses(outputs, moved, weights, shape_mean=model.shape_mean,
                                      shape_std=model.shape_std, tone_prior=model.tone_prior_z)
             # E1/E2: neo mức to TUYỆT ĐỐI của từng frame (D chỉ nhìn crop 64 frame nên không thấy).
@@ -382,11 +383,12 @@ def main() -> None:
                 print("D loss < 0.05 liên tục 500 bước — dừng khẩn")
                 raise SystemExit(4)
             if args.save_every and step % args.save_every == 0:
-                torch.save({"model": model.state_dict(), "ema": ema, "step": step, "ema_decay": args.ema},
-                           out / f"ckpt_{step}.pt")
+                torch.save({"model": model.state_dict(), "ema": ema, "step": step, "ema_decay": args.ema,
+                            "arch": getattr(model, "arch", "v1_syl")}, out / f"ckpt_{step}.pt")
             if step >= args.max_steps:
                 break
-    torch.save({"model": model.state_dict(), "ema": ema, "step": step, "ema_decay": args.ema}, out / "last.pt")
+    torch.save({"model": model.state_dict(), "ema": ema, "step": step, "ema_decay": args.ema,
+                "arch": getattr(model, "arch", "v1_syl")}, out / "last.pt")
     print(f"xong {step} bước → {out}")
 
 

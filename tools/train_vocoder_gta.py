@@ -63,14 +63,22 @@ class GtaMelDataset:
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         """mel [T,100] (model) + wav [T*hop] (audio thật, cắt đúng `frame_range`)."""
-        from vifasttts.data.features import load_wav
+
 
         row = self.rows[index]
         mel = torch_load(self.cache / f"{row['id']}.pt")["mel"]
         frames = mel.size(0)
         start = int(row["frame_range"][0]) if row.get("frame_range") else 0
-        wav = load_wav(row["audio_path"], self.sample_rate)
-        chunk = wav[start * self.hop:(start + frames) * self.hop]
+        # M1 (v18.20): CHỈ đọc đúng đoạn row bằng seek — trước đây load_wav nạp CẢ clip cha
+        # (tới ~30 phút) cho mỗi mẫu ⇒ 6 worker × clip cha = chục GB ⇒ MPS OOM.
+        import soundfile as _sf
+        import torch as _torch
+
+        begin = start * self.hop
+        with _sf.SoundFile(row["audio_path"]) as _f:
+            _f.seek(begin)
+            data = _f.read(frames * self.hop, dtype="float32", always_2d=False)
+        chunk = _torch.from_numpy(data.copy()) if data.ndim == 1 else _torch.from_numpy(data[:, 0].copy())
         target = frames * self.hop
         if chunk.numel() < target:  # clip ngắn hơn mel (hiếm): pad 0 cho đủ — đúng như collate
             import torch
@@ -279,7 +287,10 @@ def main() -> None:
                     fake_outputs = discriminator(fake_crop)
                     g_adv = generator_adversarial_loss(fake_outputs, weights=sub_weights, mode=adv_mode)
                     g_fm = feature_matching_loss(real_outputs, fake_outputs, weights=sub_weights)
-                    mel_target = generator.denormalize(mel_real)
+                    # v18.23 SỬA: đích mel loss phải là mel của AUDIO THẬT, không phải mel GTA
+                    # (trước đây lấy `denormalize(mel_real)` = chính input ⇒ Vocos học tái tạo
+                    # mel P2, tức học luôn rè). Cùng một extractor với mel_fake.
+                    mel_target, _ = extract_mel_energy_batched(real_crop, mel_cfg_loss)
                     mel_fake, _ = extract_mel_energy_batched(fake_crop, mel_cfg_loss)
                     frames = min(mel_fake.size(1), mel_target.size(1))
                     g_mel = (mel_fake[:, :frames] - mel_target[:, :frames]).abs().mean()
@@ -290,6 +301,11 @@ def main() -> None:
                     window_min = torch.minimum(window_min, g_loss.detach())
                 check_passed = False
                 if step % 10 == 0:
+                    if torch.backends.mps.is_available() and \
+                            torch.mps.driver_allocated_memory() > 30 * 2**30:
+                        save_generator(step, {"stop": "mps_mem"})
+                        print(f"step {step}: DỪNG AN TOÀN (driver > 30G)")
+                        break
                     if not bool(finite_ok.item()):
                         raise RuntimeError(f"NaN/Inf trong 10 bước gần nhất (bước {step})")
                     finite_ok = torch.ones((), dtype=torch.bool, device=device)
@@ -307,7 +323,9 @@ def main() -> None:
                            if device.type == "mps" else "")
                     g_bits = (f"g={g_loss.detach().item():.4f} adv={g_adv.detach().item():.4f} "
                               f"mel={g_mel.detach().item():.4f} " if g_loss is not None else "d-warmup ")
-                    print(f"step {step}: {g_bits}d={d_loss.detach().item():.4f} "
+                    _drv = (torch.mps.driver_allocated_memory() / 2**30
+                            if torch.backends.mps.is_available() else 0.0)
+                    print(f"step {step}: mps={_drv:.1f}G {g_bits}d={d_loss.detach().item():.4f} "
                           f"lr={lr_now:.2e} ({speed:.3f}s/bước){mem}", flush=True)
                 if device.type == "mps" and step % 500 == 0:
                     torch.mps.empty_cache()

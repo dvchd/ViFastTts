@@ -79,6 +79,11 @@ class ViFastTtsModelV2(nn.Module):
         self.mel = nn.Linear(h, config["mel"]["n_mels"])
         self.tone_classifier = nn.Linear(h, 6)
         self.use_postnet = bool(m.get("use_postnet", False))
+        # v18.29 Fc: cờ gate theo video (1 bit). Khởi tạo 0 ⇒ lúc đầu model y hệt checkpoint cũ.
+        self.gate_conditioning = bool(m.get("gate_conditioning", False))
+        if self.gate_conditioning:
+            self.gate_bias = nn.Embedding(2, h)
+            nn.init.zeros_(self.gate_bias.weight)
         if self.use_postnet:
             mel_dim = int(config["mel"]["n_mels"])
             self.postnet = nn.Sequential(
@@ -197,6 +202,7 @@ class ViFastTtsModelV2(nn.Module):
         gate_threshold: float | torch.Tensor = 0.5,
         variance_override: torch.Tensor | None = None,
         f0_scale: float = 1.0,
+        gate: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         """features [B,N,7] → dict đầu ra (docstring module: quy ước tham số + output)."""
         batch, syllables = features.shape[0], features.shape[1]
@@ -304,10 +310,11 @@ class ViFastTtsModelV2(nn.Module):
         variance = (variance_override if variance_override is not None
                     else torch.cat(variance_parts, dim=-1))
 
-        decoded = self.decoder(
-            expanded + self.variance_proj(variance) + self.position_proj(positions.unsqueeze(-1)),
-            frame_mask,
-        )
+        conditioning = expanded + self.variance_proj(variance) + self.position_proj(positions.unsqueeze(-1))
+        if gate is not None and self.gate_conditioning:
+            # v18.29 Fc: dịch đều hidden của decoder theo cờ gate (chỉ 2×h tham số).
+            conditioning = conditioning + self.gate_bias(gate.view(-1)).unsqueeze(1)
+        decoded = self.decoder(conditioning, frame_mask)
         mel_pre = self.mel(decoded)
         mel_refined = mel_pre
         if self.use_postnet:

@@ -39,9 +39,15 @@ BIN_EDGES = (-20.0, -30.0, -40.0, -50.0)
 VARIANTS = {
     "copy": {"copy": True},
     "p2": {"ckpt": P2, "cfg": CFG32},
-    "p2_exp45": {"ckpt": P2, "cfg": CFG32, "exp": (-45.0, 2.0)},
-    "p2_exp40": {"ckpt": P2, "cfg": CFG32, "exp": (-40.0, 3.0)},
+    "p2_exp45": {"ckpt": P2, "cfg": CFG32, "exp": (-45.0, 2.0, -12.0)},
+    "p2_exp40": {"ckpt": P2, "cfg": CFG32, "exp": (-40.0, 3.0, -12.0)},
+    "p2_exp40_m18": {"ckpt": P2, "cfg": CFG32, "exp": (-40.0, 3.0, -18.0)},
+    "p2_exp40_m24": {"ckpt": P2, "cfg": CFG32, "exp": (-40.0, 3.0, -24.0)},
     "v35": {"ckpt": V35, "cfg": CFG35},
+    "f0": {"ckpt": "runs/v1829_f0/ckpt_2000.pt", "cfg": CFG32},
+    "fd": {"ckpt": "runs/v1829_fd/ckpt_2000.pt", "cfg": CFG32},
+    "fc": {"ckpt": "runs/v1829_fc/ckpt_2000.pt", "cfg": "configs/small_codelung_v32_gate.yaml", "gate": 1},
+    "fc_g0": {"ckpt": "runs/v1829_fc/ckpt_2000.pt", "cfg": "configs/small_codelung_v32_gate.yaml", "gate": 0},
     **{f"gta{k}": {"ckpt": P2, "cfg": CFG32, "voc": f"{GTA_DIR}/gta_{k}k.pt"} for k in (1, 2, 3, 4, 5)},
 }
 #: biến thể GTA + expander (dựng sau dict để không lặp)
@@ -174,6 +180,10 @@ def main() -> None:
     parser.add_argument("--val", default="data/codelung/v32/val_clean_v2_dur_seg_slot4.jsonl")
     parser.add_argument("--out", required=True)
     parser.add_argument("--device", default="mps")
+    parser.add_argument("--stratify", action="store_true",
+                        help="lấy mẫu round-robin theo prefix video (tránh dồn 1 video)")
+    parser.add_argument("--gate-split", action="store_true",
+                        help="tách N1 theo nhóm video có gate (digital > 1 %%) / không gate")
     args = parser.parse_args()
 
     from vifasttts.data.cache import FeatureCache
@@ -183,7 +193,21 @@ def main() -> None:
     from vifasttts.runtime.postprocess import sharpen_mel
 
     rows = [json.loads(x) for x in Path(args.val).read_text(encoding="utf-8").splitlines() if x.strip()]
-    rows = rows[: args.segments]
+    if args.stratify:
+        from collections import OrderedDict
+
+        groups: OrderedDict[str, list[dict]] = OrderedDict()
+        for row in rows:
+            groups.setdefault(str(row["id"]).split("_")[0], []).append(row)
+        picked, cursor = [], {key: 0 for key in groups}
+        while len(picked) < args.segments and any(cursor[k] < len(groups[k]) for k in groups):
+            for key, items in groups.items():
+                if cursor[key] < len(items) and len(picked) < args.segments:
+                    picked.append(items[cursor[key]])
+                    cursor[key] += 1
+        rows = picked
+    else:
+        rows = rows[: args.segments]
     tags = [tag.strip() for tag in args.variants.split(",") if tag.strip()]
     result: dict = {"meta": {"mode": args.mode, "segments": len(rows), "alpha": 0, "variants": tags}, "table": {}}
 
@@ -234,7 +258,7 @@ def main() -> None:
             engines[key] = Synthesizer(cfg, ckpt, vocoder_checkpoint=voc, device=args.device)
         return engines[key]
 
-    def render(engine: Synthesizer, row: dict) -> tuple[np.ndarray, np.ndarray | None]:
+    def render(engine: Synthesizer, row: dict, gate: int | None = None) -> tuple[np.ndarray, np.ndarray | None]:
         text = " ".join(str(s.get("raw") or s.get("normalized")) for s in row["syllables"])
         if args.mode == "tf":
             seg_index = seg_index_of(row)
@@ -242,14 +266,39 @@ def main() -> None:
             feats = torch.tensor([[engine.vocabs.encode(it) for it in items]], dtype=torch.long, device=engine.device)
             gaps = list(row["gaps"]) + [0] if len(row["gaps"]) == len(row["durations"]) - 1 else list(row["gaps"])
             with torch.no_grad():
+                extra = {}
+                if gate is not None:
+                    extra["gate"] = torch.tensor([int(gate)], dtype=torch.long, device=engine.device)
                 out = engine.model(feats, speed=torch.tensor([1.0], device=engine.device),
                                    durations=torch.tensor([row["durations"]], dtype=torch.long, device=engine.device),
                                    gaps=torch.tensor([gaps], dtype=torch.long, device=engine.device),
-                                   lead=torch.tensor([0], dtype=torch.long, device=engine.device))
+                                   lead=torch.tensor([0], dtype=torch.long, device=engine.device), **extra)
                 audio = engine.vocoder(sharpen_mel(out["mel"][0], 0.0).unsqueeze(0))[0]
             return np.asarray(audio.float().cpu()).reshape(-1), seg_index
         pieces = [audio for audio, _ in engine.iter_synthesize_sentence(text)]
         return (np.concatenate(pieces) if pieces else np.zeros(0, dtype=np.float32)), None
+
+    gate_prefix: dict[str, bool] = {}
+    if args.gate_split and args.mode == "tf":
+        from collections import defaultdict
+
+        stats: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+        for row in rows:
+            start, end = row["frame_range"]
+            audio, _ = sf.read(row["audio_path"], dtype="float32", start=start * HOP,
+                               frames=(end - start) * HOP)
+            audio = np.asarray(audio, dtype=np.float32)
+            n = len(audio) // HOP
+            if n == 0:
+                continue
+            blocks = audio[: n * HOP].reshape(n, HOP).astype(np.float64)
+            db = 20 * np.log10(np.sqrt(np.maximum((blocks ** 2).mean(axis=1), 1e-24)))
+            prefix = str(row["id"]).split("_")[0]
+            stats[prefix][0] += int((db < -90.0).sum())
+            stats[prefix][1] += n
+        gate_prefix = {key: (value[0] / max(1, value[1]) > 0.01) for key, value in stats.items()}
+        result["gate_prefix"] = {key: round(100.0 * value[0] / max(1, value[1]), 2)
+                                 for key, value in stats.items()}
 
     # ---- mốc copy-synth (TF) hoặc WAV thật (free) ----
     cfg35 = yaml.safe_load(Path(CFG35).read_text(encoding="utf-8"))
@@ -276,6 +325,12 @@ def main() -> None:
                             "hnr": np.concatenate([r["hnr"] for r in refs]),
                             "count": int(sum(r["count"] for r in refs))})
     copy_summary["label"] = "copy-synth" if args.mode == "tf" else "WAV thật"
+    ref_db_all = np.concatenate([r["db"] for r in refs]) if refs else np.zeros(0)
+    copy_summary["levels"] = {
+        "frames": int(ref_db_all.size),
+        "below_minus50_pct": round(float(100.0 * np.mean(ref_db_all < -50.0)), 3) if ref_db_all.size else None,
+        "mean_db": round(float(np.mean(ref_db_all)), 2) if ref_db_all.size else None,
+    }
     result["table"]["copy"] = copy_summary
 
     for tag in tags:
@@ -285,9 +340,10 @@ def main() -> None:
         engine = engine_for(spec["cfg"], spec["ckpt"], spec.get("voc"))
         per_row = []
         for row in rows:
-            wave, seg_index = render(engine, row)
+            wave, seg_index = render(engine, row, gate=spec.get("gate"))
             if spec.get("exp"):
-                wave = expander(wave, spec["exp"][0], spec["exp"][1])
+                exp = spec["exp"]
+                wave = expander(wave, exp[0], exp[1], max_db=(exp[2] if len(exp) > 2 else -12.0))
             metrics = frame_analysis(wave)
             metrics["seg_index"] = seg_index
             metrics["syl"] = syllable_levels(wave, seg_index) if seg_index is not None else None
@@ -301,29 +357,44 @@ def main() -> None:
                          "hnr": merged_hnr, "count": int(merged_db.size)})
         # N1
         if args.mode == "tf":
-            bins = [{"frames": 0, "d_sum": 0.0, "p_model": 0.0, "p_ref": 0.0, "flat": [], "diffs": []} for _ in range(5)]
-            for metrics, ref in zip(per_row, refs):
+            def _empty():
+                return [{"frames": 0, "d_sum": 0.0, "p_model": 0.0, "p_ref": 0.0, "flat": [], "diffs": []}
+                        for _ in range(5)]
+
+            def _add(bins, index, metrics, ref, mask, n):
+                bins[index]["frames"] += int(mask.sum())
+                bins[index]["d_sum"] += float(np.sum(metrics["db"][:n][mask] - ref["db"][:n][mask]))
+                bins[index]["p_model"] += float(np.sum(10.0 ** (metrics["db"][:n][mask] / 10.0)))
+                bins[index]["p_ref"] += float(np.sum(10.0 ** (ref["db"][:n][mask] / 10.0)))
+                bins[index]["flat"].append(metrics["flat"][:n][mask])
+                bins[index]["diffs"].append(metrics["db"][:n][mask] - ref["db"][:n][mask])
+
+            def _report(bins):
+                return {
+                    str(index): {
+                        "frames": payload["frames"],
+                        "d_rms": round(payload["d_sum"] / payload["frames"], 2) if payload["frames"] else None,
+                        "d_rms_energy": round(10.0 * float(np.log10(max(payload["p_model"], 1e-30) / max(payload["p_ref"], 1e-30))), 2) if payload["frames"] else None,
+                        "d_rms_median": round(float(np.median(np.concatenate(payload["diffs"]))), 2) if payload["diffs"] else None,
+                        "flat": round(float(np.median(np.concatenate(payload["flat"]))), 4) if payload["flat"] else None,
+                    }
+                    for index, payload in enumerate(bins)
+                }
+
+            bins = _empty()
+            bins_gate = _empty() if (args.gate_split and gate_prefix) else None
+            for metrics, ref, row in zip(per_row, refs, rows):
                 n = min(metrics["db"].size, ref["db"].size)
+                is_gate = bool(gate_prefix.get(str(row["id"]).split("_")[0], False))
                 for index, mask in enumerate(bin_members(ref["db"][:n])):
                     if not mask.any():
                         continue
-                    bins[index]["frames"] += int(mask.sum())
-                    bins[index]["d_sum"] += float(np.sum(metrics["db"][:n][mask] - ref["db"][:n][mask]))
-                    # công thức năng lượng (so được với mốc +12,6 dB cũ)
-                    bins[index]["p_model"] += float(np.sum(10.0 ** (metrics["db"][:n][mask] / 10.0)))
-                    bins[index]["p_ref"] += float(np.sum(10.0 ** (ref["db"][:n][mask] / 10.0)))
-                    bins[index]["flat"].append(metrics["flat"][:n][mask])
-                    bins[index]["diffs"].append(metrics["db"][:n][mask] - ref["db"][:n][mask])
-            entry["n1"] = {
-                str(index): {
-                    "frames": payload["frames"],
-                    "d_rms": round(payload["d_sum"] / payload["frames"], 2) if payload["frames"] else None,
-                    "d_rms_energy": round(10.0 * float(np.log10(max(payload["p_model"], 1e-30) / max(payload["p_ref"], 1e-30))), 2) if payload["frames"] else None,
-                    "d_rms_median": round(float(np.median(np.concatenate(payload["diffs"]))), 2) if payload["diffs"] else None,
-                    "flat": round(float(np.median(np.concatenate(payload["flat"]))), 4) if payload["flat"] else None,
-                }
-                for index, payload in enumerate(bins)
-            }
+                    _add(bins, index, metrics, ref, mask, n)
+                    if bins_gate is not None and is_gate:
+                        _add(bins_gate, index, metrics, ref, mask, n)
+            entry["n1"] = _report(bins)
+            if bins_gate is not None:
+                entry["n1_gate"] = _report(bins_gate)
             s1 = []
             for metrics, ref in zip(per_row, refs):
                 if metrics["syl"] is None or ref["syl"] is None:
