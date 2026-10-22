@@ -5,7 +5,8 @@ from __future__ import annotations
 from vifasttts.frontend.custom_reading import apply_custom_reading
 from vifasttts.frontend.pipeline import parse_text
 
-TABLE = {"vba": "vi be a", "vb": "vi be", "vps": "vi pi ét", "ps": "pi es", "ch": "xê hát"}
+TABLE = {"vba": "vi be a", "vb": "vi be", "vps": "vi pi ét", "ps": "pi ét", "vs": "vi ét",
+            "ch": "xê hát"}
 
 
 def test_khop_cum_dai_truoc():
@@ -15,8 +16,7 @@ def test_khop_cum_dai_truoc():
 
 def test_khong_sinh_them_am_tiet():
     out = apply_custom_reading("PS và VPS khác nhau", TABLE)
-    assert out == "pi es và vi pi ét khác nhau"
-    assert out.count("es") == 1
+    assert out == "pi ét và vi pi ét khác nhau"
 
 
 def test_ranh_gioi_tu():
@@ -30,5 +30,14 @@ def test_parse_khong_lap_tu():
     => ghi nhận hạn chế: muốn "es" đọc đúng 1 âm tiết phải sửa normalizer (chưa làm).
     """
     raw = [s.raw for s in parse_text("PS và VPS khác nhau", resolve_oov=True)]
-    assert raw[0] == "pi"
-    assert raw.count("vi") == 1 and raw.count("pi") == 2
+    assert raw == ["pi", "ét", "và", "vi", "pi", "ét", "khác", "nhau"]
+
+
+def test_validation_bat_gia_tri_sai():
+    """Giá trị parse ra nhiều âm tiết hơn số từ phải báo lỗi, không lặng lẽ tách."""
+    import pytest
+
+    from vifasttts.frontend.custom_reading import _validate
+
+    with pytest.raises(ValueError):
+        _validate({"ps": "pi es"})

@@ -19,13 +19,39 @@ from pathlib import Path
 DEFAULT_PATH = Path("data/codelung/custom_reading.json")
 
 
+_VALIDATING = False
+
+
 @lru_cache(maxsize=4)
 def _load(path: str, mtime: float) -> dict[str, str]:
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
-    return {str(k).lower(): str(v) for k, v in data.items() if str(k).strip()}
+    table = {str(k).lower(): str(v) for k, v in data.items() if str(k).strip()}
+    _validate(table)
+    return table
+
+
+def _validate(table: dict[str, str]) -> None:
+    """Mọi giá trị phải parse thành ĐÚNG số âm tiết Việt bằng số từ (không lặng lẽ tách)."""
+    global _VALIDATING
+    if _VALIDATING:
+        return
+    _VALIDATING = True
+    try:
+        from vifasttts.frontend.pipeline import parse_text
+
+        bad = []
+        for key, value in table.items():
+            words = value.split()
+            parsed = parse_text(value, resolve_oov=True)
+            if len(parsed) != len(words):
+                bad.append(f"{key}={value!r}: {len(words)} từ → {len(parsed)} âm tiết")
+        if bad:
+            raise ValueError("custom_reading không hợp lệ: " + "; ".join(bad))
+    finally:
+        _VALIDATING = False
 
 
 def custom_map(path: str | Path | None = None) -> dict[str, str]:
