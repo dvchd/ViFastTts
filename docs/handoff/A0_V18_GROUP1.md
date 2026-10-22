@@ -50,3 +50,32 @@ v3.2 −23,02 · P2 −23,02 · v3.5 −23,00 · GAN2k −23,00 dB LUFS ⇒ **đ
 ## Chưa làm (tiếp theo)
 E1 (khớp năng lượng frame), E2 (ghép dải 1,5/2,5 kHz), E1+E2, E3 (quét 1k/2k/3k — **250/500/1,5k không tồn tại**:
 `finetune_adv` lưu mỗi 1000 bước), trang nghe mù mới.
+
+## 5. M1/M2/M3 (v18.1) — tách flatness theo loại frame, 40 segment, free-run
+
+Công cụ: `tools/v181_frame_probe.py` · JSON `artifacts/bench/v181_frame_probe.json`.
+Phân loại frame **dùng chung một luật cho cả thật và model**: lặng = năng lượng mel < trung vị câu − 30 dB;
+hữu thanh = độ tuần hoàn autocorrelation ≥ 0,45 (lag 70–400 Hz); còn lại = vô thanh.
+HNR 1–5 kHz = năng lượng trong ±12 % quanh từng hài / phần còn lại (dB).
+
+| | flat hữu thanh | Δ so GT | flat vô thanh | Δ so GT | HNR (dB) | Δ so GT |
+|---|---|---|---|---|---|---|
+| **GT (WAV thật)** | **0,1224** | — | **0,2688** | — | **−1,93** | — |
+| v3.2 | 0,1984 | **+62,1 %** | 0,3075 | +14,4 % | −4,38 | −2,46 |
+| P2 @2k | 0,1668 | +36,3 % | 0,2545 | −5,3 % | −3,74 | −1,82 |
+| v3.5 | 0,2034 | **+66,2 %** | 0,3146 | +17,0 % | −4,48 | −2,56 |
+| GAN 1k | 0,1827 | +49,3 % | 0,3030 | +12,7 % | −4,13 | −2,20 |
+| GAN 2k | 0,1754 | +43,3 % | 0,2529 | −5,9 % | −3,75 | −1,83 |
+| GAN 3k | 0,1566 | +27,9 % | 0,2408 | −10,4 % | −3,71 | −1,78 |
+
+**XÁC NHẬN giả thuyết của Agent 0:** frame hữu thanh của mọi model **rè hơn thật 28–66 %**
+(nhòe hài âm), còn frame vô thanh của P2/GAN **thấp hơn thật 5–10 %** (mất ma sát). Hai chiều
+triệt tiêu khi lấy trung bình ⇒ flatness gộp không đo được "rè nền". V3.5 flatness gộp 0,2465 < thật
+0,274 nhưng hữu thanh vẫn +66 % ⇒ **khớp đúng hiện tượng người dùng nghe**.
+
+**M3 (nền lặng): KHÔNG DÙNG ĐƯỢC** — GT (segment đã cắt) có RMS lặng −120 dB (im kỹ thuật số),
+còn audio tổng hợp **không có frame nào** dưới (trung vị − 30 dB) ⇒ trả NaN. Cần định nghĩa tuyệt đối
+(vd −50 dBFS) nếu muốn đo nền; ghi nhận, chưa kết luận.
+
+**Ràng buộc v18.1 (flat vô thanh không thấp hơn GT quá 15 %):** P2 −5,3 % ✓ · GAN2k −5,9 % ✓ ·
+GAN3k −10,4 % ✓ · GAN1k +12,7 % (cao hơn GT, không vi phạm).
