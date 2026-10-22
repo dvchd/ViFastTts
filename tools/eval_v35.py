@@ -70,13 +70,18 @@ def main() -> None:
         path, _, cfg = rest.partition("|")
         candidates.append((tag.strip(), path.strip(), (cfg or args.config).strip()))
 
-    rows = [{"id": "d03", "text": D03}, {"id": "d06", "text": D06}, {"id": "d04", "text": D04}]
+    # id phải DUY NHẤT: drift_texts cũng có d03/d04/d06 ⇒ trùng id sẽ ghi đè WAV + đáp án
+    rows = [{"id": "local_d03", "text": D03}, {"id": "local_d06", "text": D06},
+            {"id": "local_d04", "text": D04}]
     rows += json.loads(Path(args.texts).read_text(encoding="utf-8"))[:8]
     rows.append({"id": "long", "text": LONG})
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     # checkpoint cũ train bằng mel stats CŨ ⇒ mỗi ứng viên có thể cần config riêng (`path|config`)
+    seen = [row["id"] for row in rows]
+    if len(seen) != len(set(seen)):
+        raise ValueError(f"id câu trùng nhau: {sorted({i for i in seen if seen.count(i) > 1})}")
     engines = {tag: Synthesizer(yaml.safe_load(Path(cfg).read_text(encoding="utf-8")), path,
                                 device=args.device) for tag, path, cfg in candidates}
     rng = random.Random(2026)
