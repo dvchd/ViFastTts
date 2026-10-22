@@ -207,3 +207,39 @@ Nguyên nhân không nạp được: `ckpt_4000/6000` **thiếu metadata `arch`*
 | P2 6k | 0,1899 | +42,0 % | −3,72 | −1,80 | 0,462 | 4,02 |
 
 ⇒ **P2 @2k vẫn tốt nhất trên cả 3 thước** (flat hữu thanh, HNR, sai số độ to). Drift p90 của 4k/6k: chưa đo.
+
+## 9. v18.5/v18.6 — trang nghe mù + R1 + D1.1/D1.4
+
+### Trang nghe mù (v18.5) — `artifacts/listen_small_filt/v185_blind/`
+9 câu val (3 câu nhiều s/kh/ph/ch nhất), 3 bản: P2 @2k · GAN2k · copy-synth; −23 LUFS, nhãn A/B/C
+xáo riêng từng câu, id `v185_01..09`, đáp án ở `artifacts/bench/v185_blind.json`.
+
+### R1 — TF (ép durations/gaps MFA, phân loại frame bằng nhãn GT), 40 segment
+
+| | flat_V | Δ copy-synth | HNR | Δ copy |
+|---|---|---|---|---|
+| copy-synth | 0,1562 | — | −3,20 | — |
+| P2 @2k | 0,2328 | +49,0 % | −4,13 | −0,93 |
+| P2 4k | 0,2443 | +56,3 % | −3,98 | −0,79 |
+| P2 6k | 0,2303 | +47,4 % | −4,04 | −0,84 |
+| GAN2k | 0,2253 | +44,2 % | −4,10 | −0,91 |
+
+Ghi chú: trong TF, P2 6k **nhỉnh hơn** 2k về flat_V (47,4 % vs 49,0 %) nhưng kém hơn ở S1 (MAE 4,02 vs 3,56).
+Chênh lệch nằm trong CI chồng nhau ⇒ **không kết luận 6k hơn**.
+
+### D1.1 — quy tắc đọc chữ viết tắt (ĐÃ XÁC NHẬN bằng code)
+
+- `frontend/oov.py:20-27` — `LETTER_READINGS`: **tên chữ cái TIẾNG VIỆT**: b→"bê", c→"xê", d→"dê",
+  v→"vê", p→"pê", s→"ét", x→"ích", j→"giây", w→"vê kép", z→"dét", f→"ép", y→"i".
+- `frontend/stem.py:27-33` — `VARIABLES` cùng kiểu (b→"bê", c→"xê", r→"e rờ", l→"e lờ").
+- `frontend/english_fallback.py:70-90` — bảng viết tắt: `"vb": "vê bê"`, `"vpn": "vê pê en"`,
+  `"sdk": "ét đê ca"`, `"usb": "diu ét bi"`, `"url": "diu a lờ"`…
+- ⇒ **Xác nhận lệch hệ thống**: normalizer đọc chữ cái theo **tên tiếng Việt**, người đọc dùng
+  **kiểu tiếng Anh pha Việt** ("vi be", "bi", "xi"). Đúng như đính chính v18.6a.
+
+### D1.4 — cần ASR mới thống kê được
+Chưa chạy: `faster-whisper 1.2.1` **đã cài**, nhưng **chưa có model Whisper** trong cache HF
+(chỉ có wav2vec2/diarization). Tải large-v3 (~3 GB) + chạy 51 h audio là việc nhiều giờ.
+**Đề xuất**: chạy large-v3 trên **mẫu phân tầng 200–300 row (~30–45 phút audio)** trước, đo tốc độ
+thực tế rồi mới quyết định chạy toàn bộ; đồng thời lọc sẵn các row có token viết tắt/tiếng Anh để
+D1.4 chỉ cần ASR đúng tập đó.
