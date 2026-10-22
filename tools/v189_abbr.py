@@ -108,10 +108,10 @@ def main() -> None:
                         f"<audio controls src='{pick['file']}'></audio><div class='choices'>")
             for letter in group["cluster"]:
                 options = "".join(
-                    f"<label><input type='radio' name='{cid}_{letter}' value='{opt}'> {opt}</label>"
+                    f"<label><input type='radio' name='{cid}::{letter}' value='{opt}'> {opt}</label>"
                     for opt in CAND.get(letter, [letter]))
                 page.append(f"<div><b>{letter.upper()}</b>: {options}"
-                            f"<label>khác <input type='text' name='{cid}_{letter}_other'></label></div>")
+                            f"<label>khác <input type='text' name='{cid}::{letter}::other'></label></div>")
             page.append("</div></div>")
     page.append("""<button id='save'>Tải JSON</button><pre id='log'></pre>
 <script>
@@ -122,7 +122,8 @@ document.querySelectorAll('.clip').forEach(clip => {
   clip.querySelectorAll('input').forEach(inp => {
     inp.addEventListener('change', () => {
       store[id] = store[id] || {};
-      const [cid, letter] = inp.name.split('_');
+      const parts = inp.name.split('::');
+      const letter = parts[1];
       if (inp.type === 'radio') store[id][letter] = inp.value;
       else store[id][letter + '_other'] = inp.value;
       localStorage.setItem(KEY, JSON.stringify(store));
