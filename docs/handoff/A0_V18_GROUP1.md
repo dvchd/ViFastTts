@@ -486,3 +486,26 @@ Copy-synth theo định nghĩa này = **0,0 %** (đúng, vì dùng chính WAV th
 - **Thời gian:** 0,653 s/bước (b8·crop64·D ch16 đã đo) ⇒ 5k bước ≈ **55 phút**, 10k ≈ **1,8 giờ** trên Mac mini.
 - **Rủi ro:** chỉ hợp với P2 (mel z-space của v3.2); đổi acoustic model ⇒ **phải GTA lại**; nếu Vocos quen
   với nhiễu của P2, nó có thể **học luôn rè** thay vì khử ⇒ phải so với copy-synth chứ không chỉ nghe.
+
+## 18. G0 (thử runtime) + N1 đầy đủ — KẾT QUẢ ÂM TÍNH
+
+JSON: `artifacts/bench/g0.json` (300 segment, TF).
+
+**N1 (cùng một định nghĩa bin cho mọi bản), bin < −50 dBFS:**
+| | frame | flat_V |
+|---|---|---|
+| copy-synth | 25.398 | **0,4828** |
+| P2 | 26.798 | 0,4698 |
+| GAN | 25.712 | 0,4606 |
+
+⇒ **Sửa lại:** ở bin < −50, flatness của model **KHÔNG cao hơn copy** (0,47 vs 0,48). Khác biệt thật là
+**mức to**: P2 **+12,6 dB** so copy (đã đo ở v17). Vậy "rè nền" = **nền quá to**, không phải nền quá "phẳng".
+
+**G0 (thay frame nhỏ bằng profile nền trung bình):**
+- Ngưỡng q5 = **−70 dB** ⇒ không thay frame nào (kết quả y hệt bản gốc).
+- Ngưỡng q15 = **−25,9 dB** ⇒ thay quá nhiều: flat_V P2 **0,2437 → 0,2518** (tệ hơn), và bin < −50
+  thành **flat = 1,0** (hằng số ⇒ nhiễu phẳng tuyệt đối).
+⇒ **G0 bản này THẤT BẠI**. Hướng đúng phải là **giảm mức** frame nhỏ (~−12 dB) chứ không thay bằng profile.
+
+**Ghi chú:** ngưỡng năng lượng của mel z-space không tương ứng trực tiếp dBFS của waveform (q5 = −70 dB
+trong khi waveform chỉ xuống −80), nên cần hiệu chỉnh ngưỡng theo phân bố RMS thật trước khi thử lại.
