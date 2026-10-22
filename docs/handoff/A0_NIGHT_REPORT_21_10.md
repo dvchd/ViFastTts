@@ -59,3 +59,33 @@ Trạng thái lúc ghi: **A1 xong · A2 đang chạy (cache) · A3–A7 chờ**.
 - **Kiểm A2:** 20 row ngẫu nhiên, mel z trên frame tiếng: **mean −0,121 · std 1,011** ✓ (mean lệch nhẹ
   do row ngắn ít frame hữu thanh; toàn cục tính trên 556k frame là 0).
 
+
+## 7. A6/A7 — kết quả và quyết định (22/10)
+
+**Tai người dùng (trang mù `/a7_blind/`, 9 câu, 4 ứng viên):** P2 @2k thắng 4–5 câu, GAN2k thắng 1–2
++ 2 hòa, v3.5 và v3.2 không thắng câu nào. Nhận xét: GAN "trong hơn" nhưng **một số từ to hơn/lạc quẻ**;
+bản thường chỉ bị **rè đều**. Lỗi trang: id `d03/d04/d06` của câu tự soạn trùng id drift ⇒ WAV + đáp án
+bị ghi đè (đã sửa, commit `8b681e5`).
+
+**Số đo đối chứng (40 segment val, TF, EMA, α=0):**
+
+| ứng viên | flatness 2–6k (12 câu) | **RMS spike** | RMS MAE | drift p90 (40 câu) |
+|---|---|---|---|---|
+| v3.2 | 0,3071 | **0,064** | — | 3,39 |
+| P2 @2k (production) | 0,2810 | **0,114** | 2,63 dB | 4,95 |
+| v3.5 (non-GAN) | 0,2720 | **0,118** | 2,63 dB | **3,72** |
+| v3.5 + GAN 1k | — | 0,127 | 2,64 dB | — |
+| v3.5 + GAN 2k | **0,2353** | 0,157 | 2,97 dB | 5,23 |
+| v3.5 + GAN 3k | — | 0,165 | 3,19 dB | — |
+
+**Kết luận:** GAN là **đánh đổi**, không phải cải tiến: flatness −23 % nhưng spike +33 % và drift +40 %,
+và cả hai xấu dần theo bước (1k→2k→3k). Khớp đúng tai người dùng ("từ to hơn/lạc quẻ").
+⇒ **Giữ P2 @2k làm production**; **loại GAN** khỏi đường sản phẩm; v3.5 giữ làm nền (drift tốt nhất,
+đã sửa nhãn "rồi") nhưng chưa thay production.
+
+**Ba việc tiếp theo (từ tai người dùng):**
+1. Coda **-CH** ("ách") rè ở mọi bản — đếm tần suất -CH trong train + đo flatness riêng âm tiết -CH;
+   nếu hiếm → oversample.
+2. **Ngắt hơi vội trước dấu phẩy** — đo độ dài âm tiết cuối mệnh đề (model vs thật), cân nhắc chèn
+   2–4 frame "nhả hơi" trước gap (sửa runtime, không cần train lại).
+3. **Rè đều ở đoạn >40 s** — đo flatness theo vị trí trong đoạn dài (nghi cắt nhóm 4096 frame).
