@@ -300,3 +300,18 @@ gần cách đó. Tối đa 40 lần/chữ.
 ("ve pe", "xi es", "es lờ", "đi en es", "ve be"…) — trùng hướng với D1.4 nhưng **chưa đủ tin cậy**.
 
 Lưu: `artifacts/bench/d14b_clusters.json` (local).
+
+## 12. v18.9 — trang nghe cụm + tốc độ PhoWhisper
+
+### Trang `/v189_abbr/` (đã live, HTTP 200)
+- **14 cụm · 42 đoạn** (3 đoạn/cụm từ 3 row khác nhau), cắt audio THẬT theo MFA **±0,5 s**.
+- Có `vb` (VBA) và các cụm chứa **r, đ, h, s, x**; kèm câu transcript gốc làm ngữ cảnh.
+- Mỗi đoạn: nút chọn **từng chữ** theo bộ ứng viên v18.8 + ô "khác"; **không hiện gợi ý model**.
+- Lưu bằng `localStorage` + nút **Tải JSON** (`v189_abbr_answers.json`) — gửi lại cho Agent 2.
+- Tool: `tools/v189_abbr.py`; meta + danh sách cụm: `artifacts/bench/v189_abbr_meta.json`.
+
+### PhoWhisper-large trên MPS — tốc độ thật
+- Đã tải `vinai/PhoWhisper-large` (transformers).
+- 10 row: audio 56,2 s · xử lý 21,7 s ⇒ **RTF 2,59×** (audio/giây xử lý).
+- Ước: **51 h audio ≈ 19,7 giờ** (không chạy toàn bộ); mẫu D1.2 (250 row ≈ 23 phút audio) ≈ **9–10 phút**.
+- Ví dụ lệch sớm: GT "ai phôn mười hai pờ rồ đi" vs ASR "iphone mười hai pro đi" ⇒ đúng loại lỗi transcript/normalizer cần tìm.
