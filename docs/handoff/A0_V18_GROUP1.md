@@ -860,3 +860,45 @@ Công cụ: `tools/v1832_blind_set.py`, `tools/v1832_tf_free_diag.py`.
    Kết luận: **giữ P2** theo BAK+UTMOS (CI95 < 0, 0/12 video) nhưng **hạ mức tin cậy**:
    *"G1 bị các giám khảo tự động đánh giá thấp hơn P2, đặc biệt ở chất lượng nền theo DNSMOS BAK"* —
    **không** phải "đã chứng minh G1 tăng nhiễu nền", **không** kết luận về GAN nói chung, **không** quy nguyên nhân.
+
+## 26. v18.35 — sàng lọc checkpoint hiện có (không training)
+
+### 26.0 LUẬT SÀNG LỌC — ĐĂNG KÝ TRƯỚC KHI XEM KẾT QUẢ
+- Bộ sàng lọc **S**: 120 câu, 12 video × 10 (4 ngắn / 3 vừa / 3 dài mỗi video), **loại** mọi câu đã dùng
+  ở v1831/v1832/v1833 (300 stratified + 36 blind + 300 head).
+- Giám khảo chính: **DNSMOS BAK** và **UTMOSv2**; bổ trợ SIG/OVRL, flat_V, HNR. **Không** dùng CER/WER.
+- Ứng viên **ĐẠT** nếu: trung vị ΔBAK > 0 **và** CI95 (bootstrap cụm video) không chứa 0;
+  ΔUTMOS CI95 dưới > −0,02; **≥ 2/3 video** có ΔBAK ≥ 0.
+- Nhiều ứng viên đạt: chọn ΔBAK trung vị lớn nhất trong nhóm có ΔUTMOS ≥ 0.
+- Không ai đạt: giữ P2, kết thúc vòng. Không mở rộng ứng viên/bộ đo.
+- Xác nhận (nếu có): **đúng 1** ứng viên trên tập **C** 120 câu rời rạc (khác S, khác các bộ đã dùng),
+  cùng luật; chỉ **đề xuất**, không đổi production.
+
+### 26.1 Kiểm kê checkpoint (tồn tại thật, đọc từ file + run.json)
+| checkpoint | nguồn khởi tạo | step | loss | ghi chú |
+|---|---|---|---|---|
+| `adv_p2_20k/ckpt_2000.pt` (**P2**, production) | `acoustic_v32/best.pt` | 2.000 | adv 0,3 · fm 0 · d_warmup 300 · lr 2e-5 | bản đang dùng |
+| `adv_p2_20k/eval_4000.pt` | P2-run | 4.000 | như trên | **ứng viên** `p2_4k` |
+| `adv_p2_20k/eval_6000.pt` | P2-run | 6.000 | như trên | loại (chỉ giữ 4 ứng viên; 4k đại diện) |
+| `v1830_g1/ckpt_1000.pt` | **P2** | +1.000 (tổng 3.000) | adv 0,3 · fm 0 | **ứng viên** `g1_1k` |
+| `v1830_g1/ckpt_2000.pt` | P2 | +2.000 | adv 0,3 · fm 0 | G1 — đã bị loại ở v18.33 |
+| `v1830_g2/ckpt_1000.pt` | P2 | +1.000 | adv 0,3 · **fm 1,0** | **ứng viên** `g2_1k` |
+| `v1830_g2/ckpt_2000.pt` | P2 | +2.000 | adv 0,3 · fm 1,0 | **ứng viên** `g2_2k` |
+| `v1830_g1b/*` | **G1** | +2.000 | adv 0,3 · fm 0 | **loại** (không có lý do mới; đã bão hoà) |
+| `v1829_f0/fd/fc` | P2 | 2.000 | không GAN / cờ gate | **loại** (đã trượt cổng v18.29) |
+| `adv_v35/*`, `acoustic_v35/*` | v3.5 | — | adv 0,3 | **loại** (config/mel-stats v35 khác, không so trực tiếp) |
+
+### 26.2 KẾT QUẢ SÀNG LỌC (110 câu / 11 video; 44 ngắn · 33 vừa · 33 dài; 0 câu trùng bộ cũ)
+⚠️ `2b65WyiFC9k` **không có câu nào chưa dùng** (toàn bộ 242 row nằm trong "300 head" cũ) ⇒ bộ sàng lọc còn 11 video.
+
+| ứng viên | BAK trung vị | CI95 | % câu hơn P2 | UTMOS trung vị | CI95 | flat_V | HNR | ĐẠT? |
+|---|---|---|---|---|---|---|---|---|
+| `g1_1k` (GAN 3k luỹ kế) | −0,012 | [−0,118, +0,017] | 47,3 | **+0,096** | [+0,049, +0,149] | −0,017 | +0,135 | **✗** (BAK CI chứa 0) |
+| `g2_1k` (fm 1,0, 1k) | −0,063 | [−0,140, −0,036] | 40,0 | **+0,070** | [+0,023, +0,151] | −0,021 | +0,190 | ✗ (BAK xấu) |
+| `p2_4k` | −0,002 | [−0,091, +0,089] | 49,1 | **−0,070** | [−0,181, −0,025] | +0,028 | +0,145 | ✗ (UTMOS xấu) |
+| `g2_2k` | **−0,385** | [−0,449, −0,322] | 20,9 | +0,043 | [−0,045, +0,100] | −0,022 | +0,165 | ✗ (BAK xấu mạnh) |
+
+- **Không ứng viên nào ĐẠT** luật đã đăng ký ⇒ **giữ P2, kết thúc vòng**; **không** chạy bước xác nhận (luật chỉ cho 1 bản khi đã đạt sàng lọc).
+- **Giám khảo mâu thuẫn ở `g1_1k`**: UTMOS tốt hơn rõ (CI > 0) nhưng BAK trung tính (CI chứa 0) ⇒ ghi **chưa phân thắng bại** cho bản này, không phải "ứng viên thắng".
+- **Giả thuyết (chưa kiểm)**: G1@2k có UTMOS −0,10 so P2 (v18.33) trong khi G1@1k +0,10 ⇒ có thể **2k bước là quá tay**; cần vòng riêng mới kết luận, không hành động ở v18.35.
+- Không dùng CER/WER; không đổi production; không training.
