@@ -743,3 +743,66 @@ Công cụ: `tools/v1832_blind_set.py`, `tools/v1832_tf_free_diag.py`.
 
 ### Quyết định giữ nguyên
 - Không dùng < −50 % làm bằng chứng rè tốt/xấu; không đổi thước chính (C5 chưa đủ 30 câu có điểm); G1 giữ nhãn **CHƯA XÁC NHẬN TAI**; rollback P2 nguyên vẹn.
+
+## 25. v18.33 — đánh giá tự động đa tiêu chí (P2 vs G1)
+
+### 25.0 LUẬT QUYẾT ĐỊNH — ĐĂNG KÝ TRƯỚC KHI XEM KẾT QUẢ
+- **Giám khảo chính**: DNSMOS **BAK** (nhiễu nền; cao = tốt) và **UTMOSv2** (tự nhiên; cao = tốt).
+  **Phụ**: DNSMOS SIG/OVRL, flat_V, HNR, thống kê RMS. **Cổng nội dung**: CER (ASR).
+- So **ghép cặp theo câu** (cùng câu, cùng path free-run), KTC 95% bằng **bootstrap theo cụm video**
+  (resample 12 video, 2.000 lần) — không coi 300 câu là 300 quan sát độc lập.
+- **G1 thắng** nếu đồng thời: (1) ΔBAK (G1−P2) trung vị > 0 **và** CI95 không chứa 0;
+  (2) ΔUTMOS ≥ 0 hoặc CI95 không nằm dưới −0,02; (3) ΔCER ≤ +0,002 hoặc CI95 không nằm trên +0,002;
+  (4) ≥ 2/3 số video có ΔBAK ≥ 0.
+- **P2 thắng** nếu đối xứng (ΔBAK CI95 < 0, hoặc UTMOS/CER xấu đi rõ theo CI).
+- **Còn lại**: chưa phân thắng bại — giữ nguyên trạng thái, không training mò.
+- Ngưỡng 0,02 MOS và 0,2 điểm % CER là **ngưỡng phát hiện tối thiểu** (độ nhạy), **không** phải
+  ngưỡng cảm nhận; không tuyên bố "đã xác nhận bằng tai".
+
+### 25.1 Công cụ — kiểm tra khả dụng (nguồn/phiên bản/giới hạn)
+| công cụ | trạng thái | phiên bản / model | ghi chú |
+|---|---|---|---|
+| DNSMOS (P.835) | **dùng được** | `speechmos` (ONNX đi kèm), 16 kHz | cho ovrl/sig/bak/p808; **bắt buộc 16 kHz** (tự resample polyphase) |
+| UTMOSv2 | **dùng được** | `utmosv2` 1.3.1, `fusion_stage3`, fold0 | checkpoint cache `~/.cache/utmosv2`; ~0,5 s/file trên MPS |
+| ASR tiếng Việt | **dùng được** | `faster-whisper` small (CTranslate2 int8, CPU) | language=vi, beam 1, không VAD; ~1 s/câu |
+| NISQA | **KHÔNG dùng** | `nisqa` 2.0.post2 (PyPI) | gói **không kèm trọng số**; `pip install` kéo torch 2.2.1 làm hỏng môi trường (đã khôi phục torch 2.14.1 + torchvision 0.29.1). Cần tải `nisqa_pretrained_weights` thủ công ⇒ bỏ trong vòng này |
+
+### 25.2 KẾT QUẢ (300 câu / 12 video, free-run production, ghép cặp)
+**Giám khảo (trung bình):**
+| bản | UTMOSv2 | DNSMOS BAK | SIG | OVRL | CER | WER |
+|---|---|---|---|---|---|---|
+| P2 | **1,534** | **2,801** | **3,063** | **2,310** | **0,542** | **0,601** |
+| G1 | 1,444 | 2,295 | 2,808 | 2,014 | 0,669 | 0,745 |
+| WAV thật | 2,248 | 3,981 | 3,350 | 3,035 | 0,664 | 0,748 |
+
+**Δ ghép cặp (G1 − P2), KTC 95% bootstrap theo cụm video:**
+| chỉ số | trung vị | CI95 | % câu G1 tốt hơn |
+|---|---|---|---|
+| BAK | **−0,401** | [−0,456, −0,350] | 16,0 |
+| SIG | −0,132 | [−0,141, −0,116] | 27,3 |
+| OVRL | −0,225 | [−0,278, −0,198] | 18,3 |
+| UTMOS | **−0,102** | [−0,143, −0,058] | 39,0 |
+| CER | **+0,063** | [+0,047, +0,096] | — |
+| flat_V | −0,028 | [−0,029, −0,024] | 12,0 (thấp hơn = "tốt" theo thước cũ) |
+| HNR | +0,110 | [+0,007, +0,188] | 57,3 |
+
+- **BAK thấp hơn ở 12/12 video** (G1 không thắng video nào). Ví dụ 2b65WyiFC9k 2,98→2,23 · BD83pScFukQ 2,74→2,15 · vEtfty4Cc6Y 3,00→2,44.
+- CER theo video **hỗn hợp** (4ITcvEa 0,730→0,679 và lRojc8KDJ6k 1,112→0,672 tốt lên; 50swDIypplU 0,266→0,433 và EUNlJU1BuzE 0,394→1,157 xấu đi) nhưng tổng thể xấu đi rõ; ví dụ G1 bỏ từ ("Thì lý thuyết chúng ta sẽ" → "Dù chúng ta sẽ").
+- **flat_V/HNR (phụ trợ) ngược chiều với giám khảo** — đây chính là lý do v18.31 chọn G1; đánh giá tự động không xác nhận.
+
+**C. Thời lượng (cùng 300 câu):** P2 571,31 s · G1 570,08 s · thật 952,49 s; pause 1,69 % / 1,21 % / 28,68 %; trim 567,7 / 566,9 / 826,4 s; speech frames 38.099 / 39.267 / 54.155. Không sửa duration.
+
+**Kiểm độ nhạy (8 câu thật/8 video, suy giảm nhân tạo):**
+| | clean | noise30 | noise20 | noise10 | drop2 | drop5 | drop10 |
+|---|---|---|---|---|---|---|---|
+| BAK | 4,07 | 3,58 | 3,04 | 2,23 | 4,00 | 4,08 | 3,95 |
+| UTMOS | 2,42 | 2,22 | 2,02 | 1,57 | 2,07 | 1,68 | 1,67 |
+| CER (vs bản sạch) | 0 | 0,21 | 0,18 | 0,35 | 0,145 | 0,218 | 0,294 |
+- **BAK đơn điệu tuyệt đối với nhiễu** (rho = −1,0 ở 8/8 câu) → dùng được để so nền.
+- UTMOS đơn điệu cả nhiễu lẫn cắt (rho −1,0 / −0,5).
+- **CER không đơn điệu ở mức nhẹ** (0,21 > 0,18) và sàn ASR trên WAV thật = 0,188 ⇒ chỉ tin khi khác biệt lớn; không dùng CER làm thước rè.
+
+### 25.3 KẾT LUẬN (theo luật §25.0 đăng ký trước)
+- (b) **P2 tốt hơn theo đánh giá tự động**: BAK CI95 < 0, UTMOS CI95 < 0, CER CI95 > 0, **0/12 video** G1 tốt hơn về BAK.
+- **Đề xuất rollback production về P2** (đã cập nhật `configs/production_v1831.json`; G1 giữ làm nhánh thí nghiệm).
+- Nhãn: **"đánh giá tự động"** — **không** phải xác nhận bằng tai. Không đổi thước chính C5.

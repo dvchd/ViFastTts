@@ -1,13 +1,25 @@
 {
-  "label": "v18.31 — CHƯA XÁC NHẬN TAI (người dùng chưa nghe)",
-  "acoustic_config": "configs/small_codelung_v32.yaml",
-  "acoustic_checkpoint": "runs/v1830_g1/ckpt_2000.pt",
-  "rollback_checkpoint": "artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt",
-  "metrics": "artifacts/bench/v1831_free300.json",
-  "gate": {
-    "flat_v_better_than_p2_videos": "12/12",
-    "hnr_better_than_p2_videos": "8/12",
-    "s1_vs_p2_pct": 2.1
-  },
-  "note": "Đổi sang G1 theo A0 v18.31 (C1: hoãn cổng tai). Rollback 1 bước: truyền --checkpoint <rollback_checkpoint>."
+ "label": "v18.33 — đánh giá TỰ ĐỘNG (không phải xác nhận bằng tai): P2 tốt hơn G1",
+ "acoustic_config": "configs/small_codelung_v32.yaml",
+ "acoustic_checkpoint": "artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt",
+ "rollback_checkpoint": "artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt",
+ "metrics": "artifacts/bench/v1833_decision.json",
+ "gate": {
+  "rule": "§25.0 (đăng ký trước)",
+  "bak_ci95": [
+   -0.456,
+   -0.35
+  ],
+  "utmos_ci95": [
+   -0.143,
+   -0.058
+  ],
+  "cer_ci95": [
+   0.047,
+   0.096
+  ],
+  "videos_bak_better": "0/12"
+ },
+ "note": "Đổi sang G1 theo A0 v18.31 (C1: hoãn cổng tai). Rollback 1 bước: truyền --checkpoint <rollback_checkpoint>.",
+ "previous_candidate": "runs/v1830_g1/ckpt_2000.pt (G1 — kém BAK/UTMOS/CER, giữ làm thí nghiệm)"
 }
