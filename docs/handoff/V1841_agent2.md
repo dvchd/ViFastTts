@@ -4,8 +4,8 @@
 > chưa chuyển ONNX. Acoustic/end-to-end/parity số học giữ nguyên v18.40;
 > vocoder 11/12 với **ngoại lệ spectrum được A0 chấp nhận có phạm vi**.
 >
-> **Commit gốc của vòng**: `1932553` · **Tệp đặc tả**: yêu cầu A0 → Agent 2 trong chat
-> (không có `V1841_agent0.md`).
+> **Commit gốc của vòng**: `1932553` · **Commit bàn giao**: `44ebe7c` · **Tệp đặc tả**:
+> yêu cầu A0 → Agent 2 trong chat (không có `V1841_agent0.md`).
 
 ---
 
@@ -110,7 +110,7 @@ Sau commit bàn giao, chạy lại trên worktree sạch của đúng commit:
 `test_onnx_frontend.py`, `test_onnx_runtime.py`, `test_export_v2.py`,
 `test_v2_slot5.py`, `test_runtime_istft.py`, `test_vocos_generator.py`,
 `test_eval_text.py`.
-Kết quả: **45 passed** (ghi ở báo cáo cuối/commit). Worktree dùng symlink
+Kết quả tại `44ebe7c`: **45 passed**. Worktree dùng symlink
 `data/codelung`, `cache`, `artifacts`, `runs` — dependency dữ liệu ngoài repo.
 
 ---
