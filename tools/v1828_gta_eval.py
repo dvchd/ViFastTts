@@ -45,6 +45,8 @@ VARIANTS = {
     "p2_exp40_m24": {"ckpt": P2, "cfg": CFG32, "exp": (-40.0, 3.0, -24.0)},
     "v35": {"ckpt": V35, "cfg": CFG35},
     "f0": {"ckpt": "runs/v1829_f0/ckpt_2000.pt", "cfg": CFG32},
+    "g1": {"ckpt": "runs/v1830_g1/ckpt_2000.pt", "cfg": CFG32},
+    "g2": {"ckpt": "runs/v1830_g2/ckpt_2000.pt", "cfg": CFG32},
     "fd": {"ckpt": "runs/v1829_fd/ckpt_2000.pt", "cfg": CFG32},
     "fc": {"ckpt": "runs/v1829_fc/ckpt_2000.pt", "cfg": "configs/small_codelung_v32_gate.yaml", "gate": 1},
     "fc_g0": {"ckpt": "runs/v1829_fc/ckpt_2000.pt", "cfg": "configs/small_codelung_v32_gate.yaml", "gate": 0},

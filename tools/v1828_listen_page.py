@@ -42,8 +42,12 @@ def main() -> None:
     parser.add_argument("--gta", default=None, help="checkpoint Vocos GTA tốt nhất (vocoder-only)")
     parser.add_argument("--fc", default=None, help="checkpoint nhánh Fc (cờ gate) — suy luận gate=1")
     parser.add_argument("--fd", default=None, help="checkpoint nhánh Fd (đích gate đồng nhất)")
+    parser.add_argument("--no-p2-exp", action="store_true", help="bỏ cột P2+expander")
+    parser.add_argument("--g1", default=None, help="checkpoint nhánh G1 (P2 + 2k, cùng công thức)")
+    parser.add_argument("--g2", default=None, help="checkpoint nhánh G2 (thêm feature matching)")
     parser.add_argument("--gate-map", default="artifacts/bench/v1829_gate_map.json")
     parser.add_argument("--min-nogate", type=int, default=3, help="số câu tối thiểu từ video KHÔNG gate")
+    parser.add_argument("--exclude-oov", action="store_true", help="loại câu có token status != VALID")
     parser.add_argument("--with-exp", action="store_true", help="thêm bản GTA + expander −45/1:2")
     parser.add_argument("--out", default="artifacts/listen_small_filt/v1828_gate")
     parser.add_argument("--target-lufs", type=float, default=-23.0)
@@ -60,6 +64,17 @@ def main() -> None:
     if Path(args.gate_map).exists():
         gate_map = json.loads(Path(args.gate_map).read_text(encoding="utf-8")).get("gate", {})
     candidates = [row for row in rows if len(row["syllables"]) >= args.min_syllables]
+    if args.exclude_oov:
+        from vifasttts.frontend.custom_reading import custom_map
+
+        # 0 token OOV theo normalizer (val 100 % VALID) ⇒ lọc theo cụm phiên âm đã biết
+        # (khoá nhiều từ trong custom_reading) + status != VALID nếu có.
+        phrases = [key.lower() for key in custom_map() if " " in key]
+        candidates = [
+            row for row in candidates
+            if all(str(s.get("status", "VALID")) == "VALID" for s in row["syllables"])
+            and not any(phrase in str(row.get("text", "")).lower() for phrase in phrases)
+        ]
     seen: set = set()
     picked: list[dict] = []
     # v18.29: xen kẽ video gate / không gate để trang nghe có đủ câu KHÔNG gate
@@ -104,6 +119,8 @@ def main() -> None:
         # suy luận Fc: gate = 1 (A0 v18.29) — bơm qua partial để không đổi API production
         fc_engine.model.forward = partial(fc_engine.model.forward, gate=torch.tensor([1], dtype=torch.long))
     fd_engine = Synthesizer(cfg32, args.fd, device=args.device) if args.fd else None
+    g1_engine = Synthesizer(cfg32, args.g1, device=args.device) if args.g1 else None
+    g2_engine = Synthesizer(cfg32, args.g2, device=args.device) if args.g2 else None
 
     out = Path(args.out)
     if out.exists():
@@ -154,8 +171,9 @@ def main() -> None:
         variants = {
             "copy": render_copy(row),
             "p2": render_free(p2_engine, row),
-            "p2_exp": expander(render_free(p2_engine, row)),
         }
+        if not args.no_p2_exp:
+            variants["p2_exp"] = expander(render_free(p2_engine, row))
         if gta_engine is not None:
             gta_audio = render_free(gta_engine, row)
             variants["gta"] = gta_audio
@@ -165,6 +183,10 @@ def main() -> None:
             variants["fc"] = render_free(fc_engine, row)
         if fd_engine is not None:
             variants["fd"] = render_free(fd_engine, row)
+        if g1_engine is not None:
+            variants["g1"] = render_free(g1_engine, row)
+        if g2_engine is not None:
+            variants["g2"] = render_free(g2_engine, row)
         names = list(variants)
         rng.shuffle(names)
         entries = []

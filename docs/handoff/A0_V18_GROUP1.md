@@ -636,3 +636,41 @@ JSON: `v1828_l1_scores.json` · `v1829_l2_strat.json` · `v1829_l2_l3.json` · `
 - Free-run: P2 flat 0,1719 / HNR −3,89 · Fc 0,2045 / −4,36 · Fd 0,2052 / −4,48.
 
 **Trang nghe:** https://cio-rows-rocks-seq.trycloudflare.com/v1829_floor/ — 9 câu (5 không gate + 4 gate) × 5 bản (copy · P2 · P2+exp −40/1:3 trần 18 · Fc gate=1 · Fd), −23 LUFS, nhãn xáo, xuất JSON. Đáp án: `artifacts/listen_small_filt/v1829_floor/key.json`.
+
+## 22. v18.30 — B1 (thước nào khớp tai) · B2 (G1/G2) · B3 (OOV)
+
+JSON: `v1830_metric_corr.json` · `v1830_g12_tf.json` · `v1830_free.json` · `v1830_oov_val.json`.
+
+### B1 — Spearman với điểm rè (45 ô = 9 câu × 5 bản; 1 = không rè)
+| thước | rho gộp | rho trong câu (median) |
+|---|---|---|
+| **inter-harmonic** (mức giữa hài − copy) | −0,478 | **−0,90** |
+| **flat 2–8 kHz** | 0,377 | **0,80** |
+| HNR | −0,460 | −0,70 |
+| S1 (syllable MAE) | 0,421 | 0,50 |
+| flat_V (2–6 kHz) | 0,313 | 0,50 |
+| N1 bin4 (median Δ) | 0,301 | 0,50 |
+| N1 bin4 (energy Δ) | 0,398 | 0,30 |
+- Dấu inter-harmonic: mọi model **âm** so copy (ít năng lượng giữa hài hơn), GTA âm nhất (−2,1…−3,2 dB) và bị chấm rè nặng nhất ⇒ **âm hơn = tệ hơn**.
+- ⚠️ Chỉ 9 câu (một phần từ 2 video), 45 điểm ⇒ **định hướng**, không kết luận chắc.
+- Thước chính đề xuất: **flat 2–8 kHz** (diễn giải rõ) + **HNR**; inter-harmonic cần kiểm trên tập đa video.
+
+### B2 — G1/G2 (2k bước, cùng công thức P2: adv 0,3 · d_warmup 300 · chỉ decoder/mel/postnet)
+| bản | flat_V | HNR | S1 median | bin4 Δ median | bin4 energy | bin4 flat |
+|---|---|---|---|---|---|---|
+| copy | 0,1191 | −2,81 | — | — | — | — |
+| P2 | 0,1878 | −4,06 | 3,706 | 5,07 | 16,91 | 0,4369 |
+| **G1** | **0,1459** | −3,98 | 3,783 (**+2,1 %**) | 7,87 | 18,01 | 0,3688 |
+| G2 (fm 1,0) | 0,1370 | −3,92 | 3,940 (**+6,3 %**) | 8,51 | 18,87 | 0,3570 |
+- **G1 ĐẠT cổng** (flat_V −22 %, HNR tốt hơn, S1 +2,1 % ≤ 5 %). **G2 TRƯỢT** (S1 +6,3 %).
+- Cả hai **làm nền to hơn** ở bin < −50 (d_med 5,07 → 7,87/8,51; energy 16,9 → 18,0/18,9) dù flat tốt hơn.
+- Free-run 40 câu: P2 flat 0,1719/`<−50` 2,33 % · **G1 0,1491/1,59 %** · G2 0,1467/1,46 % ⇒ ở production, G1/G2 **giảm** tỉ lệ frame nền rất nhỏ.
+- TỰ QUYẾT KHÁC ĐẶC TẢ: P2 dùng `fm_weight = 0` ⇒ "×2" vẫn = 0; đã chạy G2 với **fm = 1,0** (giá trị chuẩn của feature matching). Nếu A0 muốn 2,0 thì chạy lại 2k (~6 phút).
+
+### B3 — OOV
+- Quét 3.378 row val: **0 token OOV** (100 % `status = VALID`), không có chữ ngoại (f/j/w/z).
+- `in xờ pếch` / `đê mô` là **phiên âm tiếng Anh** (inspector / demo), không phải OOV.
+- Đã hỗ trợ **khoá nhiều từ** trong `custom_reading` (+2 test) nhưng **revert entry** cho "in xờ pếch": đổi 3 → 4 âm tiết làm **lệch durations manifest** (eval TF ném lỗi `d_syl 26 vs active 27`). Muốn dùng phải giữ **đúng số âm tiết** hoặc tái tạo manifest.
+- Trang nghe: `--exclude-oov` lọc theo status + cụm phiên âm đã biết (hiện không loại câu nào).
+
+**Trang nghe v1830:** https://cio-rows-rocks-seq.trycloudflare.com/v1830_gan/ — 9 câu (5 không gate + 4 gate) × 4 bản (copy · P2 · G1 · G2), −23 LUFS, nhãn xáo, xuất JSON. Đáp án: `artifacts/listen_small_filt/v1830_gan/key.json`.

@@ -74,9 +74,8 @@ def apply_custom_reading(text: str, table: dict[str, str] | None = None) -> str:
     if not table:
         return text
     keys = {k.lower(): v for k, v in table.items()}
-    pieces = re.split(r"([^\wÀ-ỹ]+)", text)  # giữ nguyên dấu phân cách
-    out = []
-    for piece in pieces:
-        replacement = keys.get(piece.lower())
-        out.append(replacement if replacement is not None else piece)
-    return "".join(out)
+    # v18.30 (B3): hỗ trợ khoá NHIỀU TỪ ("in xờ pếch" → "in sờ pếch tờ"), ưu tiên khoá dài.
+    ordered = sorted(keys, key=lambda key: -len(key))
+    pattern = re.compile(r"(?<!\w)(" + "|".join(re.escape(key) for key in ordered) + r")(?!\w)",
+                         re.IGNORECASE)
+    return pattern.sub(lambda match: keys[match.group(0).lower()], text)
