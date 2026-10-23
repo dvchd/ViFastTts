@@ -1,5 +1,6 @@
 # TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, Agent 2 cập nhật mỗi vòng)
 
+> **V18.32 (23/10/2026)** — bộ nghe mù 36 câu (12 video) tại `artifacts/listen_small_filt/v1832_blind/` + chẩn đoán TF/free-run (`artifacts/bench/v1832_tf_free.json`); cơ chế nghịch lý nền **chưa xác định**; G1 vẫn CHƯA XÁC NHẬN TAI.
 > **V18.31 (23/10/2026)** — nhánh hiện hành là **rè nền / GAN acoustic**; báo cáo đầy đủ ở
 > `docs/handoff/A0_V18_GROUP1.md` §20–§23 (mục cũ V11 bên dưới là lịch sử, không còn hiệu lực).
 > **Production acoustic**: G1 `runs/v1830_g1/ckpt_2000.pt` (nhãn **CHƯA XÁC NHẬN TAI**) ·

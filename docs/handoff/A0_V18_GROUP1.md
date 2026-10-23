@@ -707,3 +707,39 @@ flat_V **0,1626** (kém G1 14 %), HNR −3,92 (kém 0,21), `<−50` 2,33 % (kém
 ### Production & rollback
 - Production đổi sang **G1** (`runs/v1830_g1/ckpt_2000.pt`), nhãn **"CHƯA XÁC NHẬN TAI"**, ghi tại `configs/production_v1831.json`.
 - Rollback 1 bước: truyền `--checkpoint artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt`.
+
+## 24. v18.32 — bộ nghe mù 36 câu + chẩn đoán TF/free-run + kiểm duration ratio
+
+JSON: `v1832_tf_free.json` · items/mapping: `artifacts/listen_small_filt/v1832_blind/{items,mapping}.json`.
+Công cụ: `tools/v1832_blind_set.py`, `tools/v1832_tf_free_diag.py`.
+
+### Bộ nghe mù (chờ người dùng chấm)
+- **36 câu / 12 video** · 12 ngắn (<150f) · 12 vừa (150–300f) · 12 dài (≥300f) · **36/36 có khoảng nghỉ** · 4 câu từng nghe ở trang cũ.
+- Mỗi câu: **A/B** = P2 vs G1 (ẩn tên, đảo thứ tự ngẫu nhiên, mapping riêng), **Thật** = bản ghi gốc để tham chiếu.
+- Hai phiên bản: **gốc** (không đổi) và **−23 LUFS**: chỉ **một hệ số gain tuyến tính** + chốt đỉnh −1 dBTP; **không** denoise/gate/compressor/limiter động.
+- Chấm 5 mục (rè nền · rõ chữ · tự nhiên · ngắt nghỉ · lỗi phát âm) + thích A/B/hoà; xuất JSON.
+- Trang: https://cio-rows-rocks-seq.trycloudflare.com/v1832_blind/
+
+### Chẩn đoán TF vs free-run (36 câu, cùng checkpoint/frontend/vocoder, α=0)
+| điều kiện | tổng s | < −50 s (%) | pause % | LUFS | p50 dB | dur ratio | trim ratio | speech ratio |
+|---|---|---|---|---|---|---|---|---|
+| GT thật | 105,29 | 31,44 (29,86) | 27,70 | −27,52 | −35,67 | — | — | — |
+| P2 TF | 104,90 | 33,30 (31,75) | 28,29 | −28,89 | −37,44 | 0,995 | 0,975 | 0,875 |
+| P2 free | 65,76 | 1,62 (2,46) | 1,54 | −27,51 | −28,18 | 0,616 | 0,803 | 0,830 |
+| G1 TF | 104,90 | 31,83 (30,34) | 28,26 | −28,35 | −35,69 | 0,995 | 0,974 | 0,929 |
+| G1 free | 65,64 | 1,23 (1,87) | 1,19 | −28,21 | −28,58 | 0,615 | 0,801 | 0,850 |
+| copy-synth | 104,90 | 26,89 (25,63) | 22,95 | −29,35 | −34,06 | — | — | — |
+
+- Khác biệt < −50 giữa TF và free-run **gần như trùng khớp với chênh lệch pause**: TF 28,3 % pause / 31,8 % < −50; free 1,2 % pause / 2,5 % < −50. LUFS hai chế độ tương đương ⇒ không phải lỗi chuẩn hoá mức.
+- **Mask**: TF lấy từ copy-synth (RMS < −50), **cố định** giữa P2/G1; free-run không căn frame nên chỉ báo ngưỡng tuyệt đối, **không** dùng mask chung.
+- **"duration schedule dùng chung"** = điều kiện TF (durations/gaps GT). Pipeline **không** hỗ trợ free-run với durations GT (`iter_synthesize_sentence` không nhận durations) ⇒ hai điều kiện vẫn khác nhau ở **nguồn duration/gap + hậu xử lý ghép câu**.
+- ⇒ **Chưa xác định cơ chế**; không quy nguyên nhân cho duration hay pause. Số liệu chỉ cho thấy pause chiếm ~28 pp trong 30 pp chênh lệch.
+
+### Kiểm duration ratio
+- Mẫu số = `frame_range` (gồm lead + gaps); tử số = số frame model. Ratio free/GT = **0,615**.
+- Kiểm bằng số: pause GT 27,7 % ⇒ (1−0,277)/(1−0,0154) = **0,734**; nhân speech ratio 0,83–0,85 ⇒ **≈0,61** — khớp.
+- Cắt silence đầu/cuối (max−35 dB): trim ratio **0,80**; speech ratio (frame hữu thanh) **0,83–0,93**.
+- ⇒ Ratio ~0,56–0,62 **không** chứng minh thời lượng tuyệt đối đúng; phần lớn là **mất pause**, phần còn lại là speech ngắn hơn ~7–17 %. Không sửa duration trong vòng này.
+
+### Quyết định giữ nguyên
+- Không dùng < −50 % làm bằng chứng rè tốt/xấu; không đổi thước chính (C5 chưa đủ 30 câu có điểm); G1 giữ nhãn **CHƯA XÁC NHẬN TAI**; rollback P2 nguyên vẹn.
