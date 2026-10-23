@@ -1,6 +1,7 @@
 # TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, Agent 2 cập nhật mỗi vòng)
 
-> **V18.38 (23/10/2026)** — probe crop D **3 nhánh** từ P2 EMA (300 D warm-up + 200 G update; REC 200 G): **không nhánh nào tốt hơn P2** trên bộ 36 câu dev. `gan_fixed` vs `gan_legacy`: ΔBAK +0,0041 CI95 [−0,0112, +0,0084] (không khác), ΔUTMOS −0,0507 (fixed kém hơn), ΔHNR +0,036 (fixed hơn), Δflat +0,0011 (fixed phẳng hơn = kém hơn). `gan_fixed` vs `rec`: BAK +0,0201, UTMOS +0,1064 (fixed hơn REC) nhưng **chưa hơn P2**. Crop cũ: 35/3.975 row (0,88%) và 31/500 bước có padding, 1.098 frame; crop fixed: 0. **Giữ P2, không mở training dài.** Chi tiết: `V1838_agent2.md`, `runs/v1838_crop_probe/report.json`.
+> **V18.39 (23/10/2026)** — audit UTMOSv2: `utmosv2` dùng **random crop + mixup bằng np.random không seed** ở cả prediction; cùng seed **exact**, khác seed mỗi file lệch trung bình **~0,28 điểm** (max 0,45–0,67). Chấm lại 36 WAV cũ bằng **5 seed [0..4]**: UTMOS P2 1,4899 · REC 1,4568 · legacy 1,5207 · fixed 1,4957; ΔUTMOS **fixed−legacy −0,0264 CI [−0,0554, +0,019]** (mất ý nghĩa so với 1 pass), **fixed−rec +0,0176 CI [−0,0003, +0,053]** (chỉ xu hướng), **legacy−P2 +0,0223 CI [+0,0045, +0,0461]** nhưng BAK không xác nhận. BAK/flat/HNR của v18.38 giữ; các ΔUTMOS của v18.38 **hạ mức**. CI bootstrap video **chưa gồm** bất định do giám khảo; seed range báo riêng. **Giữ P2, crop fixed là mặc định vì loại padding, không tuyên bố cải thiện chất lượng.** Chi tiết: `V1839_agent2.md`, `artifacts/bench/v1839_utmos_audit/`.
+> **V18.38 (23/10/2026)** — probe crop D **3 nhánh** từ P2 EMA (300 D warm-up + 200 G update; REC 200 G): **không nhánh nào tốt hơn P2** trên bộ 36 câu dev. `gan_fixed` vs `gan_legacy`: ΔBAK +0,0041 CI95 [−0,0112, +0,0084] (không khác), ΔUTMOS −0,0507 (**1 pass chưa seed — xem v18.39**), ΔHNR +0,036 (fixed hơn), Δflat +0,0011 (fixed phẳng hơn = kém hơn). `gan_fixed` vs `rec`: BAK +0,0201, UTMOS +0,1064 (**1 pass chưa seed — xem v18.39**) nhưng **chưa hơn P2**. Crop cũ: 35/3.975 row (0,88%) và 31/500 bước có padding, 1.098 frame; crop fixed: 0. **Giữ P2, không mở training dài.** Chi tiết: `V1838_agent2.md`, `runs/v1838_crop_probe/report.json`.
 > **V18.37 (23/10/2026)** — kiểm tra tính đúng pipeline, **không training, không đổi production**. Xác nhận bằng tensor: ONNX acoustic cũ = **P2 EMA** (180/181 tensor exact); ONNX vocoder cũ = **E4-C** (63/63 tensor exact, 0/63 pretrained) ⇒ **mismatch**, đã export bản sửa ở `artifacts/onnx/v1837/` (chưa dùng). Sửa text eval giữ dấu câu (`vifasttts/eval_text.py`); raw-join cũ chỉ còn là legacy. Trace 12 câu: legacy **0 gap**, bản có dấu câu **173 gap**; CLI/ONNX chunk dài hơn sentence mode (ghi rõ, không ép giống). Audit crop D: bản cũ có row 34 frame bị crop 64 ⇒ **33 frame padding**; đã sửa `sample_crops(lengths=...)`, test mới. Bộ split: val∩holdout = **9 video**, nhưng **0 clip cha/segment** ⇒ holdout là unseen-clip, không phải unseen-video. **Luật hiện hành chỉ còn BAK + UTMOS; CER đã bị loại, số cũ giữ trong lịch sử.** Chi tiết: `V1837_agent2.md`, JSON `artifacts/bench/v1837_*.json`.
 > **V18.35 (23/10/2026)** — sàng lọc 4 checkpoint còn tồn tại (g1_1k, g2_1k, p2_4k, g2_2k) trên 110 câu/11 video: **không bản nào đạt luật** (trượt điều kiện BAK) ⇒ **giữ P2**, không đổi production, không training. `g1_1k`: UTMOS cải thiện, **BAK chưa xác định được chiều khác biệt**, chưa đạt mục tiêu cải thiện nền — không phải bản thắng, cũng chưa bị chứng minh kém toàn diện. Chi tiết: `A0_V18_GROUP1.md` §26.
 > **V18.34 (23/10/2026)** — audit v18.33: sửa nhãn chiều (flat_V G1 thắng 88 %), **loại CER/WER khỏi luật** (macro/micro lệch; "sàn 0,188" là mẫu 8 câu khác tập), "speech frames" = **voiced frames**, UTMOS không đơn điệu từng câu với cắt. **Giữ P2** (BAK+UTMOS CI95 < 0, 0/12 video) nhưng **hạ mức kết luận**: "G1 bị giám khảo tự động đánh giá thấp hơn P2, đặc biệt DNSMOS BAK". Chi tiết: `A0_V18_GROUP1.md` §25.4–25.5, `artifacts/bench/v1834_audit.json`.
@@ -18,13 +19,13 @@
 > punctuation/inference mode/EMA-live/vocoder mismatch; xem `V1837_agent2.md` §9.
 > **Trang nghe cũ**: `/v1829_floor/`, `/v1830_gan/` (lịch sử; không phải production).
 
-**Vòng hiện hành**: **V18.38** · **Tệp đặc tả**: yêu cầu A0 → Agent 2 trong chat (không có `V1838_agent0.md`) ·
-**Commit gốc của vòng**: `f1baef0` · **Trạng thái**: **DỪNG SAU V18.38, CHỜ ĐỌC** — probe ngắn, không training dài, giữ P2.
+**Vòng hiện hành**: **V18.39** · **Tệp đặc tả**: yêu cầu A0 → Agent 2 trong chat (không có `V1839_agent0.md`) ·
+**Commit gốc của vòng**: `5e31677` · **Trạng thái**: **DỪNG SAU V18.39, CHỜ ĐỌC** — không training, giữ P2.
 > Các mục V11/V10 bên dưới là **lịch sử**, không còn hiệu lực cho quyết định production.
 > Quy ước V11S.A3 vẫn dùng: HEAD là commit hồ sơ; đọc diff `<gốc>..HEAD`.
-**Việc tiếp (chỉ đề xuất, chưa làm)**: xem `V1838_agent2.md` §8 — không mở training dài từ probe này;
-nếu muốn kiểm crop fix, chạy seed 2 với cùng 500 batch và cùng eval; nếu vẫn không khác, dừng nhánh crop.
-Việc độc lập (BAK/UTMOS trên bộ holdout/30 câu người thật) vẫn chưa làm.
+**Việc tiếp (chỉ đề xuất, chưa làm)**: xem `V1839_agent2.md` §7 — không mở training dài từ probe này;
+nếu muốn kiểm crop fix, chạy seed 2 với cùng 500 batch và **cùng cấu hình UTMOS 5 seed**; nếu vẫn không khác,
+dừng nhánh crop. BAK/UTMOS trên bộ độc lập/30 câu người thật vẫn chưa làm.
 
 > Agent 1 đọc vòng này theo thông tin ở đầu tệp (không cần hash gửi kèm): diff `bfde6a7..<commit cuối>`,
 > đối chiếu `V1837_agent2.md` §2–§9. Agent 1 **chỉ đọc, không ghi tệp** vào repo.

@@ -1,5 +1,11 @@
 # V18.38 — Agent 2: probe crop D có đối chứng (không đổi production)
 
+> **ĐÍNH CHÍNH v18.39:** UTMOSv2 dùng random crop/mixup **không seed** ngay ở prediction;
+> các số ΔUTMOS trong tài liệu này là **1 pass chưa seed**, không tái lập. V18.39 đã chấm lại
+> 5 seed trên cùng WAV: xem `V1839_agent2.md`. Các kết luận **BAK/flat/HNR** giữ nguyên;
+> các ΔUTMOS dưới đây chỉ còn là lịch sử, **không dùng làm kết luận**.
+> Quy tắc cũ “ΔUTMOS < 0,05 không đáng tin” **đã bị bỏ** — xem v18.39.
+
 > **Trạng thái: DỪNG SAU V18.38, CHỜ ĐỌC.** Probe chẩn đoán 1 seed, 200 G update.
 > Không đổi production, không đổi kiến trúc/loss, không ép vuv, không train dài.
 > Production vẫn **P2 EMA** + Vocos pretrained; artifact ONNX v1837 giữ nguyên.
@@ -35,10 +41,11 @@ worktree sạch**. Probe dùng code tại commit f1baef0; tool probe/eval có SH
    chỉ nói **probe ngắn này chưa phân biệt được**.
 6. **D accuracy cao không phải chất lượng audio**: D acc cuối legacy 0,786 / fixed 0,823;
    D loss 1,690 / 1,621. Chỉ là năng lực phân biệt của D, không đo tai.
-7. **UTMOSv2 có dao động giữa lần chấm**: cùng file P2 EMA (bit-identical với v1837),
-   UTMOS mean qua các lần: **1,4842 · 1,5177 · 1,4794 · 1,4642** (range 0,0535);
-   BAK ổn định **3,0341**. Vì vậy ΔUTMOS nhỏ hơn ~0,05 **không đáng tin**; đọc BAK/flat/HNR
-   + CI95, không so tuyệt đối giữa các lần chấm.
+7. **UTMOSv2 — ĐÃ ĐÍNH CHÍNH Ở v18.39**: cùng file P2 EMA (bit-identical với v1837),
+   UTMOS mean qua các lần: **1,4842 · 1,5177 · 1,4794 · 1,4642**. Nguyên nhân là random
+   crop/mixup không seed trong `utmosv2`, không phải một ngưỡng 0,05. **Không dùng quy tắc
+   0,05**; v18.39 chấm 5 seed và báo per-file range. Các ΔUTMOS trong file này là 1 pass,
+   chỉ giữ lịch sử.
 
 ---
 
