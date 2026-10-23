@@ -82,6 +82,9 @@ def test_onnx_runtime_end_to_end(tmp_path: Path):
     acoustic_meta = read_metadata(acoustic_onnx)
     assert acoustic_meta.get("vifasttts.model") == "acoustic"
     assert acoustic_meta.get("sample_rate") == "24000"
+    assert acoustic_meta.get("mel_hash")
+    assert acoustic_meta.get("checkpoint_sha256")
+    assert acoustic_meta.get("export_version") == "v18.37"
 
     # 2) Train + export vocoder
     vocoder_run = tmp_path / "vocoder"
@@ -95,6 +98,9 @@ def test_onnx_runtime_end_to_end(tmp_path: Path):
     assert vocoder_meta["mel_hop_length"] == "64"
     assert vocoder_meta["upsample_ratio"] == "4"
     assert vocoder_meta["sample_rate"] == "24000"
+    assert vocoder_meta.get("mel_hash")
+    assert vocoder_meta.get("checkpoint_sha256")
+    assert vocoder_meta.get("export_version") == "v18.37"
 
     # 3) Mel ONNX phải khớp PyTorch (cùng checkpoint, eval mode)
     vocabs = ComponentVocabs.default()

@@ -1,5 +1,10 @@
 # V18 — Nhóm 1 [KIỂM TRA] (Agent 2)
 
+> **Cập nhật v18.37:** luật hiện hành chỉ còn **BAK + UTMOS**; **CER/WER đã bị loại khỏi luật**
+> (giữ số cũ trong tài liệu làm lịch sử). Production vẫn **P2 EMA**; xem `configs/production_v1831.json`
+> (metadata v18.37) và `V1837_agent2.md`. Các kết luận free-run cũ bị giới hạn bởi punctuation/EMA-live/
+> vocoder mismatch — không xóa lịch sử, chỉ hạ mức áp dụng.
+
 Chuẩn đo: **40 segment val** (`data/codelung/v32/val_clean_v2_dur_seg_slot4.jsonl`, 40 dòng đầu),
 free-run, α=0, EMA. TF chỉ ghi thêm khi có.
 

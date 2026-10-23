@@ -61,15 +61,29 @@ def gap_mask(slot_durations: torch.Tensor) -> torch.Tensor:
 
 
 def sample_crops(real: torch.Tensor, fake: torch.Tensor, gap: torch.Tensor, rng: random.Random,
-                 frames: int = 64, min_speech: float = 0.8) -> tuple[torch.Tensor, torch.Tensor]:
-    """Crop cùng vị trí cho real/fake; ưu tiên cửa sổ ≥80% frame vùng tiếng."""
+                 frames: int = 64, min_speech: float = 0.8,
+                 lengths: torch.Tensor | None = None,
+                 return_windows: bool = False) -> tuple:
+    """Crop cùng vị trí cho real/fake; ưu tiên cửa sổ ≥80% frame vùng tiếng.
+
+    `lengths` (v18.37): độ dài thật từng row. Khi truyền, hàm **không bao giờ crop vào
+    padding**: `width = min(frames, min(lengths))` và mỗi row chỉ lấy start trong
+    `[0, length-width]`. Nếu bỏ qua, giữ hành vi cũ (dùng Tmax của batch) — chỉ dùng
+    cho test/đối chứng cũ, không dùng trong train.
+
+    `return_windows=True` trả thêm `[(start,end)]` để audit.
+    """
     batch, total, _bins = real.shape
-    width = min(frames, total)
+    min_length = int(lengths.min()) if lengths is not None else total
+    width = min(frames, total, min_length)
     out_r, out_f = [], []
+    windows: list[tuple[int, int]] = []
     for b in range(batch):
+        row_total = int(lengths[b]) if lengths is not None else total
+        row_total = max(width, min(row_total, total))
         best, best_frac = 0, -1.0
         for _ in range(8):
-            start = rng.randint(0, max(0, total - width))
+            start = rng.randint(0, max(0, row_total - width))
             frac = 1.0 - float(gap[b, start:start + width].float().mean())
             if frac >= min_speech:
                 best = start
@@ -79,6 +93,9 @@ def sample_crops(real: torch.Tensor, fake: torch.Tensor, gap: torch.Tensor, rng:
         end = best + width
         out_r.append(real[b, best:end])
         out_f.append(fake[b, best:end])
+        windows.append((int(best), int(end)))
+    if return_windows:
+        return torch.stack(out_r), torch.stack(out_f), windows
     return torch.stack(out_r), torch.stack(out_f)
 
 
@@ -294,7 +311,8 @@ def main() -> None:
                     energy_loss = (e_pred - e_real).abs()[voice_e].mean()
                     lowband_loss = (pred_z[..., lowband_idx] - real_z[..., lowband_idx]).abs().mean(-1)[voice_e].mean()
             gap = gap_mask(outputs["slot_durations"])[:, :outputs["mel"].size(1)]
-            real_c, fake_c = sample_crops(moved["mel"], outputs["mel"], gap, rng)
+            real_c, fake_c = sample_crops(moved["mel"], outputs["mel"], gap, rng,
+                                          lengths=moved["frame_lengths"])
             # ── D step (D học ngay từ bước 1) ──
             d_value, d_acc = float("nan"), float("nan")
             if use_d:
@@ -334,6 +352,9 @@ def main() -> None:
                     g_adv_dec = float(torch.sqrt(sum((p.grad.detach() ** 2).sum() for p in dec_params if p.grad is not None)))
                     g_adv_post = float(post_head.grad.detach().norm())
                     opt_g.zero_grad(set_to_none=True)
+                    # LƯU Ý: đây là tỉ lệ gradient **THÔ** của hinge_g / rec,
+                    # CHƯA nhân adv_weight/eff. Với P2 fixed 0,3, tỉ lệ hiệu dụng
+                    # xấp xỉ 0,3 × grad_ratio; loss lớn không tự chứng minh gradient chi phối.
                     grad_ratio = g_adv_dec / (g_rec_dec + 1e-8)
                     if args.adv_mode == "adaptive":
                         lam = float(min(10.0, max(0.0, g_rec_post / (g_adv_post + 1e-4)))) * args.adv_scale

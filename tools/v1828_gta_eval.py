@@ -266,7 +266,9 @@ def main() -> None:
         return engines[key]
 
     def render(engine: Synthesizer, row: dict, gate: int | None = None) -> tuple[np.ndarray, np.ndarray | None]:
-        text = " ".join(str(s.get("raw") or s.get("normalized")) for s in row["syllables"])
+        from vifasttts.eval_text import build_eval_text
+
+        text = build_eval_text(row)
         if args.mode == "tf":
             seg_index = seg_index_of(row)
             items = parse_text(text, resolve_oov=True)

@@ -31,7 +31,9 @@ sys.path.insert(0, str(_ROOT / "tools"))
 
 import v1828_gta_eval as E
 
+from vifasttts.data.split import video_id_of_row
 from vifasttts.eval_stats import outcome_counts
+from vifasttts.eval_text import build_eval_text, legacy_raw_join
 
 HOP = 256
 CFG32 = "configs/small_codelung_v32.yaml"
@@ -62,7 +64,7 @@ def pick_rows(n_per_video: int, used: set[str], exclude: set[str] | None = None)
     for row in rows:
         if row["id"] in used or (exclude and row["id"] in exclude):
             continue
-        groups.setdefault(str(row["id"]).split("_")[0], []).append(row)
+        groups.setdefault(video_id_of_row(row), []).append(row)
     picked: list[dict] = []
     for items in groups.values():
         short = [r for r in items if (r["frame_range"][1] - r["frame_range"][0]) < 150]
@@ -124,12 +126,14 @@ def main() -> None:
     engines = {name: Synthesizer(cfg, path, device=args.device) for name, path in models.items()}
     items = []
     for row in rows:
-        text = " ".join(str(s.get("raw") or s.get("normalized")) for s in row["syllables"])
+        text = build_eval_text(row)
+        text_legacy = legacy_raw_join(row)
         for name, engine in engines.items():
             pieces = [a for a, _ in engine.iter_synthesize_sentence(text)]
             wave = np.concatenate(pieces) if pieces else np.zeros(1, dtype=np.float32)
             sf.write(out / name / f"{row['id']}.wav", np.asarray(wave, dtype=np.float32), 24000)
-        items.append({"id": row["id"], "video": str(row["id"]).split("_")[0],
+        items.append({"id": row["id"], "video": video_id_of_row(row),
+                      "text": text, "text_legacy": text_legacy, "text_mode": "punctuation",
                       "frames": int(row["frame_range"][1]) - int(row["frame_range"][0])})
     (out / "items.json").write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
 

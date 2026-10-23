@@ -1,27 +1,32 @@
 # TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, Agent 2 cập nhật mỗi vòng)
 
+> **V18.37 (23/10/2026)** — kiểm tra tính đúng pipeline, **không training, không đổi production**. Xác nhận bằng tensor: ONNX acoustic cũ = **P2 EMA** (180/181 tensor exact); ONNX vocoder cũ = **E4-C** (63/63 tensor exact, 0/63 pretrained) ⇒ **mismatch**, đã export bản sửa ở `artifacts/onnx/v1837/` (chưa dùng). Sửa text eval giữ dấu câu (`vifasttts/eval_text.py`); raw-join cũ chỉ còn là legacy. Trace 12 câu: legacy **0 gap**, bản có dấu câu **173 gap**; CLI/ONNX chunk dài hơn sentence mode (ghi rõ, không ép giống). Audit crop D: bản cũ có row 34 frame bị crop 64 ⇒ **33 frame padding**; đã sửa `sample_crops(lengths=...)`, test mới. Bộ split: val∩holdout = **9 video**, nhưng **0 clip cha/segment** ⇒ holdout là unseen-clip, không phải unseen-video. **Luật hiện hành chỉ còn BAK + UTMOS; CER đã bị loại, số cũ giữ trong lịch sử.** Chi tiết: `V1837_agent2.md`, JSON `artifacts/bench/v1837_*.json`.
 > **V18.35 (23/10/2026)** — sàng lọc 4 checkpoint còn tồn tại (g1_1k, g2_1k, p2_4k, g2_2k) trên 110 câu/11 video: **không bản nào đạt luật** (trượt điều kiện BAK) ⇒ **giữ P2**, không đổi production, không training. `g1_1k`: UTMOS cải thiện, **BAK chưa xác định được chiều khác biệt**, chưa đạt mục tiêu cải thiện nền — không phải bản thắng, cũng chưa bị chứng minh kém toàn diện. Chi tiết: `A0_V18_GROUP1.md` §26.
 > **V18.34 (23/10/2026)** — audit v18.33: sửa nhãn chiều (flat_V G1 thắng 88 %), **loại CER/WER khỏi luật** (macro/micro lệch; "sàn 0,188" là mẫu 8 câu khác tập), "speech frames" = **voiced frames**, UTMOS không đơn điệu từng câu với cắt. **Giữ P2** (BAK+UTMOS CI95 < 0, 0/12 video) nhưng **hạ mức kết luận**: "G1 bị giám khảo tự động đánh giá thấp hơn P2, đặc biệt DNSMOS BAK". Chi tiết: `A0_V18_GROUP1.md` §25.4–25.5, `artifacts/bench/v1834_audit.json`.
 > **V18.33 (23/10/2026)** — đánh giá TỰ ĐỘNG 300 câu/12 video: **P2 tốt hơn G1** (BAK −0,40 CI[−0,46,−0,35]; UTMOS −0,10; CER +0,063; 0/12 video G1 hơn BAK) ⇒ **production rollback về P2**, G1 giữ làm thí nghiệm. Nhãn "đánh giá tự động", KHÔNG phải xác nhận tai. Chi tiết: `A0_V18_GROUP1.md` §25, `artifacts/bench/v1833_decision.json`.
 > **V18.32 (23/10/2026)** — bộ nghe mù 36 câu (12 video) tại `artifacts/listen_small_filt/v1832_blind/` + chẩn đoán TF/free-run (`artifacts/bench/v1832_tf_free.json`); cơ chế nghịch lý nền **chưa xác định**; G1 vẫn CHƯA XÁC NHẬN TAI.
-> **V18.31 (23/10/2026)** — nhánh hiện hành là **rè nền / GAN acoustic**; báo cáo đầy đủ ở
+> **V18.31 (23/10/2026, lịch sử)** — nhánh khi đó là **rè nền / GAN acoustic**; báo cáo đầy đủ ở
 > `docs/handoff/A0_V18_GROUP1.md` §20–§23 (mục cũ V11 bên dưới là lịch sử, không còn hiệu lực).
-> **Production acoustic**: G1 `runs/v1830_g1/ckpt_2000.pt` (nhãn **CHƯA XÁC NHẬN TAI**) ·
-> rollback: `artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt` · cấu hình: `configs/production_v1831.json`.
-> **Trạng thái**: ĐANG LÀM — G1 đạt cổng thước (flat_V 12/12 video, HNR 8/12, S1 +2,1 %); G2 không đổi; G1b bão hoà.
-> **Trang nghe**: `/v1829_floor/`, `/v1830_gan/` (chờ người dùng chấm).
+> **Production acoustic (v18.37)**: **P2 EMA** `artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt`
+> (SHA256 `44dd0da6…`; `model` == `ema` của `runs/adv_p2_20k/ckpt_2000.pt`) ·
+> config `configs/small_codelung_v32.yaml` · metadata `configs/production_v1831.json` (đã cập nhật v18.37).
+> **Vocoder production**: Vocos pretrained `artifacts/pretrained/vocos-mel-24khz/pytorch_model.bin`
+> (SHA256 `97ec976a…`). **ONNX cũ không phải production**: vocoder ONNX cũ khớp E4-C, xem
+> `artifacts/bench/v1837_provenance.json`; bản sửa mới ở `artifacts/onnx/v1837/`.
+> **Trạng thái**: DỪNG SAU V18.37 — không training; các kết luận BAK/UTMOS cũ bị giới hạn bởi
+> punctuation/inference mode/EMA-live/vocoder mismatch; xem `V1837_agent2.md` §9.
+> **Trang nghe cũ**: `/v1829_floor/`, `/v1830_gan/` (lịch sử; không phải production).
 
-**Vòng hiện hành**: V11 (bổ sung 1+2) · **Tệp đặc tả**: `V11_agent0.md` + `V11_agent0_bosung.md` + `V11_agent0_bosung2.md`
-**Commit gốc của vòng** (trước khi sửa): `b1ae8ce` · **Commit code cuối**: `34f9b6c`
-> Quy ước V11S.A3: HEAD luôn là commit hồ sơ (không tự ghi hash của chính nó); đọc `<gốc>..HEAD`.
-> **Phiên chính TỰ QUẢN LÝ** từ 14/10 (Agent 0 hết hạn mức): quyết định tự đưa + ghi vào `V11_agent2.md`
-> mục "PHẢN BIỆN NGOÀI" (sub-agent, ít nhất 1 model khác họ = `muse-spark-1.3-contributor`).
-**Trạng thái**: **ĐANG LÀM (W1 xong, chuyển W2/E4)** — A2 xong 60k ✓ · B6/B7 xong (TỪ CHỐI hình thức do 2 cổng mel val CŨ khác nhãn; 6 cổng còn lại đạt + tốt hơn base) · W1 xong: A/B tai người **HÒA** ⇒ A2-55k = **tham chiếu nội bộ**, base 40k = bản dùng hằng ngày; rè = ưu tiên #1 · hạ tầng xong (`ckpt_<step>.pt` nguyên tử + watchdog chịu last.pt hỏng) · B9 xong (duration 53 ms không ở trần nhãn ⇒ W2; VUV bão hoà ⇒ hạ xuống theo dõi).
-**Hàng đợi phiên sau**: E4-rè (nội suy có trọng số + loss C) → W2-duration → thước F0 phân bố → cổng cùng nhãn → B10 → bộ 30 câu người thật (chi tiết ở cuối `V11_agent2.md`).
+**Vòng hiện hành**: **V18.37** · **Tệp đặc tả**: yêu cầu A0 → Agent 2 trong chat (không có `V1837_agent0.md`) ·
+**Commit gốc của vòng**: `bfde6a7` · **Trạng thái**: **DỪNG SAU V18.37, CHỜ ĐỌC** — không training, giữ P2.
+> Các mục V11/V10 bên dưới là **lịch sử**, không còn hiệu lực cho quyết định production.
+> Quy ước V11S.A3 vẫn dùng: HEAD là commit hồ sơ; đọc diff `<gốc>..HEAD`.
+**Việc tiếp (chỉ đề xuất, chưa làm)**: xem `V1837_agent2.md` §8 — ưu tiên xác nhận provenance ONNX mới,
+đo lại BAK/UTMOS trên bộ độc lập, và quyết định wrapper EMA/live trước khi mở bất kỳ vòng train nào.
 
-> Agent 1 đọc vòng này theo thông tin ở đầu tệp (không cần hash gửi kèm): diff `06b5f10..<commit cuối>`,
-> câu hỏi V10.C1–C7 ở mục C của tệp đặc tả. Agent 1 **chỉ đọc, không ghi tệp** vào repo.
-> Từ V10.A1: commit ĐẦU TIÊN của mỗi vòng là tệp đặc tả nguyên văn `docs/handoff/V<nn>_agent0.md`.
+> Agent 1 đọc vòng này theo thông tin ở đầu tệp (không cần hash gửi kèm): diff `bfde6a7..<commit cuối>`,
+> đối chiếu `V1837_agent2.md` §2–§9. Agent 1 **chỉ đọc, không ghi tệp** vào repo.
+> Quy ước cũ: commit đầu vòng là tệp đặc tả; vòng này đặc tả nằm trong chat, không có `V1837_agent0.md`.
 
 ## 1. Mốc & hash ghim (V10.A3: ghim sha256 theo byte TRONG GIT — `git show HEAD:<tệp> | shasum -a 256`)
 | Đối tượng | Hash | Ghi chú |

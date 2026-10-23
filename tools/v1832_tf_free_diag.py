@@ -76,6 +76,7 @@ def trim_silence(wave: np.ndarray, drop_db: float = 35.0) -> np.ndarray:
 
 
 def main() -> None:
+    from vifasttts.eval_text import build_eval_text, legacy_raw_join
     from vifasttts.infer import Synthesizer
     from vifasttts.runtime.loudness import measure_lufs
     from vifasttts.runtime.postprocess import sharpen_mel
@@ -93,9 +94,11 @@ def main() -> None:
         gt_frames = int(end) - int(start)
         gt, _ = sf.read(row["audio_path"], dtype="float32", start=start * HOP, frames=gt_frames * HOP)
         gt = np.asarray(gt, dtype=np.float32)
-        text = " ".join(str(s.get("raw") or s.get("normalized")) for s in row["syllables"])
+        text = build_eval_text(row)
+        text_legacy = legacy_raw_join(row)
         gaps = list(row["gaps"]) + [0] if len(row["gaps"]) == len(row["durations"]) - 1 else list(row["gaps"])
         record = {"sid": entry["sid"], "row": entry["row"], "bucket": entry["bucket"],
+                  "text": text, "text_legacy": text_legacy, "text_mode": "punctuation",
                   "gt_frames": gt_frames, "gt": stats(gt)}
         record["gt"]["lufs"] = round(float(measure_lufs(gt, 24000)), 2)
         record["gt"]["trim_s"] = round(len(trim_silence(gt)) / 24000.0, 3)

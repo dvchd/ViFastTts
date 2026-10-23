@@ -1,11 +1,23 @@
 {
- "label": "v18.34 (sau audit) — giữ P2 theo lựa chọn vận hành thận trọng; đánh giá TỰ ĐỘNG, không phải xác nhận tai",
+ "config_version": "v18.37",
+ "label": "v18.37 — production acoustic P2 EMA (không đổi trong vòng này); đánh giá TỰ ĐỘNG, không phải xác nhận tai",
  "acoustic_config": "configs/small_codelung_v32.yaml",
  "acoustic_checkpoint": "artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt",
- "rollback_checkpoint": "artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt",
- "metrics": "artifacts/bench/v1833_decision.json",
+ "acoustic_sha256": "44dd0da6213f7512810f8f808c3c4b11d627578dd82d40cccaf8d7dcec7764be",
+ "acoustic_weights": "ema",
+ "acoustic_source": "runs/adv_p2_20k/ckpt_2000.pt:ema",
+ "acoustic_arch": "v2_slot5",
+ "acoustic_live_ema_note": "model của _ckpt/step_02000.pt trùng khít ema của ckpt_2000.pt (max diff 0.0)",
+ "mel_config": "configs/small_codelung_v32.yaml#mel",
+ "mel_hash": "e065776b45b74b874c483dfdc68c1f9c5e45918b",
+ "mel_stats": "data/codelung/mel_stats.json",
+ "mel_stats_sha256": "cab53eb6d1b369e08d3adcf349372c27e97b713faa55f6756be0c62f67bcc7bc",
+ "vocoder": "artifacts/pretrained/vocos-mel-24khz/pytorch_model.bin",
+ "vocoder_sha256": "97ec976ad1fd67a33ab2682d29c0ac7df85234fae875aefcc5fb215681a91b2a",
+ "vocoder_source": "charactr/vocos-mel-24khz (pretrained zero-shot)",
+ "vocoder_weights": "pretrained",
  "gate": {
-  "rule": "§25.0 (đăng ký trước)",
+  "rule": "v18.34/v18.37: BAK + UTMOS; CER đã bị loại khỏi luật, số cũ giữ ở historical",
   "bak_ci95": [
    -0.456,
    -0.35
@@ -14,13 +26,49 @@
    -0.143,
    -0.058
   ],
-  "cer_ci95": [
+  "videos_bak_better": "0/12",
+  "cer_removed": true,
+  "cer_ci95_historical": [
    0.047,
    0.096
-  ],
-  "videos_bak_better": "0/12"
+  ]
  },
- "note": "Đổi sang G1 theo A0 v18.31 (C1: hoãn cổng tai). Rollback 1 bước: truyền --checkpoint <rollback_checkpoint>.",
- "previous_candidate": "runs/v1830_g1/ckpt_2000.pt (G1 — kém BAK/UTMOS/CER, giữ làm thí nghiệm)",
- "audit_note": "CER/WER bị loại khỏi luật (macro/micro lệch, sàn 0,188 khác tập); kết luận hạ mức: G1 bị giám khảo tự động đánh giá thấp hơn P2, đặc biệt DNSMOS BAK"
+ "metrics": "artifacts/bench/v1833_decision.json",
+ "note": "P2 là production hiện tại. G1 chỉ là previous_candidate, không phải production; note 'Đổi sang G1' của bản cũ đã bị gỡ.",
+ "previous_candidate": "runs/v1830_g1/ckpt_2000.pt (G1 — kém BAK; UTMOS/CER chỉ còn là số lịch sử, giữ làm thí nghiệm)",
+ "audit_note": "CER/WER bị loại khỏi luật (macro/micro lệch, sàn 0,188 khác tập); kết luận hạ mức: G1 bị giám khảo tự động đánh giá thấp hơn P2, đặc biệt DNSMOS BAK",
+ "provenance": {
+  "checked_by": "tools/v1837_artifact_provenance.py",
+  "checked_at": "2026-10-23",
+  "onnx_legacy": {
+   "acoustic": {
+    "path": "artifacts/onnx/v32_adv_p2_2k.onnx",
+    "sha256": "fa5b68caf2202612ba72e23b4ea7b697a4e25fd7f3b0650c1c18a147011d9561",
+    "tensor_match": "P2 EMA (180/181 tensor exact; max abs 1.57e-05 ở f0_log_mean)",
+    "status": "artifact export cũ — không phải production runtime"
+   },
+   "vocoder": {
+    "path": "artifacts/onnx/v32_adv_p2_2k_vocoder.onnx",
+    "sha256": "941ea50e773c25640f98aa23c010cf4b2f3b4508d1119ec10f2763ec35b26ba2",
+    "tensor_match": "E4-C (63/63 tensor exact; 0/63 pretrained)",
+    "status": "MISMATCH — không dùng làm vocoder production"
+   }
+  },
+  "onnx_new": {
+   "acoustic": {
+    "path": "artifacts/onnx/v1837/p2ema_acoustic.onnx",
+    "sha256": "ff6844ec8a28b2c17a40d944d9ebe19476a159b8573c22fdd52c932cbfcdf23f",
+    "tensor_match": "P2 EMA (180/181 exact; max abs 1.57e-05)"
+   },
+   "vocoder": {
+    "path": "artifacts/onnx/v1837/vocos_pretrained_vocoder.onnx",
+    "sha256": "ed193b8246ae4078203e2b88fae5bc492b53b9f6ae6fd7652a1278aca02dd3f3",
+    "tensor_match": "Vocos pretrained (63/63 exact)"
+   },
+   "note": "artifact sửa ở đường dẫn mới; KHÔNG ghi đè/chuyển production trong v18.37"
+  }
+ },
+ "acoustic_parameters": 7045035,
+ "acoustic_state_tensors": 7045071,
+ "vocoder_parameters": 13531650
 }

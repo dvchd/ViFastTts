@@ -77,7 +77,8 @@ CK=runs/<run>/last.pt; CFG=runs/<run>/resolved_config.json
 # 5) demo tai người (3 câu cố định, cùng Vocos) → release asset (test tải trước khi báo)
 ```
 **Cổng chấp nhận một run mới**: mel_z ≤ mốc cũ · `rough` **không giảm** · C ≥ 0,78 · Δcreak **không phình**
-· CER ≤ 0,22 · (tuỳ chọn) tai người A/B thắng/hoà.
+· (tuỳ chọn) tai người A/B thắng/hoà. **CER ≤ 0,22 đã bị loại khỏi luật quyết định từ v18.34**
+(macro/micro lệch, sàn ASR khác tập); số CER cũ chỉ giữ để tham khảo lịch sử.
 
 ## 5) Bẫy thống kê & điểm mù (đọc trước khi kết luận)
 

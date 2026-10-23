@@ -36,6 +36,36 @@ def _export_torch(model, dummy, output: str, input_names: list[str], output_name
         )
 
 
+def _file_sha256(path: str | Path) -> str:
+    """SHA256 của tệp (rỗng nếu không đọc được) — provenance cho artifact export."""
+    import hashlib
+
+    try:
+        digest = hashlib.sha256()
+        with Path(path).open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except OSError:
+        return ""
+
+
+def _mel_provenance(config: dict, checkpoint: str) -> dict[str, object]:
+    """Các khoá mel/stats/checkpoint để ONNX tự mô tả nguồn (v18.37)."""
+    from vifasttts.data.features import canonical_mel_config, mel_config_hash
+
+    mel_config = canonical_mel_config(config)
+    stats_path = mel_config.get("normalize_path")
+    return {
+        "mel_hash": mel_config_hash(mel_config),
+        "stats_path": str(stats_path or ""),
+        "stats_sha256": _file_sha256(str(stats_path)) if stats_path else "",
+        "checkpoint": str(checkpoint),
+        "checkpoint_sha256": _file_sha256(checkpoint),
+        "export_version": "v18.37",
+    }
+
+
 def _write_metadata(path: str, props: dict[str, object]) -> None:
     """Ghi custom metadata (sample_rate, n_fft...) để runtime đọc lại."""
     try:
@@ -108,6 +138,7 @@ def _export_fp32(config: dict, checkpoint: str, output: str, opset_version: int)
         "sample_rate": int(config.get("sample_rate", 24000)),
         "n_mels": int(config["mel"]["n_mels"]),
         "use_phonation": bool(getattr(model, "use_phonation", False)),
+        **_mel_provenance(config, checkpoint),
     })
 
 
@@ -180,6 +211,7 @@ def _export_v2_fp32(config: dict, checkpoint: str, output: str, opset_version: i
         "n_mels": int(config["mel"]["n_mels"]),
         "use_phonation": bool(getattr(model, "use_phonation", False)),
         "arch": ARCH_V2,
+        **_mel_provenance(config, checkpoint),
     }
     for key in ("seg_method", "seg_method_version", "seg_weights_hash", "f0_stats_hash"):
         if key in ckpt:
@@ -296,16 +328,17 @@ def export_vocoder_onnx(config: dict, checkpoint: str, output: str, *, opset_ver
     target = Path(output)
     if precision == "fp16":
         intermediate = target.with_name(target.stem + ".fp32.onnx")
-        _export_vocoder_fp32(config, vt, vocoder, str(intermediate), opset_version)
+        _export_vocoder_fp32(config, vt, vocoder, checkpoint, str(intermediate), opset_version)
         try:
             convert_fp16(intermediate, target)
         finally:
             intermediate.unlink(missing_ok=True)
         return
-    _export_vocoder_fp32(config, vt, vocoder, output, opset_version)
+    _export_vocoder_fp32(config, vt, vocoder, checkpoint, output, opset_version)
 
 
-def _export_vocoder_fp32(config: dict, vt: dict, vocoder, output: str, opset_version: int) -> None:
+def _export_vocoder_fp32(config: dict, vt: dict, vocoder, checkpoint: str, output: str,
+                         opset_version: int) -> None:
     """Xuất graph vocoder fp32 (dùng chung cho fp32/fp16) + ghi metadata."""
     import torch
 
@@ -345,4 +378,6 @@ def _export_vocoder_fp32(config: dict, vt: dict, vocoder, output: str, opset_ver
         "n_mels": int(config["mel"]["n_mels"]),
         "upsample_ratio": int(getattr(vocoder, "upsample_ratio", 1)),
         "generator": str(vt.get("generator", "lite")),
+        "pretrained_sha256": str(vt.get("pretrained_sha256", "")),
+        **_mel_provenance(config, checkpoint),
     })

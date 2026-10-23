@@ -446,6 +446,28 @@ class Synthesizer:
         if not rendered_any:
             raise ValueError("Không có âm tiết nào để tổng hợp")
 
+    @staticmethod
+    def sentence_gaps(items, sample_rate: int, hop: int, *,
+                      pause_comma: float = STEADY_PAUSE_COMMA,
+                      pause_period: float = STEADY_PAUSE_PERIOD) -> np.ndarray:
+        """Gap frame sau từng âm tiết theo dấu câu — dùng chung cho sentence mode/trace.
+
+        `parse_text` gắn `punctuation` vào âm tiết đứng trước. Hàm này chỉ đọc dấu câu
+        **có trong text**; text mất dấu câu ⇒ mọi gap = 0. Không dùng GT duration/gap.
+        """
+        gaps = np.zeros(len(items), dtype=np.int64)
+        for index, item in enumerate(items):
+            if index == len(items) - 1:
+                continue
+            mark = str(getattr(item, "punctuation", None) or "")
+            if mark == ",":
+                gaps[index] = round(pause_comma * sample_rate / hop)
+            elif mark in (";", ":"):
+                gaps[index] = round(0.35 * sample_rate / hop)
+            elif mark in (".", "?", "!"):
+                gaps[index] = round(pause_period * sample_rate / hop)
+        return gaps
+
     def iter_synthesize_sentence(
         self,
         text: str,
@@ -479,17 +501,8 @@ class Synthesizer:
                 continue
             features = torch.tensor([[self.vocabs.encode(item) for item in items]],
                                     dtype=torch.long, device=self.device)
-            gaps = np.zeros(len(items), dtype=np.int64)
-            for index, item in enumerate(items):
-                mark = str(getattr(item, "punctuation", None) or "")
-                if index == len(items) - 1:
-                    continue
-                if mark == ",":
-                    gaps[index] = round(pause_comma * self.sample_rate / hop)
-                elif mark in (";", ":"):
-                    gaps[index] = round(0.35 * self.sample_rate / hop)
-                elif mark in (".", "?", "!"):
-                    gaps[index] = round(pause_period * self.sample_rate / hop)
+            gaps = self.sentence_gaps(items, self.sample_rate, hop,
+                                      pause_comma=pause_comma, pause_period=pause_period)
             with torch.no_grad():
                 speed_t = torch.tensor([float(speed)], dtype=torch.float32, device=self.device)
                 out = self.model(features, speed=speed_t, gate_threshold=gate_threshold,

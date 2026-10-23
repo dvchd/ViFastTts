@@ -13,8 +13,28 @@ from typing import Any
 
 
 def video_id_of(sample_id: str) -> str:
-    """Tách video id từ sample id: `lRojc8KDJ6k_0001` → `lRojc8KDJ6k`."""
+    """Tách video id từ **clip id**: `lRojc8KDJ6k_0001` → `lRojc8KDJ6k`.
+
+    Không dùng cho segment id (`...__s00`): id segment có `__sNN` ở cuối nên
+    `rsplit("_", 1)` sẽ trả sai. Dùng `video_id_of_row` cho row manifest.
+    """
     return sample_id.rsplit("_", 1)[0] if "_" in sample_id else sample_id
+
+
+def video_id_of_row(row: dict[str, Any]) -> str:
+    """Tách video id từ row manifest (ưu tiên `parent` của clip cha).
+
+    `parent` có dạng `<video>_<NNNN>` kể cả khi video id chứa `_` (vd
+    `4ITcvEa_Acc_0001` → `4ITcvEa_Acc`). Nếu row không có `parent`, fallback
+    về `id` cấp clip; không dùng trực tiếp id segment.
+    """
+    parent = row.get("parent")
+    if parent:
+        return str(parent).rsplit("_", 1)[0]
+    sample_id = str(row.get("id", ""))
+    if "__s" in sample_id:  # segment id: bỏ hậu tố __sNN trước khi tách
+        sample_id = sample_id.split("__s", 1)[0]
+    return video_id_of(sample_id)
 
 
 def pick_val_videos(

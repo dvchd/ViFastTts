@@ -4,13 +4,29 @@ from pathlib import Path
 import pytest
 
 from vifasttts.data.report import dataset_summary, format_report
-from vifasttts.data.split import pick_val_videos, split_rows, video_id_of, write_split
+from vifasttts.data.split import (
+    pick_val_videos,
+    split_rows,
+    video_id_of,
+    video_id_of_row,
+    write_split,
+)
 
 
 def test_video_id_of():
     assert video_id_of("lRojc8KDJ6k_0001") == "lRojc8KDJ6k"
     assert video_id_of("abc") == "abc"
     assert video_id_of("a_b_0002") == "a_b"
+
+
+def test_video_id_of_row_giu_video_co_gach_duoi():
+    """Video id có `_` (4ITcvEa_Acc) không bị cắt; segment id không làm sai."""
+    assert video_id_of_row({"parent": "4ITcvEa_Acc_0001",
+                            "id": "4ITcvEa_Acc_0001__s00"}) == "4ITcvEa_Acc"
+    assert video_id_of_row({"parent": "EM_ObHWvd94_0007",
+                            "id": "EM_ObHWvd94_0007__s02"}) == "EM_ObHWvd94"
+    assert video_id_of_row({"id": "a_b_0002"}) == "a_b"
+    assert video_id_of_row({"id": "a_b_0002__s01"}) == "a_b"
 
 
 def test_pick_val_videos_exact_and_deterministic():
