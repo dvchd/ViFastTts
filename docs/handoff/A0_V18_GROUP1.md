@@ -674,3 +674,36 @@ JSON: `v1830_metric_corr.json` · `v1830_g12_tf.json` · `v1830_free.json` · `v
 - Trang nghe: `--exclude-oov` lọc theo status + cụm phiên âm đã biết (hiện không loại câu nào).
 
 **Trang nghe v1830:** https://cio-rows-rocks-seq.trycloudflare.com/v1830_gan/ — 9 câu (5 không gate + 4 gate) × 4 bản (copy · P2 · G1 · G2), −23 LUFS, nhãn xáo, xuất JSON. Đáp án: `artifacts/listen_small_filt/v1830_gan/key.json`.
+
+## 23. v18.31 — B0 (định nghĩa nền) · A (đo rộng 300 câu) · A2 · B (G1b)
+
+JSON: `v1831_tf.json` · `v1831_free300.json`. Cấu hình production: `configs/production_v1831.json`.
+
+### L0/B0 — vì sao 29,0 % vs 2,33 %
+**Không có mâu thuẫn:** hai báo cáo dùng **cùng 40 câu stratified**, cùng định nghĩa (RMS 256 mẫu, 20·log10, **không** chuẩn hoá LUFS). Con số **29,0 % / −45,6 dB là WAV THẬT** (hàng `copy`), còn **P2 = 2,33 % / −30,5 dB** — trùng khít giữa `v1829_l4_free.json` và `v1830_free.json`. Câu chữ v18.29 đặt "WAV thật" và "P2" cùng dòng nên bị đọc gộp.
+
+### L1/A — free-run 300 câu stratified, 12 video (production path)
+| bản | flat_V | flat 2–8k | HNR | % frame < −50 | mean dB | duration ratio |
+|---|---|---|---|---|---|---|
+| WAV thật | 0,1112 | 0,0548 | −2,22 | 27,93 | −44,00 | — |
+| P2 | 0,1698 | 0,0741 | −3,79 | 2,19 | −30,04 | 0,566 ± 0,146 |
+| **G1** | **0,1425** | 0,0611 | **−3,71** | **1,65** | −30,48 | 0,563 ± 0,148 |
+| G2 (fm 1,0) | 0,1430 | **0,0588** | −3,67 | 1,45 | −29,77 | 0,565 ± 0,147 |
+| G1b (2k tiếp) | 0,1626 | 0,0656 | −3,92 | 2,33 | −30,02 | 0,565 ± 0,147 |
+
+**Theo video (G1 vs P2):** flat_V thắng **12/12** video; HNR thắng **8/12**.
+**Luật A:** G1 ĐẠT (flat 12/12 ≥ 2/3 · HNR 8/12 ≥ 2/3 · S1 +2,1 % ≤ 5 %) ⇒ **G1 = bản thắng**.
+**G2:** flat_V 0,1430 **kém** G1 0,35 % (luật đòi ≥3 % tốt hơn) ⇒ **không đổi**.
+Duration ratio P2/G1/G2/G1b đều ~0,565 ⇒ không có drift thời lượng mới.
+
+### L2/A2 — nghịch lý nền ở TF: **hệ thống**, không do 1–2 video
+- Bin < −50, Δ(G1 − P2) theo video: **+1,0 … +3,6 dB trên 12/12 video**.
+- Theo độ dài: ngắn (<150f) **+4,7 dB** · vừa +1,9 · dài (≥300f) +2,0.
+⇒ Kết luận: G1 **nâng mức frame lặng trong TF một cách đều** (~+2 dB), không phải lỗi mẫu; nhưng free-run lại **giảm** tỉ lệ frame < −50 (2,19 → 1,65 %). Cơ chế chưa rõ (khác căn chỉnh GT vs pause dự đoán) — **suy đoán**, cần đo riêng nếu muốn.
+
+### L3/B — G1b (2k tiếp từ G1, cùng công thức)
+flat_V **0,1626** (kém G1 14 %), HNR −3,92 (kém 0,21), `<−50` 2,33 % (kém 1,65 %) ⇒ **bão hoà ở G1**, dừng nhánh; không chạy G1c.
+
+### Production & rollback
+- Production đổi sang **G1** (`runs/v1830_g1/ckpt_2000.pt`), nhãn **"CHƯA XÁC NHẬN TAI"**, ghi tại `configs/production_v1831.json`.
+- Rollback 1 bước: truyền `--checkpoint artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt`.

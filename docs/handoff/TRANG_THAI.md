@@ -1,5 +1,12 @@
 # TRANG_THAI — trạng thái hiện hành (nguồn duy nhất, Agent 2 cập nhật mỗi vòng)
 
+> **V18.31 (23/10/2026)** — nhánh hiện hành là **rè nền / GAN acoustic**; báo cáo đầy đủ ở
+> `docs/handoff/A0_V18_GROUP1.md` §20–§23 (mục cũ V11 bên dưới là lịch sử, không còn hiệu lực).
+> **Production acoustic**: G1 `runs/v1830_g1/ckpt_2000.pt` (nhãn **CHƯA XÁC NHẬN TAI**) ·
+> rollback: `artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt` · cấu hình: `configs/production_v1831.json`.
+> **Trạng thái**: ĐANG LÀM — G1 đạt cổng thước (flat_V 12/12 video, HNR 8/12, S1 +2,1 %); G2 không đổi; G1b bão hoà.
+> **Trang nghe**: `/v1829_floor/`, `/v1830_gan/` (chờ người dùng chấm).
+
 **Vòng hiện hành**: V11 (bổ sung 1+2) · **Tệp đặc tả**: `V11_agent0.md` + `V11_agent0_bosung.md` + `V11_agent0_bosung2.md`
 **Commit gốc của vòng** (trước khi sửa): `b1ae8ce` · **Commit code cuối**: `34f9b6c`
 > Quy ước V11S.A3: HEAD luôn là commit hồ sơ (không tự ghi hash của chính nó); đọc `<gốc>..HEAD`.

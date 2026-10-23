@@ -47,6 +47,7 @@ VARIANTS = {
     "f0": {"ckpt": "runs/v1829_f0/ckpt_2000.pt", "cfg": CFG32},
     "g1": {"ckpt": "runs/v1830_g1/ckpt_2000.pt", "cfg": CFG32},
     "g2": {"ckpt": "runs/v1830_g2/ckpt_2000.pt", "cfg": CFG32},
+    "g1b": {"ckpt": "runs/v1830_g1b/ckpt_2000.pt", "cfg": CFG32},
     "fd": {"ckpt": "runs/v1829_fd/ckpt_2000.pt", "cfg": CFG32},
     "fc": {"ckpt": "runs/v1829_fc/ckpt_2000.pt", "cfg": "configs/small_codelung_v32_gate.yaml", "gate": 1},
     "fc_g0": {"ckpt": "runs/v1829_fc/ckpt_2000.pt", "cfg": "configs/small_codelung_v32_gate.yaml", "gate": 0},
@@ -62,8 +63,8 @@ def frame_analysis(wave: np.ndarray) -> dict:
     """Đo theo frame 10,67 ms: RMS dBFS, flatness 2–6 kHz, tuần hoàn, HNR."""
     count = int(len(wave) // HOP)
     if count == 0:
-        return {"db": np.zeros(0), "flat": np.zeros(0), "voiced": np.zeros(0, dtype=bool),
-                "hnr": np.zeros(0), "count": 0}
+        return {"db": np.zeros(0), "flat": np.zeros(0), "flat8": np.zeros(0),
+                "voiced": np.zeros(0, dtype=bool), "hnr": np.zeros(0), "count": 0}
     padded = np.pad(wave, (0, max(0, (count - 1) * HOP + NFFT - len(wave))))
     frames = np.stack([padded[i * HOP:i * HOP + NFFT] for i in range(count)])
     window = np.hanning(NFFT)
@@ -72,6 +73,9 @@ def frame_analysis(wave: np.ndarray) -> dict:
     band = (freqs >= 2000) & (freqs <= 6000)
     power = spec[:, band] ** 2 + 1e-12
     flat = np.exp(np.mean(np.log(power), axis=1)) / np.mean(power, axis=1)
+    band8 = (freqs >= 2000) & (freqs <= 8000)
+    power8 = spec[:, band8] ** 2 + 1e-12
+    flat8 = np.exp(np.mean(np.log(power8), axis=1)) / np.mean(power8, axis=1)
     centered = frames - frames.mean(axis=1, keepdims=True)
     autoc = np.fft.irfft(np.abs(np.fft.rfft(centered, 2048, axis=1)) ** 2, axis=1)[:, :1024]
     autoc = autoc / (autoc[:, :1] + 1e-12)
@@ -100,7 +104,7 @@ def frame_analysis(wave: np.ndarray) -> dict:
                                          & (freqs <= harmonic_index * f_0 + half) & mask] ** 2))
             harmonic_index += 1
         hnr[index] = 10 * np.log10(max(harmonic, 1e-12) / max(total - harmonic, 1e-12))
-    return {"db": db, "flat": flat, "voiced": voiced, "hnr": hnr, "count": count}
+    return {"db": db, "flat": flat, "flat8": flat8, "voiced": voiced, "hnr": hnr, "count": count}
 
 
 def expander(x: np.ndarray, threshold_db: float, ratio: float, *,
@@ -169,6 +173,7 @@ def summary(metrics: dict) -> dict:
     return {
         "frames": int(metrics["count"]),
         "flat_v": round(float(np.median(flat[voiced])), 4) if voiced.any() else None,
+        "flat_8k": round(float(np.median(metrics["flat8"][voiced])), 4) if voiced.any() else None,
         "flat_uv": round(float(np.median(flat[non_silent_unvoiced])), 4) if non_silent_unvoiced.any() else None,
         "hnr": round(float(np.nanmedian(hnr)), 2) if np.isfinite(hnr).any() else None,
     }
@@ -323,6 +328,7 @@ def main() -> None:
         refs.append(metrics)
     copy_summary = summary({"db": np.concatenate([r["db"] for r in refs]),
                             "flat": np.concatenate([r["flat"] for r in refs]),
+                            "flat8": np.concatenate([r["flat8"] for r in refs]),
                             "voiced": np.concatenate([r["voiced"] for r in refs]),
                             "hnr": np.concatenate([r["hnr"] for r in refs]),
                             "count": int(sum(r["count"] for r in refs))})
@@ -355,8 +361,47 @@ def main() -> None:
         merged_flat = np.concatenate([m["flat"] for m in per_row])
         merged_voiced = np.concatenate([m["voiced"] for m in per_row])
         merged_hnr = np.concatenate([m["hnr"] for m in per_row])
-        entry = summary({"db": merged_db, "flat": merged_flat, "voiced": merged_voiced,
-                         "hnr": merged_hnr, "count": int(merged_db.size)})
+        merged_flat8 = np.concatenate([m["flat8"] for m in per_row])
+        entry = summary({"db": merged_db, "flat": merged_flat, "flat8": merged_flat8,
+                         "voiced": merged_voiced, "hnr": merged_hnr, "count": int(merged_db.size)})
+        # --- A0 v18.31: mọi chỉ số theo VIDEO + duration drift (free-run) ---
+        by_video: dict[str, dict] = {}
+        for metrics, row in zip(per_row, rows):
+            key = str(row["id"]).split("_")[0]
+            slot = by_video.setdefault(key, {"db": [], "flat": [], "flat8": [], "voiced": [],
+                                             "hnr": [], "dur": []})
+            slot["db"].append(metrics["db"])
+            slot["flat"].append(metrics["flat"])
+            slot["flat8"].append(metrics["flat8"])
+            slot["voiced"].append(metrics["voiced"])
+            slot["hnr"].append(metrics["hnr"])
+            if args.mode == "free":
+                gt_frames = int(row["frame_range"][1]) - int(row["frame_range"][0])
+                slot["dur"].append(metrics["count"] / max(1, gt_frames))
+        entry["by_video"] = {}
+        for key, slot in by_video.items():
+            db = np.concatenate(slot["db"])
+            flat = np.concatenate(slot["flat"])
+            flat8 = np.concatenate(slot["flat8"])
+            voiced = np.concatenate(slot["voiced"])
+            hnr = np.concatenate(slot["hnr"])
+            payload = {
+                "frames": int(db.size),
+                "flat_v": round(float(np.median(flat[voiced])), 4) if voiced.any() else None,
+                "flat_8k": round(float(np.median(flat8[voiced])), 4) if voiced.any() else None,
+                "hnr": round(float(np.nanmedian(hnr)), 2) if np.isfinite(hnr).any() else None,
+                "below_minus50_pct": round(float(100.0 * np.mean(db < -50.0)), 3),
+                "mean_db": round(float(np.mean(db)), 2),
+            }
+            if slot["dur"]:
+                payload["duration_ratio"] = round(float(np.mean(slot["dur"])), 3)
+            entry["by_video"][key] = payload
+        if args.mode == "free":
+            ratios = [metrics["count"] / max(1, int(row["frame_range"][1]) - int(row["frame_range"][0]))
+                      for metrics, row in zip(per_row, rows)]
+            entry["duration_ratio"] = {"mean": round(float(np.mean(ratios)), 3),
+                                       "std": round(float(np.std(ratios)), 3)}
+
         # N1
         if args.mode == "tf":
             def _empty():
@@ -395,6 +440,39 @@ def main() -> None:
                     if bins_gate is not None and is_gate:
                         _add(bins_gate, index, metrics, ref, mask, n)
             entry["n1"] = _report(bins)
+            # A2: bin4 tách theo video và theo độ dài câu (chẩn đoán nghịch lý nền TF)
+            by_prefix: dict[str, dict] = {}
+            by_length = {"short(<150f)": {"n": 0, "d": 0.0, "p": 0.0, "pr": 0.0},
+                         "mid(150-300f)": {"n": 0, "d": 0.0, "p": 0.0, "pr": 0.0},
+                         "long(>=300f)": {"n": 0, "d": 0.0, "p": 0.0, "pr": 0.0}}
+            for metrics, ref, row in zip(per_row, refs, rows):
+                n = min(metrics["db"].size, ref["db"].size)
+                mask = bin_members(ref["db"][:n])[-1]
+                if not mask.any():
+                    continue
+                key = str(row["id"]).split("_")[0]
+                slot = by_prefix.setdefault(key, {"frames": 0, "d": 0.0, "p": 0.0, "pr": 0.0})
+                delta = metrics["db"][:n][mask] - ref["db"][:n][mask]
+                slot["frames"] += int(mask.sum())
+                slot["d"] += float(np.sum(delta))
+                slot["p"] += float(np.sum(10.0 ** (metrics["db"][:n][mask] / 10.0)))
+                slot["pr"] += float(np.sum(10.0 ** (ref["db"][:n][mask] / 10.0)))
+                bucket = "short(<150f)" if n < 150 else ("mid(150-300f)" if n < 300 else "long(>=300f)")
+                by_length[bucket]["n"] += int(mask.sum())
+                by_length[bucket]["d"] += float(np.sum(delta))
+                by_length[bucket]["p"] += float(np.sum(10.0 ** (metrics["db"][:n][mask] / 10.0)))
+                by_length[bucket]["pr"] += float(np.sum(10.0 ** (ref["db"][:n][mask] / 10.0)))
+            entry["n1_by_prefix"] = {
+                key: {"frames": slot["frames"],
+                      "d_med": None,
+                      "d_mean": round(slot["d"] / slot["frames"], 2),
+                      "d_energy": round(10.0 * float(np.log10(max(slot["p"], 1e-30) / max(slot["pr"], 1e-30))), 2)}
+                for key, slot in by_prefix.items()}
+            entry["n1_by_length"] = {
+                key: {"frames": slot["n"],
+                      "d_mean": round(slot["d"] / slot["n"], 2) if slot["n"] else None,
+                      "d_energy": round(10.0 * float(np.log10(max(slot["p"], 1e-30) / max(slot["pr"], 1e-30))), 2) if slot["n"] else None}
+                for key, slot in by_length.items()}
             if bins_gate is not None:
                 entry["n1_gate"] = _report(bins_gate)
             s1 = []
