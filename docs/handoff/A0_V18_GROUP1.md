@@ -899,6 +899,16 @@ Công cụ: `tools/v1832_blind_set.py`, `tools/v1832_tf_free_diag.py`.
 | `g2_2k` | **−0,385** | [−0,449, −0,322] | 20,9 | +0,043 | [−0,045, +0,100] | −0,022 | +0,165 | ✗ (BAK xấu mạnh) |
 
 - **Không ứng viên nào ĐẠT** luật đã đăng ký ⇒ **giữ P2, kết thúc vòng**; **không** chạy bước xác nhận (luật chỉ cho 1 bản khi đã đạt sàng lọc).
-- **Giám khảo mâu thuẫn ở `g1_1k`**: UTMOS tốt hơn rõ (CI > 0) nhưng BAK trung tính (CI chứa 0) ⇒ ghi **chưa phân thắng bại** cho bản này, không phải "ứng viên thắng".
-- **Giả thuyết (chưa kiểm)**: G1@2k có UTMOS −0,10 so P2 (v18.33) trong khi G1@1k +0,10 ⇒ có thể **2k bước là quá tay**; cần vòng riêng mới kết luận, không hành động ở v18.35.
+- **`g1_1k` (diễn giải đã chỉnh theo A0):** *"UTMOS cải thiện; BAK **chưa xác định được chiều khác biệt**; chưa đạt mục tiêu cải thiện chất lượng nền."*
+  - **Không** gọi BAK "tương đương P2" chỉ vì CI95 chứa 0; **không** gọi đây là "mâu thuẫn trực tiếp giữa hai giám khảo".
+- **Giả thuyết chưa kiểm chứng:** G1@1k có UTMOS +0,10 trên bộ sàng lọc còn G1@2k có −0,10 trên bộ 300 của v18.33 — **hai tập khác nhau**, nên **không** được kết luận "2k bước là quá tay"; chỉ ghi là giả thuyết, không hành động.
 - Không dùng CER/WER; không đổi production; không training.
+
+### 26.3 Đính chính thiết kế & số liệu bổ sung (không chạy lại audio)
+- **Sai lệch so với thiết kế:** chạy **110 câu / 11 video** thay vì 120/12; bucket thực tế **44 ngắn / 33 vừa / 33 dài**.
+- **Thời điểm phát hiện:** thiếu `2b65WyiFC9k` được phát hiện **sau khi chạy xong và đã có điểm**, ở bước kiểm tra phân bố.
+  **Không có điều chỉnh thiết kế nào trước khi xem điểm**, và **không chọn lại câu** sau khi thấy điểm; không bổ sung dữ liệu.
+  Nguyên nhân: cả 242 row của video này đã nằm trong "300 head" cũ nên bị loại theo luật "không dùng câu đã dùng".
+- **Số video có ΔBAK ≥ 0 (trên 11 video thực tế):** `g1_1k` **4/11** · `g2_1k` **2/11** · `p2_4k` **6/11** · `g2_2k` **0/11**.
+- **Ngưỡng 2/3 áp dụng trên 11 video:** cần ≥ ⌈2/3 × 11⌉ = **8 video**; code dùng `(2·11+2)//3 = 8`. Cả 4 ứng viên đều **trượt điều kiện BAK** (CI95 và/hoặc số video), nên **không cần thêm dữ liệu** để hoàn thiện hay đổi kết quả sàng lọc.
+- **Trạng thái cuối:** P2 = production (lựa chọn vận hành thận trọng) · `g1_1k` lưu checkpoint + kết quả, **chưa đạt luật giảm rè**, không phải bản thắng và **cũng chưa bị chứng minh kém toàn diện** · các ứng viên khác giữ lịch sử, không thử lại nếu không có giả thuyết mới cụ thể · **chưa xác định cơ chế** chất lượng nền kém ở các bản GAN · **không** kết luận GAN nói chung không phù hợp.
