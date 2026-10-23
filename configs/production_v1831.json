@@ -1,5 +1,5 @@
 {
- "label": "v18.33 — đánh giá TỰ ĐỘNG (không phải xác nhận bằng tai): P2 tốt hơn G1",
+ "label": "v18.34 (sau audit) — giữ P2 theo lựa chọn vận hành thận trọng; đánh giá TỰ ĐỘNG, không phải xác nhận tai",
  "acoustic_config": "configs/small_codelung_v32.yaml",
  "acoustic_checkpoint": "artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt",
  "rollback_checkpoint": "artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt",
@@ -21,5 +21,6 @@
   "videos_bak_better": "0/12"
  },
  "note": "Đổi sang G1 theo A0 v18.31 (C1: hoãn cổng tai). Rollback 1 bước: truyền --checkpoint <rollback_checkpoint>.",
- "previous_candidate": "runs/v1830_g1/ckpt_2000.pt (G1 — kém BAK/UTMOS/CER, giữ làm thí nghiệm)"
+ "previous_candidate": "runs/v1830_g1/ckpt_2000.pt (G1 — kém BAK/UTMOS/CER, giữ làm thí nghiệm)",
+ "audit_note": "CER/WER bị loại khỏi luật (macro/micro lệch, sàn 0,188 khác tập); kết luận hạ mức: G1 bị giám khảo tự động đánh giá thấp hơn P2, đặc biệt DNSMOS BAK"
 }

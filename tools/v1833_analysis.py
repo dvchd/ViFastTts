@@ -23,6 +23,8 @@ sys.path.insert(0, str(_ROOT / "tools"))
 
 import v1828_gta_eval as E
 
+from vifasttts.eval_stats import outcome_counts
+
 AUDIO = Path("artifacts/bench/v1833_audio")
 
 
@@ -64,16 +66,20 @@ def main() -> None:
         subset = [row for row in rows if row["video"] in {videos[i] for i in chosen}]
         for field in fields:
             boot[field].append(float(np.nanmedian([row[field] for row in subset])))
+    higher_better = {"d_bak": True, "d_sig": True, "d_ovrl": True, "d_utmos": True,
+                     "d_hnr": True, "d_cer": False, "d_wer": False, "d_flat": False}
     summary = {}
     for field in fields:
         values = np.array([row[field] for row in rows], dtype=float)
+        counts = outcome_counts(values, higher_better=higher_better[field])
         summary[field] = {
             "mean": round(float(np.nanmean(values)), 4),
             "median": round(float(np.nanmedian(values)), 4),
             "ci95": [round(float(np.percentile(boot[field], 2.5)), 4),
                      round(float(np.percentile(boot[field], 97.5)), 4)],
-            "better_pct": round(100.0 * float(np.nanmean(values > 0)), 2),
-            "n": int(np.isfinite(values).sum()),
+            "higher_better": higher_better[field],
+            "win_pct": counts["win_pct"], "loss_pct": counts["loss_pct"], "tie_pct": counts["tie_pct"],
+            "n": counts["n"],
         }
     per_video = {}
     for video in videos:

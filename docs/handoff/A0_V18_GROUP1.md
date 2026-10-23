@@ -806,3 +806,57 @@ Công cụ: `tools/v1832_blind_set.py`, `tools/v1832_tf_free_diag.py`.
 - (b) **P2 tốt hơn theo đánh giá tự động**: BAK CI95 < 0, UTMOS CI95 < 0, CER CI95 > 0, **0/12 video** G1 tốt hơn về BAK.
 - **Đề xuất rollback production về P2** (đã cập nhật `configs/production_v1831.json`; G1 giữ làm nhánh thí nghiệm).
 - Nhãn: **"đánh giá tự động"** — **không** phải xác nhận bằng tai. Không đổi thước chính C5.
+
+### 25.4 AUDIT v18.33 (v18.34) — từng mục đúng / lỗi / chưa giải thích
+
+**A. CER/WER — LỖI cách trình bày (không phải lỗi tính):**
+- "Sàn ASR 0,188" ở sensitivity là CER(ASR bản sạch) vs **manifest text** trên **8 câu ngắn**, không phải sàn của bộ 300.
+  Bộ 300 (cùng reference, cùng normalization) có CER **macro 0,664** cho WAV thật ⇒ hai số **khác tập**, không so được.
+- Có **hai loại** CER: (i) vs transcript chuẩn (dùng ở bảng chính); (ii) vs ASR của bản sạch (dùng ở sensitivity).
+  Đã tách tên; không gọi chung là "sàn".
+- Tổng hợp: bảng chính là **macro theo câu** (`mean` CER từng câu). Micro (tổng edit/tổng ký tự):
+  P2 **0,291** · G1 **0,393** · thật **0,413**; median theo câu: 0,264 / 0,406 / 0,422.
+  Macro bị chi phối bởi vài câu lỗi nặng; **chiều kết luận không đổi** nhưng độ lớn nhỏ hơn nhiều so với 0,54/0,67.
+- Pairing: **300/300** text khớp manifest; **300/300** `frame_range` = Σdurations+Σgaps; **296/300** WAV thật dài đúng
+  (4 file ngắn hơn 1–10 ms do file nguồn kết thúc — không ảnh hưởng chấm).
+- Quy tắc chấm **giống nhau** cho P2/G1/real (cùng hàm, cùng reference, cùng normalization NFC + bỏ dấu câu).
+- Ví dụ "bỏ từ": chỉ được ghi **"ASR trả transcript thiếu/khác từ"** — chưa có bằng chứng độc lập trong audio.
+- ⇒ **Tạm loại CER/WER khỏi luật quyết định** (vẫn báo cáo tham khảo).
+
+**B. Chiều tốt/xấu — LỖI nhãn cột:**
+- Cột "% câu G1 tốt hơn" cũ tính `delta > 0` cho **mọi** thước ⇒ với flat_V/CER bị ngược.
+- Đã thay bằng `eval_stats.outcome_counts(values, higher_better=...)` (+3 test). Bảng đúng:
+  BAK 16,0 % thắng · SIG 27,3 · OVRL 18,3 · UTMOS 39,0 · HNR 57,3 · **flat_V 88,0 % thắng** (thấp hơn = tốt) ·
+  CER 20,3 % thắng / 61,7 % thua / 18,0 hoà · WER 17,0 / 53,7 / 29,3.
+- Không sửa luật sau khi thấy kết quả.
+
+**C. Thời lượng — LỖI nhãn "speech frames":**
+- `total = pause + non-pause` đúng (pause = frame RMS < max−35 dB; hop 256 @24 kHz; đơn vị frame).
+- "speech frames" cũ thực chất là **voiced frames** (autocorr ≥ 0,45), **không** phải phần bù của pause:
+  P2 38.099 voiced / 52.761 non-pause; G1 39.267 / 52.895.
+- Pause%: macro 1,69/1,21/28,68 (P2/G1/thật) vs **weighted theo thời lượng** 1,44/0,97/26,34.
+- G1 tổng frame 53.411 vs P2 53.534 (−0,23 %) nhưng voiced +3,1 % và pause −257 frame ⇒ khác do **bộ phát hiện voiced/ngưỡng năng lượng**, không được đọc là tốc độ nói.
+
+**D. Sensitivity & thống kê — LỖI phát biểu:**
+- Xu hướng **trung bình** ≠ đơn điệu **từng câu**. Với cắt: UTMOS trung bình 2,07→1,68→1,67 nhưng rho từng câu
+  [0,5; −0,5; −0,5; −1; −1; −0,5; 0,5; 0,5], median **−0,5** ⇒ **không** đơn điệu từng câu. Đã sửa phát biểu.
+- Với nhiễu: BAK rho = **−1,0 ở 8/8 câu** (đơn điệu thật); UTMOS median −1,0 nhưng 2/8 câu chỉ −0,5.
+- Bootstrap: resample **12 video có hoàn lại**, gộp mọi câu của video được chọn, tính **trung vị** delta (2.000 lần).
+  CI báo cáo là CI của **trung vị** (đúng đại lượng đã in): [−0,456, −0,350]; CI của **trung bình** là [−0,563, −0,448].
+  Số câu/video đều 25 nên chưa có trường hợp lệch; phương pháp vẫn xử lý được (gộp theo video được chọn).
+
+**E. Kết luận sau audit:**
+- Loại CER/WER khỏi luật ⇒ còn BAK (CI95 < 0), UTMOS (CI95 < 0), **0/12 video** G1 hơn BAK ⇒ **vẫn P2**, nhưng
+  **hạ mức tin cậy**: "G1 bị các giám khảo tự động đánh giá thấp hơn P2, đặc biệt ở chất lượng nền theo DNSMOS BAK".
+- **Không** nói "đã chứng minh G1 tăng nhiễu nền"; **không** kết luận về GAN nói chung; **không** quy nguyên nhân
+  cho loss/vocoder/duration.
+- Giữ P2 là **lựa chọn vận hành thận trọng**, không phải "thắng tuyệt đối".
+
+### 25.5 Lịch sử kết luận (ghi để đối chiếu, không xoá)
+1. **v18.31**: chọn G1 theo **flat_V/HNR/S1** (đo tự động, chưa có tai) — nhãn "chưa xác nhận tai".
+2. **v18.33**: giám khảo tự động (DNSMOS/UTMOSv2/ASR) → **P2 tốt hơn** ở BAK/UTMOS/CER; rollback production về P2.
+3. **v18.34 (audit)**: sửa nhãn chiều (flat_V thực ra G1 thắng 88 %), loại **CER/WER** khỏi luật (macro/micro lệch,
+   "sàn 0,188" khác tập), sửa "speech frames" → **voiced frames**, sửa phát biểu "UTMOS đơn điệu với cắt".
+   Kết luận: **giữ P2** theo BAK+UTMOS (CI95 < 0, 0/12 video) nhưng **hạ mức tin cậy**:
+   *"G1 bị các giám khảo tự động đánh giá thấp hơn P2, đặc biệt ở chất lượng nền theo DNSMOS BAK"* —
+   **không** phải "đã chứng minh G1 tăng nhiễu nền", **không** kết luận về GAN nói chung, **không** quy nguyên nhân.
