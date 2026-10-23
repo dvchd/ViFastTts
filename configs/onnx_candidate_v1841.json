@@ -1,0 +1,58 @@
+{
+ "status": "candidate_not_active",
+ "scope": "chunk mode only; PyTorch P2 EMA + Vocos pretrained; frontend resolve_oov=True",
+ "acoustic": {
+  "path": "artifacts/onnx/v1837/p2ema_acoustic.onnx",
+  "sha256": "ff6844ec8a28b2c17a40d944d9ebe19476a159b8573c22fdd52c932cbfcdf23f",
+  "source": "artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt",
+  "checkpoint_sha256": "44dd0da6213f7512810f8f808c3c4b11d627578dd82d40cccaf8d7dcec7764be",
+  "weights": "ema",
+  "mel_hash": "e065776b45b74b874c483dfdc68c1f9c5e45918b"
+ },
+ "vocoder": {
+  "path": "artifacts/onnx/v1837/vocos_pretrained_vocoder.onnx",
+  "sha256": "ed193b8246ae4078203e2b88fae5bc492b53b9f6ae6fd7652a1278aca02dd3f3",
+  "source": "artifacts/pretrained/vocos-mel-24khz/pytorch_model.bin",
+  "pretrained_sha256": "97ec976ad1fd67a33ab2682d29c0ac7df85234fae875aefcc5fb215681a91b2a",
+  "mel_hash": "e065776b45b74b874c483dfdc68c1f9c5e45918b"
+ },
+ "stats": {
+  "path": "data/codelung/mel_stats.json",
+  "sha256": "cab53eb6d1b369e08d3adcf349372c27e97b713faa55f6756be0c62f67bcc7bc"
+ },
+ "runtime": {
+  "provider": "cpu",
+  "VIFASTT_INTRA_THREADS": "2",
+  "mode": "chunk",
+  "target_lufs": null,
+  "peak_normalize": false,
+  "sharpen_alpha": 0.0,
+  "note": "chưa kiểm sentence/steady mode; ONNX không có sentence-gap và steady khác trim"
+ },
+ "parity": {
+  "result": "artifacts/bench/v1840_onnx_parity/result.json",
+  "acoustic": "36/36 pass; mel max 1.53e-05; discrete exact",
+  "vocoder": "11/12 pass; 1 sparse spectrum bin over 0.02; waveform pass",
+  "end_to_end": "12/12 pass; max 2.14e-04; RMSE 7.74e-06",
+  "frontend": "V18.41: 8/8 valid cases equal; OOV resolve fixed",
+  "deterministic": true
+ },
+ "accepted_exception": {
+  "input": "2b65WyiFC9k_0030__s03",
+  "layer": "vocoder spectrum real/imag",
+  "max_abs": {
+   "real": 0.023357868194580078,
+   "imag": 0.017773866653442383
+  },
+  "criterion": 0.02,
+  "why_accepted": "A0 v18.41 chấp nhận ngoại lệ có phạm vi: provenance đúng, waveform/end-to-end đạt, không clipping; không suy rộng cho mọi input/backend",
+  "not_a_global_pass": true
+ },
+ "switch_command": "VIFASTT_INTRA_THREADS=2 vifasttts synthesize-onnx --acoustic artifacts/onnx/v1837/p2ema_acoustic.onnx --vocoder artifacts/onnx/v1837/vocos_pretrained_vocoder.onnx --text '<text>' --output out.wav --provider cpu",
+ "rollback": {
+  "production_pytorch": "VIFASTT_INTRA_THREADS=2 vifasttts synthesize --config configs/small_codelung_v32.yaml --checkpoint artifacts/listen_small_filt/adv_progress_p2/_ckpt/step_02000.pt --text '<text>' --output out.wav",
+  "old_onnx_historical": "vifasttts synthesize-onnx --acoustic artifacts/onnx/v32_adv_p2_2k.onnx --vocoder artifacts/onnx/v32_adv_p2_2k_vocoder.onnx --text '<text>' --output out.wav",
+  "old_onnx_note": "vocoder cũ là E4-C; chỉ là artifact lịch sử, KHÔNG tương đương production P2 + Vocos pretrained"
+ },
+ "not_active_note": "chưa chuyển production trong v18.41; config production_v1831.json vẫn P2 + PyTorch"
+}

@@ -1,5 +1,9 @@
 # V18.40 — Agent 2: xác nhận artifact ONNX v1837, không training
 
+> **Cập nhật v18.41:** frontend OOV đã được kiểm và sửa (`OnnxAcousticModel.features_from_text`
+> mặc định `resolve_oov=True`); xem `V1841_agent2.md`. Kết quả parity số học và ngoại lệ
+> spectrum ở tài liệu này giữ nguyên.
+
 > **Trạng thái: DỪNG SAU V18.40, CHỜ ĐỌC.** Không training, không đổi production,
 > không chuyển ONNX. Kết quả: **acoustic/front-end/end-to-end đạt**; **vocoder 11/12**
 > do một bin phổ vượt tolerance tuyệt đối đã đăng ký trước; **chưa tuyên bố sẵn sàng chuyển**.

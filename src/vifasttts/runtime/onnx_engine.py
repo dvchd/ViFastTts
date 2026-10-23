@@ -137,9 +137,17 @@ class OnnxAcousticModel:
         *,
         dialect: str = "north",
         options: NormalizerOptions | None = None,
+        resolve_oov: bool = True,
     ) -> np.ndarray:
-        """Parse text → mảng int64 [1, N, 7] cho session ONNX."""
-        items = parse_text(text, dialect=dialect, options=options)
+        """Parse text → mảng int64 [1, N, 7] cho session ONNX.
+
+        `resolve_oov=True` (mặc định, v18.41) khớp đường PyTorch production
+        (`Synthesizer._render` dùng `parse_text(..., resolve_oov=True)`):
+        acronym/English/tên chữ cái được respell trước khi fallback. Trước v18.41
+        ONNX gọi `parse_text` không resolve ⇒ token như `XYZ`/`John` thành
+        FALLBACK_REQUIRED trong khi PyTorch đọc được.
+        """
+        items = parse_text(text, dialect=dialect, options=options, resolve_oov=resolve_oov)
         if not items:
             raise ValueError("Không có âm tiết nào để tổng hợp")
         vocabs = ComponentVocabs.default()
